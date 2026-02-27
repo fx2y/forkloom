@@ -59,6 +59,20 @@ function assertExamples(): void {
 	}
 }
 
+function assertSchemasStrict(): void {
+	const schemaFiles = readdirSync(resolve("contracts/v0")).filter((file) =>
+		file.endsWith(".schema.json"),
+	);
+	for (const file of schemaFiles) {
+		const schema = JSON.parse(
+			readFileSync(resolve("contracts/v0", file), "utf8"),
+		) as { type?: string; additionalProperties?: unknown };
+		if (schema.type === "object" && schema.additionalProperties !== false) {
+			throw new Error(`${file} must have additionalProperties: false`);
+		}
+	}
+}
+
 function assertTypesInSync(): void {
 	const expected = renderTypes();
 	const existing = readFileSync(TYPES_PATH, "utf8");
@@ -69,9 +83,51 @@ function assertTypesInSync(): void {
 	}
 }
 
+function assertNoBannedNouns(): void {
+	const bannedNouns = [
+		"Task",
+		"Agent",
+		"Thread",
+		"Run",
+		"ToolCall",
+		"Memory",
+		"Connector",
+		"Doc",
+	];
+	const schemaDir = resolve("contracts/v0");
+	const schemaFiles = readdirSync(schemaDir).filter((f) =>
+		f.endsWith(".schema.json"),
+	);
+
+	const srcDir = resolve("packages/contracts/src");
+	const srcFiles = readdirSync(srcDir).filter(
+		(f) => f.endsWith(".ts") && f !== "check.ts",
+	);
+
+	const allFiles = [
+		...schemaFiles.map((f) => resolve(schemaDir, f)),
+		...srcFiles.map((f) => resolve(srcDir, f)),
+	];
+
+	for (const fullPath of allFiles) {
+		const content = readFileSync(fullPath, "utf8");
+		for (const noun of bannedNouns) {
+			const pattern = new RegExp(`"${noun}"`);
+			if (pattern.test(content)) {
+				throw new Error(
+					`banned noun detected in ${basename(fullPath)}: "${noun}"`,
+				);
+			}
+		}
+	}
+}
+
 function main(): void {
+	assertSchemasStrict();
+	assertNoBannedNouns();
 	assertExamples();
 	assertTypesInSync();
+	console.log("contract check: ok");
 }
 
 main();
