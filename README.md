@@ -1,6 +1,6 @@
 # forkloom C0
 
-`forkloom` ships a mise-first C0 stack with 4 services (`postgres`, `seaweedfs`, `pi`, `api`) and frozen v0 nouns.
+`forkloom` ships a mise-first C0/C1 stack with 5 services (`postgres`, `seaweedfs`, `pi`, `api`, `web`) and frozen v0 nouns.
 
 ## Invariants
 
@@ -14,6 +14,7 @@
 ## Ports
 
 - `api`: `8080`
+- `web`: `5173`
 - `postgres`: `5432`
 - `seaweed s3`: `8333`
 - `seaweed master`: `9333`
@@ -33,6 +34,8 @@ MISE_EXPERIMENTAL=1 mise run bootstrap
 ```bash
 MISE_EXPERIMENTAL=1 mise run svc
 ```
+
+Open `http://127.0.0.1:5173` for the single-screen run UI.
 
 ## Quick Artifact Demo
 
@@ -55,6 +58,12 @@ curl -fsS http://localhost:8080/artifacts/$SHA/meta | jq .
 - `GET /artifacts/:sha256/meta` fetch metadata noun
 - `POST /artifacts/:sha256/link` append parent/meta only
 - `GET /health` dependency map (`pg/s3/pi/api`)
+
+## Run UI
+
+- `web` proxies `/runs`, `/artifacts`, `/health` to `api`
+- flow: upload file -> `POST /artifacts` -> `POST /runs` -> `GET /runs/:runId/events`
+- trace drawer is reducer-derived from append-only `RunEvent` SSE
 
 ## Data Layout
 

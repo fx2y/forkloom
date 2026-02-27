@@ -1,6 +1,8 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import type { RunEvent, RunState } from "@forkloom/contracts";
 import type { RunEventKind } from "./event";
 import type { RunEventModel, RunModel, RunRepo, RunSpecModel } from "./ports";
+import { toRunEventContract, toRunStateContract } from "./projection";
 
 export type RunDonePayload = {
 	resultText: string;
@@ -59,6 +61,28 @@ export class RunService {
 		}
 
 		return created;
+	}
+
+	async getRunState(runId: string): Promise<RunState | null> {
+		const run = await this.deps.runRepo.getRun(runId);
+		if (!run) {
+			return null;
+		}
+		const artifacts = await this.deps.runRepo.listArtifacts(runId);
+		return toRunStateContract(run, artifacts);
+	}
+
+	async listRunEvents(
+		runId: string,
+		sinceEventId: number,
+		limit: number,
+	): Promise<RunEvent[]> {
+		const events = await this.deps.runRepo.listEventsSince(
+			runId,
+			sinceEventId,
+			limit,
+		);
+		return events.map(toRunEventContract);
 	}
 
 	async appendRunStarted(

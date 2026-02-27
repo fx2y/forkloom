@@ -2,6 +2,7 @@ import pg from "pg";
 import type {
 	AppendRunEventInput,
 	CreateRunInput,
+	RunArtifactLinkModel,
 	RunEventModel,
 	RunModel,
 	RunRepo,
@@ -30,6 +31,12 @@ type RunEventRow = PgRowBase & {
 	run_id: string;
 	kind: RunEventModel["kind"];
 	payload: Record<string, unknown> | null;
+};
+
+type RunArtifactRow = PgRowBase & {
+	run_id: string;
+	sha256: string;
+	kind: string;
 };
 
 type QueryResultLike<TRow> = {
@@ -95,6 +102,15 @@ function toRunEventModel(row: RunEventRow): RunEventModel {
 		runId: row.run_id,
 		kind: row.kind,
 		payload: row.payload ?? {},
+		createdAt: asIsoString(row.created_at),
+	};
+}
+
+function toRunArtifactLinkModel(row: RunArtifactRow): RunArtifactLinkModel {
+	return {
+		runId: row.run_id,
+		sha256: row.sha256,
+		kind: row.kind,
 		createdAt: asIsoString(row.created_at),
 	};
 }
@@ -200,6 +216,17 @@ export class PgRunRepo implements RunRepo {
 			[runId, sinceEventId, safeLimit],
 		);
 		return result.rows.map(toRunEventModel);
+	}
+
+	async listArtifacts(runId: string): Promise<RunArtifactLinkModel[]> {
+		const result = await this.pool.query<RunArtifactRow>(
+			`select run_id, sha256, kind, created_at
+			 from run_artifacts
+			 where run_id = $1
+			 order by created_at asc, sha256 asc, kind asc`,
+			[runId],
+		);
+		return result.rows.map(toRunArtifactLinkModel);
 	}
 
 	async markDone(input: {

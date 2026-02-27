@@ -1,0 +1,5 @@
+{
+	"name": "@forkloom/worker",
+	"private": true,
+	"type": "module"
+}

@@ -45,6 +45,7 @@ describe("run idempotency over POST /runs", () => {
 		listEventsSince: async () => {
 			throw new Error("unused");
 		},
+		listArtifacts: async () => [],
 		markDone: async () => null,
 		markFailed: async () => null,
 		linkArtifact: async () => undefined,

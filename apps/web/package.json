@@ -1,0 +1,14 @@
+{
+	"name": "@forkloom/web",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@forkloom/contracts": "workspace:*",
+		"@forkloom/shared": "workspace:*"
+	}
+}

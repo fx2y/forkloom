@@ -39,6 +39,13 @@ export type RunEventModel = {
 	createdAt: string;
 };
 
+export type RunArtifactLinkModel = {
+	runId: string;
+	sha256: string;
+	kind: string;
+	createdAt: string;
+};
+
 export type CreateRunInput = {
 	runId: string;
 	workflowId: string;
@@ -68,6 +75,7 @@ export interface RunRepo {
 		sinceEventId: number,
 		limit: number,
 	): Promise<RunEventModel[]>;
+	listArtifacts(runId: string): Promise<RunArtifactLinkModel[]>;
 	markDone(input: {
 		runId: string;
 		resultText: string;

@@ -4,7 +4,6 @@ import {
 	parseArtifactMeta,
 	parseArtifactType,
 	parseLinkPayload,
-	parseRunCreatePayload,
 	parseUpload,
 	requireRouteParam,
 } from "../../apps/api/src/http/request-parsers";
@@ -73,21 +72,5 @@ describe("request-parsers", () => {
 		expect(() => parseLinkPayload({ parent: 1 })).toThrow(
 			"parent must be a string",
 		);
-	});
-
-	it("parses run create payload and validates pointers", () => {
-		const payload = parseRunCreatePayload({
-			runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
-			scope: "team",
-			userMsg: "hello",
-			attachments: [{ sha256: "a".repeat(64) }],
-			workdirRef: { sha256: "b".repeat(64) },
-			modelPref: "gpt-4.1",
-		});
-
-		expect(payload.scope).toBe("team");
-		expect(payload.attachments[0]?.sha256).toBe("a".repeat(64));
-		expect(payload.workdirRef?.sha256).toBe("b".repeat(64));
-		expect(payload.modelPref).toBe("gpt-4.1");
 	});
 });

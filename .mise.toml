@@ -53,7 +53,7 @@ outputs = [".cache/mise-marks/svc__up.ok"]
 run = "bash ./mise-tasks/svc/health"
 depends = ["svc:up"]
 sources = ["docker-compose.yml", "mise-tasks/svc/health"]
-outputs = [".cache/mise-marks/svc__health.ok", "/tmp/svc.pg", "/tmp/svc.s3", "/tmp/svc.pi", "/tmp/svc.api"]
+outputs = [".cache/mise-marks/svc__health.ok", "/tmp/svc.pg", "/tmp/svc.s3", "/tmp/svc.pi", "/tmp/svc.api", "/tmp/svc.web"]
 
 [tasks."svc:down"]
 run = "bash ./mise-tasks/svc/down"

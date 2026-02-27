@@ -3,13 +3,14 @@ import express from "express";
 import multer from "multer";
 import type { RunService } from "../run/service";
 import type { ArtifactService } from "../service";
+import { parseRunCreatePayload, parseRunCursor } from "./run-request-parsers";
 import {
 	parseLinkPayload,
-	parseRunCreatePayload,
 	parseUpload,
 	requireRouteParam,
 } from "./request-parsers";
 import { asyncHandler, mapError } from "./route-utils";
+import { streamRunEvents } from "./sse";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -80,6 +81,38 @@ export function buildApiRouter(deps: {
 					runId: started.run.runId,
 					created: started.created,
 					status: started.run.status,
+				});
+			}),
+		);
+
+		app.get(
+			"/runs/:runId",
+			asyncHandler(async (req, res) => {
+				const runId = requireRouteParam(req.params.runId, "runId");
+				const run = await runService.getRunState(runId);
+				if (!run) {
+					res.status(404).json({ error: "run not found" });
+					return;
+				}
+				res.json(run);
+			}),
+		);
+
+		app.get(
+			"/runs/:runId/events",
+			asyncHandler(async (req, res) => {
+				const runId = requireRouteParam(req.params.runId, "runId");
+				const run = await runService.getRunState(runId);
+				if (!run) {
+					res.status(404).json({ error: "run not found" });
+					return;
+				}
+				const cursor = parseRunCursor(req);
+				await streamRunEvents(req, res, {
+					sinceEventId: cursor.sinceEventId,
+					limit: cursor.limit,
+					listEvents: (sinceEventId, limit) =>
+						runService.listRunEvents(runId, sinceEventId, limit),
 				});
 			}),
 		);
