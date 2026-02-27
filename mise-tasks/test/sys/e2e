@@ -3,15 +3,26 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds mise curl jq python3
+require_cmds mise curl jq python3 rg
+mkdir -p .cache/test-sys
 
 echo "starting sys:e2e smoke..."
 
+run_forced_gate() {
+  local gate="$1"
+  local log_path=".cache/test-sys/${gate//:/__}.log"
+  mise run --force "$gate" | tee "$log_path"
+  if rg -q 'sources up-to-date, skipping' "$log_path"; then
+    echo "unexpected cache skip in forced gate: $gate" >&2
+    exit 1
+  fi
+}
+
 # gates must pass before smoke
-mise run check
-mise run test:int
-mise run golden
-mise run fault
+run_forced_gate check
+run_forced_gate test:int
+run_forced_gate golden
+run_forced_gate fault
 
 echo "running product smoke..."
 curl -fsS http://localhost:8080/health | jq -e '.deps.pg and .deps.s3 and .deps.pi and .deps.api' >/dev/null

@@ -78,5 +78,27 @@ if [[ "$HTTP_CODE" != "409" ]]; then
   exit 1
 fi
 
+echo "checking meta key contract on upload..."
+HTTP_CODE=$(curl -sS -o /tmp/artifact.meta.invalid.upload.err -w "%{http_code}" \
+  -F "file=@$INPUT" \
+  -F 'meta={"BadKey":"bad"}' \
+  "http://localhost:8080/artifacts")
+if [[ "$HTTP_CODE" != "400" ]]; then
+  echo "expected invalid upload meta key rejection, got status $HTTP_CODE" >&2
+  cat /tmp/artifact.meta.invalid.upload.err >&2 || true
+  exit 1
+fi
+
+echo "checking meta key contract on link..."
+HTTP_CODE=$(curl -sS -o /tmp/artifact.meta.invalid.link.err -w "%{http_code}" \
+  -X POST "http://localhost:8080/artifacts/$HASH1/link" \
+  -H "content-type: application/json" \
+  -d '{"meta":{"BadKey":"bad"}}')
+if [[ "$HTTP_CODE" != "400" ]]; then
+  echo "expected invalid link meta key rejection, got status $HTTP_CODE" >&2
+  cat /tmp/artifact.meta.invalid.link.err >&2 || true
+  exit 1
+fi
+
 write_mark "test:int:artifact"
 echo "test:int:artifact ok"

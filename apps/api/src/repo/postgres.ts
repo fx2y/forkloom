@@ -89,7 +89,9 @@ export class PgArtifactRepo implements ArtifactRepo {
 		return toModel(row);
 	}
 
-	async insert(model: ArtifactModel): Promise<ArtifactModel> {
+	async insertIfAbsent(
+		model: ArtifactModel,
+	): Promise<{ artifact: ArtifactModel; inserted: boolean }> {
 		const result = await this.pool.query<ArtifactRow>(
 			`insert into artifact(sha256, uri, mime, bytes, created_at, type, parents, meta)
 			 values ($1, $2, $3, $4, $5::timestamptz, $6, $7::text[], $8::jsonb)
@@ -112,14 +114,18 @@ export class PgArtifactRepo implements ArtifactRepo {
 			if (!row) {
 				throw new Error("artifact row missing after insert");
 			}
-			return toModel(row);
+			return { artifact: toModel(row), inserted: true };
 		}
 
 		const existing = await this.getBySha256(model.sha256);
 		if (!existing) {
 			throw new Error("insert raced but row is missing");
 		}
-		return existing;
+		return { artifact: existing, inserted: false };
+	}
+
+	async deleteBySha256(sha256: string): Promise<void> {
+		await this.pool.query("delete from artifact where sha256 = $1", [sha256]);
 	}
 
 	async appendLink(

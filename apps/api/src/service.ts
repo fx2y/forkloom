@@ -46,28 +46,47 @@ export class ArtifactService {
 			return existing;
 		}
 
-		await this.stepRunner.runStep("artifact-put-object", () =>
-			this.deps.store.putObject({
-				sha256,
-				body: input.body,
-				mime: input.mime,
-			}),
+		const reservation = await this.stepRunner.runStep(
+			"artifact-insert-meta",
+			() =>
+				this.deps.repo.insertIfAbsent({
+					sha256,
+					uri: `s3://${this.deps.s3Bucket}/cas/${sha256.slice(0, 2)}/${sha256}`,
+					mime: input.mime,
+					bytes: input.body.byteLength,
+					createdAt: this.now().toISOString(),
+					type: input.type,
+					parents: [],
+					meta: input.meta,
+				}),
 		);
 
-		const created = await this.stepRunner.runStep("artifact-insert-meta", () =>
-			this.deps.repo.insert({
-				sha256,
-				uri: `s3://${this.deps.s3Bucket}/cas/${sha256.slice(0, 2)}/${sha256}`,
-				mime: input.mime,
-				bytes: input.body.byteLength,
-				createdAt: this.now().toISOString(),
-				type: input.type,
-				parents: [],
-				meta: input.meta,
-			}),
-		);
+		if (!reservation.inserted) {
+			if (input.force) {
+				throw new HttpError(409, "immutable artifact");
+			}
+			return reservation.artifact;
+		}
 
-		return created;
+		try {
+			await this.stepRunner.runStep("artifact-put-object", () =>
+				this.deps.store.putObject({
+					sha256,
+					body: input.body,
+					mime: input.mime,
+				}),
+			);
+		} catch (error) {
+			// Best-effort rollback: if object write fails we should not keep metadata-only rows.
+			try {
+				await this.deps.repo.deleteBySha256(sha256);
+			} catch {
+				// ignore cleanup failure to preserve original storage error
+			}
+			throw error;
+		}
+
+		return reservation.artifact;
 	}
 
 	async getArtifactMeta(sha256: string): Promise<ArtifactModel> {

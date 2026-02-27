@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds pnpm docker
+require_cmds pnpm docker curl jq
 
 docker compose up -d postgres
 for _ in $(seq 1 60); do
@@ -31,6 +31,29 @@ if [[ "$FIRST_EXIT" -eq 0 ]]; then
 fi
 
 pnpm exec tsx scripts/harness/dbos-live-workflow.ts recover "$WORKFLOW_ID" >/tmp/dbos-live.recover.log 2>&1
+
+mkdir -p .cache/test-int
+before_count=$(docker compose exec -T postgres psql -U postgres -d agentos -tAc "select count(*) from dbos.operation_outputs where function_name in ('artifact-put-object','artifact-insert-meta');" | tr -d '[:space:]')
+DBOS_INPUT=.cache/test-int/dbos-api-input.txt
+printf 'dbos-api-%s-%s\n' "$(date +%s)" "$RANDOM" > "$DBOS_INPUT"
+curl -fsS \
+  -H "content-type: text/plain" \
+  --data-binary @"$DBOS_INPUT" \
+  http://localhost:8080/artifacts \
+  > .cache/test-int/dbos-api-upload.json
+after_count=$(docker compose exec -T postgres psql -U postgres -d agentos -tAc "select count(*) from dbos.operation_outputs where function_name in ('artifact-put-object','artifact-insert-meta');" | tr -d '[:space:]')
+
+if [[ "$after_count" -le "$before_count" ]]; then
+  echo "expected API /artifacts path to emit DBOS step outputs (artifact-put-object/artifact-insert-meta)" >&2
+  exit 1
+fi
+
+jq -n \
+  --arg workflow_id "$WORKFLOW_ID" \
+  --argjson before "$before_count" \
+  --argjson after "$after_count" \
+  '{workflow_id:$workflow_id, api_step_outputs:{before:$before, after:$after}}' \
+  > .cache/test-int/dbos-api-step.json
 
 write_mark "test:int:dbos-runtime"
 echo "test:int:dbos-runtime ok"

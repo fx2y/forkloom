@@ -2,6 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
 import { loadConfig } from "./config";
+import { DbosStepRunner, launchDbos, shutdownDbos } from "./durability";
 import { buildHealthHandler } from "./http/health";
 import { buildApiRouter } from "./http/routes";
 import { PgArtifactRepo } from "./repo/postgres";
@@ -13,6 +14,8 @@ const migrationsDir = resolve(__dirname, "../migrations");
 
 async function bootstrap() {
 	const config = loadConfig();
+	await launchDbos(config.databaseUrl);
+
 	const repo = new PgArtifactRepo({
 		databaseUrl: config.databaseUrl,
 		migrationsDir,
@@ -40,6 +43,7 @@ async function bootstrap() {
 		repo,
 		store,
 		s3Bucket: config.s3Bucket,
+		stepRunner: new DbosStepRunner(),
 	});
 
 	const app = buildApiRouter(service);
@@ -70,6 +74,7 @@ async function main(): Promise<void> {
 	const close = async () => {
 		server.close();
 		await repo.close();
+		await shutdownDbos();
 	};
 
 	process.on("SIGTERM", () => {

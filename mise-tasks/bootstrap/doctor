@@ -6,7 +6,9 @@ cd_repo_root
 require_cmds mise jq
 optional_cmds_status fnox docker curl sqlite3 | tee .cache/doctor.optional.txt >/dev/null
 
-if find . -maxdepth 3 -type f -name '.env*' | rg -q '.'; then
+if find . \
+  \( -path './.git' -o -path './node_modules' \) -prune -o \
+  -type f -name '.env*' -print | rg -q '.'; then
   echo ".env* files are forbidden; use fnox only" >&2
   exit 1
 fi

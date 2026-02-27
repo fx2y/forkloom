@@ -5,10 +5,43 @@ source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 cd_repo_root
 require_cmds git rg
 
-CODE_CHANGED=$(git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD 2>/dev/null | rg -n '^(src/|scripts/|mise-tasks/|schema/|fixtures/|\.mise\.toml$|docker-compose\.yml$)' || true)
+collect_changed_files() {
+  if [[ -n "${LESSON_GUARD_RANGE:-}" ]]; then
+    git diff --name-only --diff-filter=ACMRTUXB "$LESSON_GUARD_RANGE"
+    return
+  fi
+
+  if [[ -n "${CI:-}" ]]; then
+    if [[ -n "${LESSON_GUARD_BASE_REF:-}" ]] && git rev-parse --verify "origin/${LESSON_GUARD_BASE_REF}" >/dev/null 2>&1; then
+      local base
+      base="$(git merge-base HEAD "origin/${LESSON_GUARD_BASE_REF}")"
+      git diff --name-only --diff-filter=ACMRTUXB "${base}...HEAD"
+      return
+    fi
+    if [[ -n "${GITHUB_BASE_REF:-}" ]] && git rev-parse --verify "origin/${GITHUB_BASE_REF}" >/dev/null 2>&1; then
+      local base
+      base="$(git merge-base HEAD "origin/${GITHUB_BASE_REF}")"
+      git diff --name-only --diff-filter=ACMRTUXB "${base}...HEAD"
+      return
+    fi
+    if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+      git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD
+      return
+    fi
+  fi
+
+  {
+    git diff --name-only --diff-filter=ACMRTUXB
+    git diff --name-only --cached --diff-filter=ACMRTUXB
+    git ls-files --others --exclude-standard
+  } | sort -u
+}
+
+CHANGED="$(collect_changed_files || true)"
+CODE_CHANGED=$(printf '%s\n' "$CHANGED" | rg -n '^(src/|scripts/|mise-tasks/|schema/|fixtures/|\.mise\.toml$|docker-compose\.yml$)' || true)
 
 if [[ -n "$CODE_CHANGED" ]]; then
-  POLICY_CHANGED=$(git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD 2>/dev/null | rg -n '^(tests/|AGENTS\.md$|\.codex/rules/)' || true)
+  POLICY_CHANGED=$(printf '%s\n' "$CHANGED" | rg -n '^(tests/|AGENTS\.md$|\.codex/rules/)' || true)
   if [[ -z "$POLICY_CHANGED" ]]; then
     echo "lesson-guard fail: code changed without tests/invariant delta" >&2
     exit 1

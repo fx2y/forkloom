@@ -1,4 +1,5 @@
 import { Readable } from "node:stream";
+import { hashBytes } from "@forkloom/shared";
 import { describe, expect, it } from "vitest";
 import type { HttpError } from "../../apps/api/src/errors";
 import type {
@@ -26,13 +27,16 @@ function inMemoryRepo(initial: ArtifactModel[] = []): ArtifactRepo {
 	return {
 		ping: async () => true,
 		getBySha256: async (sha256) => map.get(sha256) ?? null,
-		insert: async (model) => {
+		insertIfAbsent: async (model) => {
 			const existing = map.get(model.sha256);
 			if (existing) {
-				return existing;
+				return { artifact: existing, inserted: false };
 			}
 			map.set(model.sha256, model);
-			return model;
+			return { artifact: model, inserted: true };
+		},
+		deleteBySha256: async (sha256) => {
+			map.delete(sha256);
 		},
 		appendLink: async (sha256, parent, metaPatch) => {
 			const found = map.get(sha256);
@@ -72,6 +76,25 @@ function inMemoryStore(): ArtifactStore {
 			return { body: Readable.from(found.body), contentType: found.mime };
 		},
 		ping: async () => true,
+	};
+}
+
+function putCountingStore() {
+	let putCalls = 0;
+	const store = inMemoryStore();
+	return {
+		store: {
+			...store,
+			putObject: async (input: {
+				sha256: string;
+				body: Buffer;
+				mime: string;
+			}) => {
+				putCalls += 1;
+				await store.putObject(input);
+			},
+		} satisfies ArtifactStore,
+		getPutCalls: () => putCalls,
 	};
 }
 
@@ -161,5 +184,78 @@ describe("ArtifactService", () => {
 		});
 		expect(linked.parents).toContain("b".repeat(64));
 		expect(linked.meta["ingest.note"]).toBe("x");
+	});
+
+	it("returns 409 on force when insert races after empty precheck", async () => {
+		const sha = "b".repeat(64);
+		let inserted = false;
+		const raceRepo: ArtifactRepo = {
+			ping: async () => true,
+			getBySha256: async () => null,
+			insertIfAbsent: async () => {
+				if (!inserted) {
+					inserted = true;
+					return { artifact: makeArtifact(sha), inserted: false };
+				}
+				return { artifact: makeArtifact(sha), inserted: false };
+			},
+			deleteBySha256: async () => undefined,
+			appendLink: async () => null,
+		};
+		const counter = putCountingStore();
+		const service = new ArtifactService({
+			repo: raceRepo,
+			store: counter.store,
+			s3Bucket: "agentos",
+		});
+
+		await expect(
+			service.putArtifact({
+				body: Buffer.from("abc"),
+				mime: "text/plain",
+				type: "raw",
+				meta: {},
+				force: true,
+			}),
+		).rejects.toMatchObject({ status: 409 } satisfies Partial<HttpError>);
+		expect(counter.getPutCalls()).toBe(0);
+	});
+
+	it("rolls back inserted metadata if object write fails", async () => {
+		const sha = hashBytes(Buffer.from("abc"));
+		let deletedSha: string | null = null;
+		const repo: ArtifactRepo = {
+			ping: async () => true,
+			getBySha256: async () => null,
+			insertIfAbsent: async (model) => ({ artifact: model, inserted: true }),
+			deleteBySha256: async (value) => {
+				deletedSha = value;
+			},
+			appendLink: async () => null,
+		};
+		const service = new ArtifactService({
+			repo,
+			store: {
+				ensureBucket: async () => undefined,
+				putObject: async () => {
+					throw new Error("s3 down");
+				},
+				getObject: async () => {
+					throw new Error("unused");
+				},
+				ping: async () => true,
+			},
+			s3Bucket: "agentos",
+		});
+
+		await expect(
+			service.putArtifact({
+				body: Buffer.from("abc"),
+				mime: "text/plain",
+				type: "raw",
+				meta: {},
+			}),
+		).rejects.toThrow("s3 down");
+		expect(deletedSha).toBe(sha);
 	});
 });

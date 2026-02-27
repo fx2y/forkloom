@@ -6,7 +6,10 @@ cd_repo_root
 require_cmds docker
 
 echo "svc:reset: cleaning up docker volumes and local caches..."
-docker compose down -v --remove-orphans || true
-rm -rf .cache/dbos .data/seaweed .tmp/svc.* || true
+docker compose down -v --remove-orphans
+if [[ -d .data/seaweed ]] && ! rm -rf .data/seaweed 2>/dev/null; then
+  docker run --rm -v "$PWD:/work" alpine:3.20 sh -lc 'rm -rf /work/.data/seaweed'
+fi
+rm -rf .cache/dbos .tmp/svc.* /tmp/svc.*
 write_mark "svc:reset"
 echo "svc:reset ok"

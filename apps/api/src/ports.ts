@@ -42,7 +42,10 @@ export interface ArtifactStore {
 export interface ArtifactRepo {
 	ping(): Promise<boolean>;
 	getBySha256(sha256: string): Promise<ArtifactModel | null>;
-	insert(model: ArtifactModel): Promise<ArtifactModel>;
+	insertIfAbsent(
+		model: ArtifactModel,
+	): Promise<{ artifact: ArtifactModel; inserted: boolean }>;
+	deleteBySha256(sha256: string): Promise<void>;
 	appendLink(
 		sha256: string,
 		parent: string | null,

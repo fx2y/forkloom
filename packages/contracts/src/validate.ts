@@ -39,6 +39,13 @@ const validators: Record<ContractName, ValidateFunction> = {
 	Skill: ajv.compile(skillSchema),
 	Extension: ajv.compile(extensionSchema),
 };
+const artifactProperties =
+	(artifactSchema as { properties?: Record<string, unknown> }).properties ?? {};
+const artifactMetaSchema = artifactProperties.meta;
+if (!artifactMetaSchema || typeof artifactMetaSchema !== "object") {
+	throw new Error("Artifact.meta schema is required for meta validation");
+}
+const validateArtifactMetaFn = ajv.compile(artifactMetaSchema);
 
 function toErrors(errors: ErrorObject[] | null | undefined): string[] {
 	return (errors ?? []).map(
@@ -63,4 +70,15 @@ export function validateByName(
 
 export function getContractNames(): ContractName[] {
 	return Object.keys(validators) as ContractName[];
+}
+
+export function validateArtifactMeta(input: unknown): {
+	valid: boolean;
+	errors: string[];
+} {
+	const valid = validateArtifactMetaFn(input);
+	return {
+		valid: Boolean(valid),
+		errors: toErrors(validateArtifactMetaFn.errors),
+	};
 }

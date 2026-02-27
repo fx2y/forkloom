@@ -109,7 +109,7 @@ outputs = [".cache/mise-marks/test__int__dbos-durability.ok", "/tmp/dbos.sql.out
 run = "bash ./mise-tasks/test/int/dbos-runtime"
 depends = ["svc:health"]
 sources = ["src/**/*.ts", "scripts/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/dbos-runtime"]
-outputs = [".cache/mise-marks/test__int__dbos-runtime.ok", ".cache/test-int/dbos-live.json", "/tmp/dbos-live.first.log", "/tmp/dbos-live.recover.log"]
+outputs = [".cache/mise-marks/test__int__dbos-runtime.ok", ".cache/test-int/dbos-live.json", ".cache/test-int/dbos-api-step.json", "/tmp/dbos-live.first.log", "/tmp/dbos-live.recover.log"]
 
 [tasks."test:int:pi-rpc"]
 run = "bash ./mise-tasks/test/int/pi-rpc"

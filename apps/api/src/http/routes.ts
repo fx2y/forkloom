@@ -1,3 +1,4 @@
+import { validateArtifactMeta } from "@forkloom/contracts";
 import { isSha256 } from "@forkloom/shared";
 import type { NextFunction, Request, Response } from "express";
 import express from "express";
@@ -28,6 +29,15 @@ function parseType(input: unknown): ArtifactType {
 }
 
 function parseMeta(input: unknown): Record<string, unknown> {
+	const parsed = parseMetaObject(input);
+	const validation = validateArtifactMeta(parsed);
+	if (!validation.valid) {
+		throw new HttpError(400, `invalid meta: ${validation.errors.join("; ")}`);
+	}
+	return parsed;
+}
+
+function parseMetaObject(input: unknown): Record<string, unknown> {
 	if (input == null || input === "") {
 		return {};
 	}
@@ -42,6 +52,29 @@ function parseMeta(input: unknown): Record<string, unknown> {
 		return input as Record<string, unknown>;
 	}
 	throw new HttpError(400, "meta must be a JSON object");
+}
+
+function parseLinkPayload(input: unknown): {
+	parent: string | null;
+	meta: Record<string, unknown>;
+} {
+	if (input == null) {
+		return { parent: null, meta: {} };
+	}
+	if (typeof input !== "object" || Array.isArray(input)) {
+		throw new HttpError(400, "link payload must be a JSON object");
+	}
+
+	const record = input as Record<string, unknown>;
+	const parentValue = record.parent;
+	if (parentValue != null && typeof parentValue !== "string") {
+		throw new HttpError(400, "parent must be a string");
+	}
+
+	return {
+		parent: parentValue ?? null,
+		meta: parseMeta(record.meta),
+	};
 }
 
 async function parseUpload(req: Request): Promise<PutArtifactInput> {
@@ -151,14 +184,11 @@ export function buildApiRouter(service: ArtifactService) {
 		"/artifacts/:sha256/link",
 		express.json({ limit: "1mb" }),
 		asyncHandler(async (req, res) => {
-			const payload = (req.body ?? {}) as {
-				parent?: string;
-				meta?: Record<string, unknown>;
-			};
+			const payload = parseLinkPayload(req.body);
 			const artifact = await service.linkArtifact(
 				requireParam(req.params.sha256, "sha256"),
-				payload.parent ?? null,
-				payload.meta ?? {},
+				payload.parent,
+				payload.meta,
 			);
 			res.json(artifact);
 		}),
