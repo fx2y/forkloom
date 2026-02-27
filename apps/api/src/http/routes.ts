@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import multer from "multer";
 import { HttpError, isHttpError } from "../errors";
-import type { ArtifactType } from "../ports";
+import type { ArtifactType, PutArtifactInput } from "../ports";
 import type { ArtifactService } from "../service";
 
 const upload = multer({ storage: multer.memoryStorage() });

@@ -197,5 +197,6 @@ run = [
   "mise run --force test:int",
   "mise run --force golden",
   "mise run --force fault",
+  "mise run --force test:sys",
   "mise run --force bench"
 ]

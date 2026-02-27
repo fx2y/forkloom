@@ -20,8 +20,8 @@ export type PutArtifactInput = {
 	mime: string;
 	type: ArtifactType;
 	meta: ArtifactMeta;
-	expectedSha256?: string;
-	force?: boolean;
+	expectedSha256?: string | undefined;
+	force?: boolean | undefined;
 };
 
 export type PutObjectInput = {

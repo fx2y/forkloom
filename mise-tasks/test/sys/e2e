@@ -5,11 +5,15 @@ source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 cd_repo_root
 require_cmds mise curl jq python3
 
+echo "starting sys:e2e smoke..."
+
+# gates must pass before smoke
 mise run check
 mise run test:int
 mise run golden
 mise run fault
 
+echo "running product smoke..."
 curl -fsS http://localhost:8080/health | jq -e '.deps.pg and .deps.s3 and .deps.pi and .deps.api' >/dev/null
 curl -fsS -F file=@README.md http://localhost:8080/artifacts > .cache/test-int/sys.upload.json
 SYS_SHA=$(jq -r '.sha256' .cache/test-int/sys.upload.json)
