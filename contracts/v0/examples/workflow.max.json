@@ -1,0 +1,9 @@
+{
+  "name": "artifact_ingest",
+  "runId": "01HS7Z6E5R4W6NED8MH4D9Y6A1",
+  "status": "done",
+  "idempotencyKey": "artifact:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "input": {
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

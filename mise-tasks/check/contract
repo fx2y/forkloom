@@ -3,9 +3,16 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds pnpm
+require_cmds pnpm rg
 
 pnpm exec vitest run tests/contract
 pnpm exec tsx scripts/harness/contract-smoke.ts fixtures/contract/pi-event.valid.json
+pnpm exec tsx packages/contracts/src/check.ts
+
+if rg -n '"(Task|Agent|Thread|Run|ToolCall|Memory|Connector|Doc)"' contracts/v0/*.schema.json packages/contracts/src; then
+  echo "banned noun detected in public contracts surface" >&2
+  exit 1
+fi
+
 write_mark "check:contract"
 echo "check:contract ok"

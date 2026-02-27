@@ -1,0 +1,55 @@
+{
+  "$id": "https://forkloom/contracts/v0/Artifact.schema.json",
+  "title": "Artifact",
+  "type": "object",
+  "required": [
+    "sha256",
+    "uri",
+    "mime",
+    "bytes",
+    "createdAt",
+    "type",
+    "parents",
+    "meta"
+  ],
+  "properties": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "uri": {
+      "type": "string",
+      "pattern": "^(s3://|https?://).+"
+    },
+    "mime": {
+      "type": "string"
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["raw", "md", "json", "trace", "other"]
+    },
+    "parents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "meta": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$"
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

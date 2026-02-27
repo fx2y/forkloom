@@ -1,0 +1,62 @@
+/*
+ * GENERATED FILE - DO NOT EDIT.
+ * Run: pnpm exec tsx packages/contracts/src/typegen.ts --write
+ */
+
+export type Delivery = "steer" | "follow";
+export type Scope = "me" | "team" | "org";
+export type Role = "user" | "agent" | "system";
+export type ArtifactType = "raw" | "md" | "json" | "trace" | "other";
+export type WorkflowStatus = "queued" | "running" | "done" | "err";
+export type ExtensionCapability = "tool" | "cmd" | "ui" | "gate";
+
+export type ArtifactRef = {
+	sha256: string;
+};
+
+export type Message = {
+	id: string;
+	ts: string;
+	role: Role;
+	text: string;
+	scope: Scope;
+	threadId: string;
+	delivery: Delivery;
+	attachments: ArtifactRef[];
+	meta: Record<string, unknown>;
+};
+
+export type Artifact = {
+	sha256: string;
+	uri: string;
+	mime: string;
+	bytes: number;
+	createdAt: string;
+	type: ArtifactType;
+	parents: string[];
+	meta: Record<string, unknown>;
+};
+
+export type Workflow = {
+	name: string;
+	runId: string;
+	status: WorkflowStatus;
+	idempotencyKey: string;
+	input?: ArtifactRef | Record<string, unknown>;
+};
+
+export type Skill = {
+	skillId: string;
+	path: string;
+	name: string;
+	description: string;
+	allowedTools?: string[];
+	version?: string;
+};
+
+export type Extension = {
+	name: string;
+	version: string;
+	entry: string;
+	capabilities: ExtensionCapability[];
+};

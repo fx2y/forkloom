@@ -1,0 +1,35 @@
+{
+  "$id": "https://forkloom/contracts/v0/Skill.schema.json",
+  "title": "Skill",
+  "type": "object",
+  "required": ["skillId", "path", "name", "description"],
+  "properties": {
+    "skillId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "allowedTools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

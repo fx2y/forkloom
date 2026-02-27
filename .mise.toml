@@ -46,14 +46,14 @@ depends = ["bootstrap:doctor", "bootstrap:secrets"]
 
 [tasks."svc:up"]
 run = "bash ./mise-tasks/svc/up"
-sources = ["docker-compose.yml", "mise-tasks/svc/up"]
+sources = ["docker-compose.yml", "apps/api/**/*.ts", "apps/pi-mock/**/*.mjs", "apps/api/migrations/*.sql", "mise-tasks/svc/up"]
 outputs = [".cache/mise-marks/svc__up.ok"]
 
 [tasks."svc:health"]
 run = "bash ./mise-tasks/svc/health"
 depends = ["svc:up"]
 sources = ["docker-compose.yml", "mise-tasks/svc/health"]
-outputs = [".cache/mise-marks/svc__health.ok", "/tmp/svc.pg", "/tmp/svc.s3"]
+outputs = [".cache/mise-marks/svc__health.ok", "/tmp/svc.pg", "/tmp/svc.s3", "/tmp/svc.pi", "/tmp/svc.api"]
 
 [tasks."svc:down"]
 run = "bash ./mise-tasks/svc/down"
@@ -65,26 +65,31 @@ depends = ["svc:health"]
 
 [tasks."check:lint"]
 run = "bash ./mise-tasks/check/lint"
-sources = ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "schema/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/lint"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "schema/**/*.json", "contracts/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/lint"]
 outputs = [".cache/mise-marks/check__lint.ok"]
 
 [tasks."check:type"]
 run = "bash ./mise-tasks/check/type"
-sources = ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "tsconfig.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/type"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tsconfig.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/type"]
 outputs = [".cache/mise-marks/check__type.ok"]
 
 [tasks."check:unit"]
 run = "bash ./mise-tasks/check/unit"
-sources = ["src/**/*.ts", "tests/unit/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
+sources = ["src/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/unit/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
 outputs = [".cache/mise-marks/check__unit.ok"]
 
 [tasks."check:contract"]
 run = "bash ./mise-tasks/check/contract"
-sources = ["src/**/*.ts", "tests/contract/**/*.ts", "schema/**/*.json", "fixtures/contract/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/contract"]
+sources = ["src/**/*.ts", "packages/contracts/**/*.ts", "tests/contract/**/*.ts", "schema/**/*.json", "fixtures/contract/**/*.json", "contracts/v0/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/contract"]
 outputs = [".cache/mise-marks/check__contract.ok"]
 
+[tasks."check:lesson-guard"]
+run = "bash ./mise-tasks/check/lesson-guard"
+sources = [".mise.toml", "mise-tasks/check/lesson-guard", "AGENTS.md", ".codex/rules/**/*.md"]
+outputs = [".cache/mise-marks/check__lesson-guard.ok"]
+
 [tasks.check]
-depends = ["check:lint", "check:type", "check:unit", "check:contract"]
+depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard"]
 
 [tasks."test:int:dbos-durability"]
 run = "bash ./mise-tasks/test/int/dbos-durability"
@@ -110,7 +115,8 @@ outputs = [".cache/mise-marks/test__int__pi-rpc-live.ok", ".cache/test-int/pi-li
 
 [tasks."test:int:artifact"]
 run = "bash ./mise-tasks/test/int/artifact"
-sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/artifact"]
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/artifact"]
 outputs = [".cache/mise-marks/test__int__artifact.ok", ".cache/test-int/artifact.meta.1.json", ".cache/test-int/artifact.meta.2.json"]
 
 [tasks."test:int:ocr-doc"]
@@ -171,7 +177,7 @@ depends = ["bench:latency", "bench:cost"]
 [tasks."test:sys:e2e"]
 run = "bash ./mise-tasks/test/sys/e2e"
 depends = ["bootstrap", "svc:health"]
-sources = [".mise.toml", "mise-tasks/test/sys/e2e", "src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "fixtures/**/*.jsonl", "schema/**/*.json", "docker-compose.yml"]
+sources = [".mise.toml", "mise-tasks/test/sys/e2e", "src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "contracts/v0/**/*.json", "fixtures/**/*.jsonl", "schema/**/*.json", "docker-compose.yml"]
 outputs = [".cache/mise-marks/test__sys__e2e.ok"]
 
 [tasks."test:sys"]

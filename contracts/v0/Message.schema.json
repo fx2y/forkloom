@@ -1,0 +1,59 @@
+{
+  "$id": "https://forkloom/contracts/v0/Message.schema.json",
+  "title": "Message",
+  "type": "object",
+  "required": [
+    "id",
+    "ts",
+    "role",
+    "text",
+    "scope",
+    "threadId",
+    "delivery",
+    "attachments",
+    "meta"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["user", "agent", "system"]
+    },
+    "text": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["me", "team", "org"]
+    },
+    "threadId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "delivery": {
+      "type": "string",
+      "enum": ["steer", "follow"]
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "https://forkloom/contracts/v0/ArtifactRef.schema.json"
+      }
+    },
+    "meta": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$"
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

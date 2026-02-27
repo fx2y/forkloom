@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds git rg
+
+CODE_CHANGED=$(git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD 2>/dev/null | rg -n '^(src/|scripts/|mise-tasks/|schema/|fixtures/|\.mise\.toml$|docker-compose\.yml$)' || true)
+
+if [[ -n "$CODE_CHANGED" ]]; then
+  POLICY_CHANGED=$(git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD 2>/dev/null | rg -n '^(tests/|AGENTS\.md$|\.codex/rules/)' || true)
+  if [[ -z "$POLICY_CHANGED" ]]; then
+    echo "lesson-guard fail: code changed without tests/invariant delta" >&2
+    exit 1
+  fi
+fi
+
+write_mark "check:lesson-guard"
+echo "check:lesson-guard ok"

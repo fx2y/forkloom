@@ -1,0 +1,36 @@
+{
+  "$id": "https://forkloom/contracts/v0/Workflow.schema.json",
+  "title": "Workflow",
+  "type": "object",
+  "required": ["name", "runId", "status", "idempotencyKey"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "done", "err"]
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input": {
+      "anyOf": [
+        {
+          "$ref": "https://forkloom/contracts/v0/ArtifactRef.schema.json"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

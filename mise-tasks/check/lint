@@ -5,6 +5,6 @@ source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 cd_repo_root
 require_cmds pnpm
 
-pnpm exec biome check src scripts tests
+pnpm exec biome check src scripts tests apps packages
 write_mark "check:lint"
 echo "check:lint ok"

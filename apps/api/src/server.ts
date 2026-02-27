@@ -1,0 +1,93 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadConfig } from "./config";
+import { buildHealthHandler } from "./http/health";
+import { buildApiRouter } from "./http/routes";
+import { PgArtifactRepo } from "./repo/postgres";
+import { ArtifactService } from "./service";
+import { S3ArtifactStore } from "./storage/s3";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const migrationsDir = resolve(__dirname, "../migrations");
+
+async function waitFor(
+	name: string,
+	predicate: () => Promise<boolean>,
+	tries = 60,
+): Promise<void> {
+	for (let index = 0; index < tries; index += 1) {
+		if (await predicate()) {
+			return;
+		}
+		await new Promise((resolveSleep) => setTimeout(resolveSleep, 1_000));
+	}
+	throw new Error(`${name} is not ready after ${tries}s`);
+}
+
+async function main(): Promise<void> {
+	const config = loadConfig();
+	const repo = new PgArtifactRepo({
+		databaseUrl: config.databaseUrl,
+		migrationsDir,
+	});
+	const store = new S3ArtifactStore({
+		endpoint: config.s3Endpoint,
+		bucket: config.s3Bucket,
+		region: config.s3Region,
+		accessKeyId: config.awsAccessKeyId,
+		secretAccessKey: config.awsSecretAccessKey,
+	});
+
+	await waitFor("postgres", () => repo.ping());
+	await repo.runMigrations();
+	await waitFor("s3 bucket", async () => {
+		try {
+			await store.ensureBucket();
+			return true;
+		} catch {
+			return false;
+		}
+	});
+
+	const service = new ArtifactService({
+		repo,
+		store,
+		s3Bucket: config.s3Bucket,
+	});
+
+	const app = buildApiRouter(service);
+	app.get(
+		"/health",
+		buildHealthHandler({ repo, store, piRpcUrl: config.piRpcUrl }),
+	);
+
+	const server = app.listen(config.port, () => {
+		const payload = {
+			msg: "api booted",
+			port: config.port,
+			deps: {
+				pg: config.databaseUrl,
+				s3: config.s3Endpoint,
+				pi: config.piRpcUrl,
+			},
+		};
+		console.log(JSON.stringify(payload));
+	});
+
+	const close = async () => {
+		server.close();
+		await repo.close();
+	};
+
+	process.on("SIGTERM", () => {
+		void close();
+	});
+	process.on("SIGINT", () => {
+		void close();
+	});
+}
+
+main().catch((error: unknown) => {
+	console.error(error);
+	process.exit(1);
+});

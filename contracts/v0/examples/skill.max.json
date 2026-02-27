@@ -1,0 +1,8 @@
+{
+  "skillId": "policy-qa",
+  "path": "/skills/policy-qa/SKILL.md",
+  "name": "Policy QA",
+  "description": "Answer policy questions with references",
+  "allowedTools": ["read", "write"],
+  "version": "1.0.0"
+}

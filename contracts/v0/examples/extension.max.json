@@ -1,0 +1,6 @@
+{
+  "name": "ops-tools",
+  "version": "1.2.3",
+  "entry": "dist/main.js",
+  "capabilities": ["tool", "cmd", "ui", "gate"]
+}

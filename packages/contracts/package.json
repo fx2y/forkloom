@@ -1,0 +1,9 @@
+{
+	"name": "@forkloom/contracts",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "tsx src/check.ts",
+		"typegen": "tsx src/typegen.ts --write"
+	}
+}

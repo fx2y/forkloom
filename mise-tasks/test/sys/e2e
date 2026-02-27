@@ -3,12 +3,27 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds mise
+require_cmds mise curl jq python3
 
 mise run check
 mise run test:int
 mise run golden
 mise run fault
+
+curl -fsS http://localhost:8080/health | jq -e '.deps.pg and .deps.s3 and .deps.pi and .deps.api' >/dev/null
+curl -fsS -F file=@README.md http://localhost:8080/artifacts > .cache/test-int/sys.upload.json
+SYS_SHA=$(jq -r '.sha256' .cache/test-int/sys.upload.json)
+curl -fsS "http://localhost:8080/artifacts/$SYS_SHA" > .cache/test-int/sys.download.bin
+SYS_HASH=$(python3 - <<'PY'
+import hashlib
+with open('.cache/test-int/sys.download.bin','rb') as f:
+    print(hashlib.sha256(f.read()).hexdigest())
+PY
+)
+if [[ "$SYS_HASH" != "$SYS_SHA" ]]; then
+  echo "system smoke hash mismatch" >&2
+  exit 1
+fi
 
 write_mark "test:sys:e2e"
 echo "test:sys:e2e ok"

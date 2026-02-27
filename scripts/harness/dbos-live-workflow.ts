@@ -29,6 +29,7 @@ if (!dbUrl) {
 	console.error("DBOS_SYSTEM_DATABASE_URL is required");
 	process.exit(1);
 }
+const systemDatabaseUrl: string = dbUrl;
 
 const crashMarker = resolve(".cache/dbos/crash.once");
 mkdirSync(dirname(crashMarker), { recursive: true });
@@ -110,7 +111,7 @@ async function run(): Promise<void> {
 	await setupTables();
 
 	DBOS.setConfig({
-		systemDatabaseUrl: dbUrl,
+		systemDatabaseUrl,
 		runAdminServer: false,
 	});
 	await DBOS.launch();

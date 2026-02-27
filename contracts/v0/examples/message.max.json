@@ -1,0 +1,18 @@
+{
+  "id": "01HS7Z5FQH4YBBX4S66AV87QZ2",
+  "ts": "2026-02-27T00:00:01Z",
+  "role": "agent",
+  "text": "",
+  "scope": "team",
+  "threadId": "thread-01",
+  "delivery": "steer",
+  "attachments": [
+    {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "meta": {
+    "ingest.source": "ui",
+    "org.trace_id": "trace-7"
+  }
+}

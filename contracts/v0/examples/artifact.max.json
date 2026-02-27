@@ -1,0 +1,15 @@
+{
+  "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "uri": "https://example.invalid/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "mime": "application/json",
+  "bytes": 2048,
+  "createdAt": "2026-02-27T00:00:02Z",
+  "type": "json",
+  "parents": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "meta": {
+    "ingest.filename": "doc.json",
+    "trace.provider": "mock"
+  }
+}

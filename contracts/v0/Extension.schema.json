@@ -1,0 +1,29 @@
+{
+  "$id": "https://forkloom/contracts/v0/Extension.schema.json",
+  "title": "Extension",
+  "type": "object",
+  "required": ["name", "version", "entry", "capabilities"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["tool", "cmd", "ui", "gate"]
+      },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false
+}

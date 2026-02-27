@@ -22,3 +22,39 @@ services:
     volumes:
       - ./.data/seaweed:/data
       - ./infra/seaweedfs/s3.conf:/etc/seaweedfs/s3.conf:ro
+
+  pi:
+    image: node:24-alpine
+    working_dir: /work
+    command: ["node", "apps/pi-mock/server.mjs"]
+    volumes:
+      - ./:/work
+    ports:
+      - "7070:7070"
+
+  api:
+    image: node:24-alpine
+    working_dir: /work
+    command: ["sh", "-lc", "corepack enable && pnpm exec tsx apps/api/src/server.ts"]
+    volumes:
+      - ./:/work
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
+      DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: agentos
+      S3_ACCESS_KEY: admin
+      S3_SECRET_KEY: key
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: key
+      PI_RPC_URL: http://pi:7070
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+      pi:
+        condition: service_started

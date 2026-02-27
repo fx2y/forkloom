@@ -1,0 +1,13 @@
+{
+  "$id": "https://forkloom/contracts/v0/ArtifactRef.schema.json",
+  "title": "ArtifactRef",
+  "type": "object",
+  "required": ["sha256"],
+  "properties": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}
