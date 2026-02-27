@@ -1,4 +1,4 @@
-import { hashBytes, isSha256 } from "../../../packages/shared/src/hash";
+import { hashBytes, isSha256 } from "@forkloom/shared";
 import { InlineStepRunner, type StepRunner } from "./durability";
 import { HttpError } from "./errors";
 import type {

@@ -4,5 +4,10 @@
 	"type": "module",
 	"scripts": {
 		"dev": "tsx src/server.ts"
+	},
+	"dependencies": {
+		"@forkloom/contracts": "workspace:*",
+		"@forkloom/shared": "workspace:*"
 	}
 }
+

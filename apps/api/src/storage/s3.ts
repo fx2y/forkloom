@@ -6,7 +6,7 @@ import {
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
-import { casKey } from "../../../../packages/shared/src/hash";
+import { casKey } from "@forkloom/shared";
 import type { ArtifactStore, PutObjectInput } from "../ports";
 
 type S3Deps = {

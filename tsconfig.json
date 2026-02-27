@@ -11,7 +11,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"],
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@forkloom/contracts": ["packages/contracts/src/index"],
+      "@forkloom/shared": ["packages/shared/src/index"]
+    }
   },
   "include": [
     "src/**/*.ts",
