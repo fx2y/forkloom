@@ -60,6 +60,23 @@ write_json() {
   printf '%s\n' "$json_payload" > "$output_path"
 }
 
+wait_for_url() {
+  local name="$1"
+  local url="$2"
+  local output_path="$3"
+  local curl_opts="${4:--fsS}"
+  local tries="${5:-60}"
+  local i
+  for (( i=1; i<=tries; i++ )); do
+    if curl ${curl_opts} "$url" > "$output_path" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "$name healthcheck failed ($url)" >&2
+  return 1
+}
+
 append_line() {
   local output_path="$1"
   local line="$2"

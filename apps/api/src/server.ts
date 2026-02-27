@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitFor } from "@forkloom/shared";
 import { loadConfig } from "./config";
 import { buildHealthHandler } from "./http/health";
 import { buildApiRouter } from "./http/routes";
@@ -10,21 +11,7 @@ import { S3ArtifactStore } from "./storage/s3";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(__dirname, "../migrations");
 
-async function waitFor(
-	name: string,
-	predicate: () => Promise<boolean>,
-	tries = 60,
-): Promise<void> {
-	for (let index = 0; index < tries; index += 1) {
-		if (await predicate()) {
-			return;
-		}
-		await new Promise((resolveSleep) => setTimeout(resolveSleep, 1_000));
-	}
-	throw new Error(`${name} is not ready after ${tries}s`);
-}
-
-async function main(): Promise<void> {
+async function bootstrap() {
 	const config = loadConfig();
 	const repo = new PgArtifactRepo({
 		databaseUrl: config.databaseUrl,
@@ -60,6 +47,12 @@ async function main(): Promise<void> {
 		"/health",
 		buildHealthHandler({ repo, store, piRpcUrl: config.piRpcUrl }),
 	);
+
+	return { app, config, repo };
+}
+
+async function main(): Promise<void> {
+	const { app, config, repo } = await bootstrap();
 
 	const server = app.listen(config.port, () => {
 		const payload = {

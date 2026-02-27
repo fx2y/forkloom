@@ -7,6 +7,7 @@ require_cmds docker curl
 
 docker compose ps postgres seaweedfs pi api >/tmp/svc.ps
 
+# Postgres uses a different check mechanism
 for _ in $(seq 1 60); do
   if docker compose exec -T postgres pg_isready -U postgres -d agentos >/tmp/svc.pg 2>/dev/null; then
     break
@@ -19,39 +20,13 @@ if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/tmp/svc
   exit 1
 fi
 
-for _ in $(seq 1 60); do
-  if curl -sS http://localhost:8333 >/tmp/svc.s3 2>/dev/null; then
-    break
-  fi
-  sleep 1
-done
+wait_for_url "seaweed" "http://localhost:8333" "/tmp/svc.s3" "-sS" || exit 1
+wait_for_url "pi" "http://localhost:7070/health" "/tmp/svc.pi" "-fsS" || exit 1
+wait_for_url "api" "http://localhost:8080/health" "/tmp/svc.api" "-fsS" || exit 1
 
-if ! curl -sS http://localhost:8333 >/tmp/svc.s3 2>/dev/null; then
-  echo "seaweed healthcheck failed" >&2
-  exit 1
-fi
-
-for _ in $(seq 1 60); do
-  if curl -sS http://localhost:7070/health >/tmp/svc.pi 2>/dev/null; then
-    break
-  fi
-  sleep 1
-done
-
-if ! curl -sS http://localhost:7070/health >/tmp/svc.pi 2>/dev/null; then
-  echo "pi healthcheck failed" >&2
-  exit 1
-fi
-
-for _ in $(seq 1 60); do
-  if curl -sS http://localhost:8080/health >/tmp/svc.api 2>/dev/null; then
-    break
-  fi
-  sleep 1
-done
-
-if ! curl -sS http://localhost:8080/health >/tmp/svc.api 2>/dev/null; then
-  echo "api healthcheck failed" >&2
+# Extra safety: ensure API reports OK
+if ! grep -q '"ok":true' /tmp/svc.api; then
+  echo "api healthcheck reported NOT ok: $(cat /tmp/svc.api)" >&2
   exit 1
 fi
 
