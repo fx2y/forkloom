@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq
+
+mkdir -p .cache/test-int
+cp fixtures/sessions/sample.session.jsonl .cache/test-int/artifact.input
+pnpm exec tsx scripts/harness/artifact-metadata.ts .cache/test-int/artifact.input .cache/test-int/artifact.meta.1.json
+pnpm exec tsx scripts/harness/artifact-metadata.ts .cache/test-int/artifact.input .cache/test-int/artifact.meta.2.json
+
+HASH1=$(jq -r '.sha256' .cache/test-int/artifact.meta.1.json)
+HASH2=$(jq -r '.sha256' .cache/test-int/artifact.meta.2.json)
+if [[ "$HASH1" != "$HASH2" ]]; then
+  echo "artifact hash is unstable" >&2
+  exit 1
+fi
+
+write_mark "test:int:artifact"
+echo "test:int:artifact ok"

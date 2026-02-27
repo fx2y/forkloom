@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds docker curl
+
+docker compose ps postgres seaweedfs >/tmp/svc.ps
+
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U postgres -d agentos >/tmp/svc.pg 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/tmp/svc.pg 2>/dev/null; then
+  echo "postgres healthcheck failed" >&2
+  exit 1
+fi
+
+for _ in $(seq 1 60); do
+  if curl -sS http://localhost:8333 >/tmp/svc.s3 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+if ! curl -sS http://localhost:8333 >/tmp/svc.s3 2>/dev/null; then
+  echo "seaweed healthcheck failed" >&2
+  exit 1
+fi
+
+write_mark "svc:health"
+echo "svc:health ok"

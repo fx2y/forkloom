@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root() {
+  git rev-parse --show-toplevel
+}
+
+cd_repo_root() {
+  cd "$(repo_root)"
+}
+
+ensure_dir() {
+  mkdir -p "$1"
+}
+
+mark_path() {
+  local task_name="$1"
+  local safe_name
+  safe_name="${task_name//:/__}"
+  printf '%s/.cache/mise-marks/%s.ok\n' "$(repo_root)" "$safe_name"
+}
+
+write_mark() {
+  local task_name="$1"
+  local marker
+  marker="$(mark_path "$task_name")"
+  ensure_dir "$(dirname "$marker")"
+  date -u +"%Y-%m-%dT%H:%M:%SZ" > "$marker"
+}
+
+require_cmds() {
+  local missing=0
+  local cmd
+  for cmd in "$@"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      echo "missing command: $cmd" >&2
+      missing=1
+    fi
+  done
+  if [[ "$missing" -ne 0 ]]; then
+    exit 1
+  fi
+}
+
+optional_cmds_status() {
+  local cmd
+  for cmd in "$@"; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      echo "$cmd=ok"
+    else
+      echo "$cmd=missing"
+    fi
+  done
+}
+
+write_json() {
+  local output_path="$1"
+  local json_payload="$2"
+  ensure_dir "$(dirname "$output_path")"
+  printf '%s\n' "$json_payload" > "$output_path"
+}
+
+append_line() {
+  local output_path="$1"
+  local line="$2"
+  ensure_dir "$(dirname "$output_path")"
+  printf '%s\n' "$line" >> "$output_path"
+}

@@ -1,0 +1,22 @@
+{
+  "markdown": "# Invoice 42  \n\nTotal:  $19.99\n",
+  "json": {
+    "vendor": "Forkloom",
+    "total": 19.99,
+    "timestamp": "2026-02-27T00:00:00Z"
+  },
+  "spans": [
+    {
+      "text": "Total:   $19.99",
+      "start": 12,
+      "end": 26,
+      "page": 1
+    },
+    {
+      "text": "Invoice 42",
+      "start": 0,
+      "end": 10,
+      "page": 1
+    }
+  ]
+}

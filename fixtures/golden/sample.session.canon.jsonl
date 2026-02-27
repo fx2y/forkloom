@@ -1,0 +1,2 @@
+{"id":"evt-1","message":{"content":"hello","role":"user"},"type":"prompt"}
+{"id":"evt-2","message":{"content":"world","role":"assistant"},"type":"assistant"}

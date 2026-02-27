@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+
+diff -u fixtures/golden/sample.session.canon.jsonl .cache/golden/sample.session.canon.jsonl
+write_mark "golden:diff"
+echo "golden:diff ok"

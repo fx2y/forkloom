@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+mkdir -p .cache/test-int
+pnpm exec tsx scripts/harness/canonicalize-jsonl.ts fixtures/sessions/sample.session.jsonl .cache/test-int/sample.session.canon.jsonl
+
+diff -u fixtures/golden/sample.session.canon.jsonl .cache/test-int/sample.session.canon.jsonl
+
+printf '{"id":"1","type":"prompt","message":{"role":"user","content":"interrupt","streamingBehavior":"steer"}}\n' > .cache/test-int/pi-rpc-steer.json
+printf '{"id":"2","type":"follow_up","message":{"role":"user","content":"afterwards do Y","streamingBehavior":"followUp"}}\n' > .cache/test-int/pi-rpc-follow-up.json
+
+write_mark "test:int:pi-rpc"
+echo "test:int:pi-rpc ok"

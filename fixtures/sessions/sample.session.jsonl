@@ -1,0 +1,2 @@
+{"id":"evt-1","type":"prompt","timestamp":"2026-02-27T00:00:00Z","message":{"role":"user","content":"hello","timestamp":"2026-02-27T00:00:00Z"},"usage":{"tokens":10},"cost":0.001}
+{"id":"evt-2","type":"assistant","timestamp":"2026-02-27T00:00:02Z","message":{"role":"assistant","content":"world"},"elapsedMs":20}

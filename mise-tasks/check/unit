@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+pnpm exec vitest run tests/unit
+write_mark "check:unit"
+echo "check:unit ok"

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+
+cp .cache/golden/sample.session.canon.jsonl fixtures/golden/sample.session.canon.jsonl
+write_mark "golden:accept"
+echo "golden:accept ok"

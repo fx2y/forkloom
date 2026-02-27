@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds docker
+
+docker compose up -d postgres
+
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+  echo "postgres is not ready" >&2
+  exit 1
+fi
+
+SQL_FILE=.cache/test-int/durability.sql
+mkdir -p .cache/test-int
+cat > "$SQL_FILE" <<'SQL'
+create table if not exists side_effects(
+  id bigserial primary key,
+  idempotency_key text not null,
+  payload jsonb not null,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists once_guard on side_effects(idempotency_key);
+truncate side_effects;
+insert into side_effects(idempotency_key,payload) values('evt-1','{"ok":true}');
+insert into side_effects(idempotency_key,payload) values('evt-1','{"ok":true}') on conflict do nothing;
+SQL
+
+docker compose exec -T postgres psql -U postgres -d agentos -f /dev/stdin < "$SQL_FILE" >/tmp/dbos.sql.out
+COUNT=$(docker compose exec -T postgres psql -U postgres -d agentos -tAc "select count(*) from side_effects where idempotency_key='evt-1';" | tr -d '[:space:]')
+if [[ "$COUNT" != "1" ]]; then
+  echo "exactly-once guard failed: expected 1 row, got $COUNT" >&2
+  exit 1
+fi
+
+write_mark "test:int:dbos-durability"
+echo "test:int:dbos-durability ok"

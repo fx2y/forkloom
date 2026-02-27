@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+mkdir -p .cache/golden
+pnpm exec tsx scripts/harness/canonicalize-jsonl.ts fixtures/sessions/sample.session.jsonl .cache/golden/sample.session.canon.jsonl
+write_mark "golden:canonicalize"
+echo "golden:canonicalize ok"

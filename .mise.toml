@@ -1,0 +1,187 @@
+[tools]
+node = "24"
+pnpm = "latest"
+python = "3.12"
+uv = "latest"
+fnox = "latest"
+jq = "latest"
+sqlite = "latest"
+
+[plugins]
+fnox-env = "https://github.com/jdx/mise-env-fnox"
+
+[settings]
+lockfile = true
+python.uv_venv_auto = "create|source"
+task.disable_paths = ["mise-tasks/**"]
+
+[prepare.pnpm]
+auto = true
+
+[prepare.uv]
+auto = true
+
+[env]
+_.fnox-env = { tools = true, profile = "dev" }
+
+[tasks."bootstrap:install"]
+run = "bash ./mise-tasks/bootstrap/install"
+sources = [".mise.toml", "mise.lock", "fnox.toml"]
+outputs = [".cache/mise-marks/bootstrap__install.ok"]
+
+[tasks."bootstrap:doctor"]
+run = "bash ./mise-tasks/bootstrap/doctor"
+depends = ["bootstrap:install"]
+sources = [".mise.toml", "fnox.toml", "mise-tasks/bootstrap/doctor", "scripts/lib/common.sh"]
+outputs = [".cache/mise-marks/bootstrap__doctor.ok", ".cache/doctor.optional.txt"]
+
+[tasks."bootstrap:secrets"]
+run = "bash ./mise-tasks/bootstrap/secrets"
+depends = ["bootstrap:install"]
+sources = [".mise.toml", "fnox.toml", "mise-tasks/bootstrap/secrets"]
+outputs = [".cache/mise-marks/bootstrap__secrets.ok", "/tmp/mise.env.redacted"]
+
+[tasks.bootstrap]
+depends = ["bootstrap:doctor", "bootstrap:secrets"]
+
+[tasks."svc:up"]
+run = "bash ./mise-tasks/svc/up"
+sources = ["docker-compose.yml", "mise-tasks/svc/up"]
+outputs = [".cache/mise-marks/svc__up.ok"]
+
+[tasks."svc:health"]
+run = "bash ./mise-tasks/svc/health"
+depends = ["svc:up"]
+sources = ["docker-compose.yml", "mise-tasks/svc/health"]
+outputs = [".cache/mise-marks/svc__health.ok", "/tmp/svc.pg", "/tmp/svc.s3"]
+
+[tasks."svc:down"]
+run = "bash ./mise-tasks/svc/down"
+sources = ["docker-compose.yml", "mise-tasks/svc/down"]
+outputs = [".cache/mise-marks/svc__down.ok"]
+
+[tasks.svc]
+depends = ["svc:health"]
+
+[tasks."check:lint"]
+run = "bash ./mise-tasks/check/lint"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "schema/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/lint"]
+outputs = [".cache/mise-marks/check__lint.ok"]
+
+[tasks."check:type"]
+run = "bash ./mise-tasks/check/type"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "tsconfig.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/type"]
+outputs = [".cache/mise-marks/check__type.ok"]
+
+[tasks."check:unit"]
+run = "bash ./mise-tasks/check/unit"
+sources = ["src/**/*.ts", "tests/unit/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
+outputs = [".cache/mise-marks/check__unit.ok"]
+
+[tasks."check:contract"]
+run = "bash ./mise-tasks/check/contract"
+sources = ["src/**/*.ts", "tests/contract/**/*.ts", "schema/**/*.json", "fixtures/contract/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/contract"]
+outputs = [".cache/mise-marks/check__contract.ok"]
+
+[tasks.check]
+depends = ["check:lint", "check:type", "check:unit", "check:contract"]
+
+[tasks."test:int:dbos-durability"]
+run = "bash ./mise-tasks/test/int/dbos-durability"
+depends = ["svc:health"]
+sources = ["mise-tasks/test/int/dbos-durability", "docker-compose.yml"]
+outputs = [".cache/mise-marks/test__int__dbos-durability.ok", "/tmp/dbos.sql.out"]
+
+[tasks."test:int:dbos-runtime"]
+run = "bash ./mise-tasks/test/int/dbos-runtime"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/dbos-runtime"]
+outputs = [".cache/mise-marks/test__int__dbos-runtime.ok", ".cache/test-int/dbos-live.json", "/tmp/dbos-live.first.log", "/tmp/dbos-live.recover.log"]
+
+[tasks."test:int:pi-rpc"]
+run = "bash ./mise-tasks/test/int/pi-rpc"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/sessions/**/*.jsonl", "fixtures/golden/**/*.jsonl", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/pi-rpc"]
+outputs = [".cache/mise-marks/test__int__pi-rpc.ok", ".cache/test-int/sample.session.canon.jsonl", ".cache/test-int/pi-rpc-steer.json", ".cache/test-int/pi-rpc-follow-up.json"]
+
+[tasks."test:int:pi-rpc-live"]
+run = "bash ./mise-tasks/test/int/pi-rpc-live"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/pi-rpc-live"]
+outputs = [".cache/mise-marks/test__int__pi-rpc-live.ok", ".cache/test-int/pi-live.json"]
+
+[tasks."test:int:artifact"]
+run = "bash ./mise-tasks/test/int/artifact"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/artifact"]
+outputs = [".cache/mise-marks/test__int__artifact.ok", ".cache/test-int/artifact.meta.1.json", ".cache/test-int/artifact.meta.2.json"]
+
+[tasks."test:int:ocr-doc"]
+run = "bash ./mise-tasks/test/int/ocr-doc"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]
+outputs = [".cache/mise-marks/test__int__ocr-doc.ok", ".cache/test-int/ocr.out.1.md", ".cache/test-int/ocr.out.1.json", ".cache/test-int/ocr.out.1.manifest.json", ".cache/test-int/ocr.out.2.md", ".cache/test-int/ocr.out.2.json", ".cache/test-int/ocr.out.2.manifest.json"]
+
+[tasks."test:int"]
+depends = ["test:int:dbos-durability", "test:int:dbos-runtime", "test:int:pi-rpc", "test:int:pi-rpc-live", "test:int:artifact", "test:int:ocr-doc"]
+
+[tasks."golden:canonicalize"]
+run = "bash ./mise-tasks/golden/canonicalize"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "mise-tasks/golden/canonicalize"]
+outputs = [".cache/mise-marks/golden__canonicalize.ok", ".cache/golden/sample.session.canon.jsonl"]
+
+[tasks."golden:diff"]
+run = "bash ./mise-tasks/golden/diff"
+depends = ["golden:canonicalize"]
+sources = ["fixtures/golden/**/*.jsonl", ".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/diff"]
+outputs = [".cache/mise-marks/golden__diff.ok"]
+
+[tasks."golden:accept"]
+run = "bash ./mise-tasks/golden/accept"
+depends = ["golden:canonicalize"]
+sources = [".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/accept"]
+outputs = [".cache/mise-marks/golden__accept.ok", "fixtures/golden/sample.session.canon.jsonl"]
+
+[tasks.golden]
+depends = ["golden:diff"]
+
+[tasks."fault:kill-resume"]
+run = "bash ./mise-tasks/fault/kill-resume"
+sources = ["scripts/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/fault/kill-resume"]
+outputs = [".cache/mise-marks/fault__kill-resume.ok", ".cache/fault/state.json", ".cache/fault/side-effects.log"]
+
+[tasks."fault:once-guard"]
+run = "bash ./mise-tasks/fault/once-guard"
+depends = ["svc:health"]
+sources = ["mise-tasks/fault/once-guard", "docker-compose.yml"]
+outputs = [".cache/mise-marks/fault__once-guard.ok", "/tmp/fault.once.log", "/tmp/fault.once.err"]
+
+[tasks.fault]
+depends = ["fault:kill-resume", "fault:once-guard"]
+
+[tasks."bench:latency"]
+run = "bash ./mise-tasks/bench/latency"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "mise-tasks/bench/latency"]
+outputs = [".cache/mise-marks/bench__latency.ok", ".cache/bench/latency.json"]
+
+[tasks."bench:cost"]
+run = "bash ./mise-tasks/bench/cost"
+sources = ["fixtures/sessions/**/*.jsonl", "mise-tasks/bench/cost"]
+outputs = [".cache/mise-marks/bench__cost.ok", ".cache/bench/cost.json"]
+
+[tasks.bench]
+depends = ["bench:latency", "bench:cost"]
+
+[tasks."test:sys:e2e"]
+run = "bash ./mise-tasks/test/sys/e2e"
+depends = ["bootstrap", "svc:health"]
+sources = [".mise.toml", "mise-tasks/test/sys/e2e", "src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "fixtures/**/*.jsonl", "schema/**/*.json", "docker-compose.yml"]
+outputs = [".cache/mise-marks/test__sys__e2e.ok"]
+
+[tasks."test:sys"]
+depends = ["test:sys:e2e"]
+
+[tasks."ci:force"]
+run = [
+  "mise run --force check",
+  "mise run --force test:int",
+  "mise run --force golden",
+  "mise run --force fault",
+  "mise run --force bench"
+]

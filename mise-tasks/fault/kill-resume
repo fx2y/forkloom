@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+STATE=.cache/fault/state.json
+LOG=.cache/fault/side-effects.log
+rm -f "$STATE" "$LOG"
+
+set +e
+pnpm exec tsx scripts/harness/fault-resume.ts "$STATE" "$LOG" first
+EXIT_CODE=$?
+set -e
+
+if [[ "$EXIT_CODE" -eq 0 ]]; then
+  echo "expected simulated crash during first phase" >&2
+  exit 1
+fi
+
+pnpm exec tsx scripts/harness/fault-resume.ts "$STATE" "$LOG" resume
+
+STEP1_COUNT=$(rg -c '^step1$' "$LOG")
+STEP2_COUNT=$(rg -c '^step2$' "$LOG")
+if [[ "$STEP1_COUNT" != "1" || "$STEP2_COUNT" != "1" ]]; then
+  echo "fault-resume violated exactly-once side-effect rule" >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+
+write_mark "fault:kill-resume"
+echo "fault:kill-resume ok"

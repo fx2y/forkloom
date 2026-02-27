@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+pnpm exec tsx scripts/harness/pi-rpc-live.ts
+
+write_mark "test:int:pi-rpc-live"
+echo "test:int:pi-rpc-live ok"

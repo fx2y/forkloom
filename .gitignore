@@ -1,0 +1,52 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+*.out
+*.pid
+
+# Dependencies / package managers
+node_modules/
+.pnpm-store/
+
+# Build / test outputs
+dist/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local runtime / caches
+.cache/
+.tmp/
+.data/
+.dbos/
+.mypy_cache/
+
+# Local credentials / env files
+.env
+.env.*
+!.env.example
+AGENTS.local.md
+
+# Local Pi session data (avoid leaking auth/session artifacts)
+.pi/
+
+# Spec filtering (intentional project structure)
+spec-*/
+!spec-0/
+spec-0/*
+!spec-0/01*
+spec-0/*.md
+!spec-0/00-learnings.sqlite

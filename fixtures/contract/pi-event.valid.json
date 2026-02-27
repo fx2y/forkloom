@@ -1,0 +1,10 @@
+{
+  "id": "evt-1",
+  "type": "prompt",
+  "message": {
+    "role": "user",
+    "content": "list files",
+    "streamingBehavior": "steer"
+  },
+  "timestamp": "2026-02-27T00:00:00Z"
+}

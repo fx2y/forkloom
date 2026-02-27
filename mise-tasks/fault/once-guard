@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds docker
+
+docker compose up -d postgres
+
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+  echo "postgres is not ready" >&2
+  exit 1
+fi
+
+docker compose exec -T postgres psql -U postgres -d agentos -f /dev/stdin <<'SQL' >/tmp/fault.once.log
+create table if not exists side_effects_guard(
+  id bigserial primary key,
+  idempotency_key text not null unique,
+  payload jsonb not null
+);
+truncate side_effects_guard;
+insert into side_effects_guard(idempotency_key,payload) values('guard-1','{"value":1}');
+SQL
+
+set +e
+docker compose exec -T postgres psql -U postgres -d agentos -tAc "insert into side_effects_guard(idempotency_key,payload) values('guard-1','{\"value\":2}');" >/tmp/fault.once.err 2>&1
+ERR_CODE=$?
+set -e
+
+if [[ "$ERR_CODE" -eq 0 ]]; then
+  echo "expected duplicate insert to fail" >&2
+  exit 1
+fi
+
+write_mark "fault:once-guard"
+echo "fault:once-guard ok"

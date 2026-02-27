@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise jq
+optional_cmds_status fnox docker curl sqlite3 | tee .cache/doctor.optional.txt >/dev/null
+
+if find . -maxdepth 3 -type f -name '.env*' | rg -q '.'; then
+  echo ".env* files are forbidden; use fnox only" >&2
+  exit 1
+fi
+
+mise env >/dev/null
+
+if command -v docker >/dev/null 2>&1; then
+  docker compose ps >/dev/null || true
+fi
+
+write_mark "bootstrap:doctor"
+echo "bootstrap:doctor ok"

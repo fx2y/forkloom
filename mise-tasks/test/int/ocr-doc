@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq
+
+mkdir -p .cache/test-int
+pnpm exec tsx scripts/harness/ocr-postprocess.ts fixtures/ocr/sample.raw.json .cache/test-int/ocr.out.1
+pnpm exec tsx scripts/harness/ocr-postprocess.ts fixtures/ocr/sample.raw.json .cache/test-int/ocr.out.2
+
+HASH1=$(jq -r '.sha256' .cache/test-int/ocr.out.1.manifest.json)
+HASH2=$(jq -r '.sha256' .cache/test-int/ocr.out.2.manifest.json)
+if [[ "$HASH1" != "$HASH2" ]]; then
+  echo "ocr post-processing hash is unstable" >&2
+  exit 1
+fi
+
+write_mark "test:int:ocr-doc"
+echo "test:int:ocr-doc ok"

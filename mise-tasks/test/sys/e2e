@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise
+
+mise run check
+mise run test:int
+mise run golden
+mise run fault
+
+write_mark "test:sys:e2e"
+echo "test:sys:e2e ok"

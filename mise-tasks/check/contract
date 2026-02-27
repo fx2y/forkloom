@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+pnpm exec vitest run tests/contract
+pnpm exec tsx scripts/harness/contract-smoke.ts fixtures/contract/pi-event.valid.json
+write_mark "check:contract"
+echo "check:contract ok"

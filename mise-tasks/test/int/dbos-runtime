@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker
+
+docker compose up -d postgres
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+  echo "postgres is not ready" >&2
+  exit 1
+fi
+
+WORKFLOW_ID="forkloom-dbos-live-wf-$(date +%s)-$RANDOM"
+rm -f .cache/dbos/crash.once
+
+set +e
+pnpm exec tsx scripts/harness/dbos-live-workflow.ts first "$WORKFLOW_ID" >/tmp/dbos-live.first.log 2>&1
+FIRST_EXIT=$?
+set -e
+if [[ "$FIRST_EXIT" -eq 0 ]]; then
+  echo "expected first DBOS run to crash/terminate" >&2
+  cat /tmp/dbos-live.first.log >&2
+  exit 1
+fi
+
+pnpm exec tsx scripts/harness/dbos-live-workflow.ts recover "$WORKFLOW_ID" >/tmp/dbos-live.recover.log 2>&1
+
+write_mark "test:int:dbos-runtime"
+echo "test:int:dbos-runtime ok"
