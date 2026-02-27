@@ -1,0 +1,17 @@
+graph LR
+    C[check] --> TI[test:int]
+    TI --> GD[golden]
+    GD --> FT[fault]
+    FT --> BN[bench]
+    BN --> CF[ci:force]
+    
+    subgraph GATES
+        C -- lint, unit, type, lesson-guard
+        TI -- artifact, dbos-runtime, pi-rpc-live
+        GD -- canonicalize, diff
+        FT -- kill-resume, once-guard
+        BN -- latency, cost
+    end
+    
+    style CF fill:#f96,stroke:#333,stroke-width:4px
+    style GATES fill:#f5f5f5,stroke:#999

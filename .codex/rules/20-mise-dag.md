@@ -6,12 +6,16 @@ paths:
   - "README.md"
 ---
 
-# Mise DAG/task rules
+# Mise DAG/Task Rules
 
-- DAG is explicit in `.mise.toml` (`depends`,`sources`,`outputs`); never rely on implicit file-task discovery.
-- Task runner stanza form: `run = "bash ./mise-tasks/<group>/<name>"`; keep task files non-exec to avoid shadow behavior.
-- Every cacheable task writes one marker via `write_mark "<task:name>"`; marker path is `.cache/mise-marks/<task__name>.ok`.
-- Service-coupled tasks must prove readiness (retry loop + hard fail message), not optimistic start-only.
-- Seaweed S3 health is reachability (`curl -sS`), not strict 2xx (auth root can be 403 by design).
-- `ci:force` must remain sequential list of forced phase runs: `check,test:int,golden,fault,bench`.
-- README command blocks mirror real entrypoints; docs drift is treated as build breakage.
+- **Orchestration:** Explicit DAG in `.mise.toml` (`depends`,`sources`,`outputs`). No file-task auto-discovery.
+- **Runtime:** `MISE_EXPERIMENTAL=1` required for all `mise run/prep/watch`.
+- **Scripts:** `run = "bash ./mise-tasks/<group>/<name>"` in stanza. Non-exec task files.
+- **Cache:** `write_mark "<task:name>"` -> `.cache/mise-marks/<task__name>.ok`.
+- **Reset:** `svc:reset` must:
+  - remove stale `/tmp` and `.tmp` probes.
+  - fail on purge errors (no mask).
+  - use docker-root fallback for root-owned `.data/seaweed`.
+- **Health:** Ready = retry loop + hard-fail diagnostic. `common.sh:wait_for_url` used for reachability.
+- **CI:** `ci:force` MUST remain a sequential list of forced phases: `check,test:int,golden,fault,bench`. No single multi-arg runs.
+- **Docs:** README command blocks = real entrypoints. Docs drift is build breakage.

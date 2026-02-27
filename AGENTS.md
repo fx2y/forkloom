@@ -1,32 +1,24 @@
 # forkloom AGENT policy (living spec index)
 
 Scope: repo memory root. Keep terse; push detail to `.codex/rules/*`.
+Model: `AGENTS.md` (root) + `.codex/rules/*.md` (modular).
 
-Model:
-- One tracked repo memory root: `AGENTS.md` (this file).
-- Modular detail allowed only in `.codex/rules/*.md` (imported below).
-- Private local prefs in `AGENTS.local.md` only (gitignored); never required for CI.
+## Doctrine (Hard Invariants)
+- **Runner:** `mise` only. No `make/just/npm` orchestration. `MISE_EXPERIMENTAL=1` mandatory.
+- **Secrets:** `fnox` only. `.env*` strictly banned (deep scan). Hydrate via `bootstrap:secrets`.
+- **Repro:** `mise.lock` + `MISE_LOCKED=1`. Refresh platform URLs via `mise lock --platform ...`.
+- **Durability:** Dual-layer proof: SQL unique-idempotency + DBOS crash/recover runtime trace.
+- **Artifacts:** CAS immutable. Reserve-first (SQL) -> write. Overwrite=409. Meta=namespaced lowercase.
+- **Contracts:** Schema source-of-truth. Drift-check (schema vs typegen vs examples) + noun-ban (5-noun freeze).
+- **Protocol:** PI gate must run real RPC mock/live. Local mock default for CI; `PI_RPC_STRICT_REAL=1` for live.
+- **Compounding:** Every bug/PR must add invariant (rule) or test. `check:lesson-guard` enforces this.
 
-Hard invariants:
-- Orchestrator=`mise` only (`C1`,`D1`,`R3`); no `make/just/npm run` as DAG runner.
-- Secrets=`fnox` only (`C2`,`D2`); `.env*` forbidden.
-- Repro=`mise.lock`+locked install (`C3`); refresh via `mise lock --platform ...`.
-- `MISE_EXPERIMENTAL=1` required for fast deps/watch (`C4`).
-- Durability/once semantics are mandatory: SQL unique guard + DBOS crash/recover live proof (`D3`,`D8`,`G4`).
-- PI gate must execute real RPC protocol; default fallback is local OpenAI-compatible mock for deterministic CI (`D7`,`G5`).
-- CI force gate must run phases sequentially, not multi-arg single run (`D6`,`A5`).
-
-Entrypoints (canonical):
-- Bootstrap: `mise trust && mise install && MISE_EXPERIMENTAL=1 mise prep && MISE_EXPERIMENTAL=1 mise run bootstrap`
-- Dev loop: `MISE_EXPERIMENTAL=1 mise watch check test:int golden`
-- Service management: `mise run svc` (up+health), `mise run svc:logs`, `mise run svc:reset` (purge)
-- Ordered verify: `bootstrap:doctor -> check:contract -> check:unit -> test:int -> test:sys -> golden -> fault -> bench`
-- Full refresh gates: `MISE_EXPERIMENTAL=1 mise run ci:force`
-
-Living-spec compounding:
-- Any new bug/regression/PR pattern MUST add at least one: invariant (`AGENTS.md`/rule) or regression test; preferred=both.
-- Behavior change without test/rule delta requires explicit rationale in commit/PR notes (`NO_NEW_INVARIANT=<why>`).
-- CI policy (required): run a lesson-guard check; fail when `src/**|scripts/**|mise-tasks/**|schema/**|fixtures/**|.mise.toml|docker-compose.yml` changed and neither `tests/**` nor `AGENTS.md|.codex/rules/**` changed.
+## Entrypoints (Canonical)
+- **Init:** `mise trust && mise install && MISE_EXPERIMENTAL=1 mise prep && MISE_EXPERIMENTAL=1 mise run bootstrap`
+- **Loop:** `MISE_EXPERIMENTAL=1 mise watch check test:int golden`
+- **Ops:** `mise run svc` (up+health), `svc:logs`, `svc:reset` (purge+unroot)
+- **Verify:** `bootstrap:doctor -> check:* -> test:int:* -> golden:* -> fault:* -> test:sys -> bench:*`
+- **Gate:** `MISE_EXPERIMENTAL=1 mise run ci:force` (sequential phase force)
 
 Imports:
 @.codex/rules/00-global.md
@@ -34,3 +26,4 @@ Imports:
 @.codex/rules/20-mise-dag.md
 @.codex/rules/30-verify-playbook.md
 @.codex/rules/40-ui-state.md
+@.codex/rules/50-api-contract.md
