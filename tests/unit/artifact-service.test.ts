@@ -103,6 +103,33 @@ describe("ArtifactService", () => {
 		expect(first.uri).toBe(second.uri);
 	});
 
+	it("blocks overwrite if force is used", async () => {
+		const repo = inMemoryRepo();
+		const store = inMemoryStore();
+		const service = new ArtifactService({
+			repo,
+			store,
+			s3Bucket: "agentos",
+		});
+
+		await service.putArtifact({
+			body: Buffer.from("abc"),
+			mime: "text/plain",
+			type: "raw",
+			meta: {},
+		});
+
+		await expect(
+			service.putArtifact({
+				body: Buffer.from("abc"),
+				mime: "text/plain",
+				type: "raw",
+				meta: {},
+				force: true,
+			}),
+		).rejects.toMatchObject({ status: 409 } satisfies Partial<HttpError>);
+	});
+
 	it("rejects sha mismatch", async () => {
 		const service = new ArtifactService({
 			repo: inMemoryRepo(),

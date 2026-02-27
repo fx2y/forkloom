@@ -44,43 +44,27 @@ function parseMeta(input: unknown): Record<string, unknown> {
 	throw new HttpError(400, "meta must be a JSON object");
 }
 
-async function parseUpload(req: Request): Promise<{
-	body: Buffer;
-	mime: string;
-	type: ArtifactType;
-	meta: Record<string, unknown>;
-	expectedSha256?: string;
-	force?: boolean;
-}> {
-	const isMultipart = req.is("multipart/form-data");
+async function parseUpload(req: Request): Promise<PutArtifactInput> {
 	const expectedSha256 = req.header("x-sha256") ?? undefined;
 	if (expectedSha256 && !isSha256(expectedSha256)) {
 		throw new HttpError(400, "invalid x-sha256 header");
 	}
 
-	if (isMultipart) {
+	const force = req.query.force === "1";
+
+	if (req.is("multipart/form-data")) {
 		const body = req.file?.buffer;
 		if (!body) {
 			throw new HttpError(400, "multipart upload requires file field");
 		}
-		const next: {
-			body: Buffer;
-			mime: string;
-			type: ArtifactType;
-			meta: Record<string, unknown>;
-			force: boolean;
-			expectedSha256?: string;
-		} = {
+		return {
 			body,
 			mime: req.file?.mimetype || "application/octet-stream",
 			type: parseType(req.body.type),
 			meta: parseMeta(req.body.meta),
-			force: req.query.force === "1",
+			expectedSha256,
+			force,
 		};
-		if (expectedSha256) {
-			next.expectedSha256 = expectedSha256;
-		}
-		return next;
 	}
 
 	const body = await readRawBody(req);
@@ -88,24 +72,14 @@ async function parseUpload(req: Request): Promise<{
 		throw new HttpError(400, "raw upload body is empty");
 	}
 
-	const next: {
-		body: Buffer;
-		mime: string;
-		type: ArtifactType;
-		meta: Record<string, unknown>;
-		force: boolean;
-		expectedSha256?: string;
-	} = {
+	return {
 		body,
 		mime: req.header("content-type") || "application/octet-stream",
 		type: parseType(req.query.type),
 		meta: {},
-		force: req.query.force === "1",
+		expectedSha256,
+		force,
 	};
-	if (expectedSha256) {
-		next.expectedSha256 = expectedSha256;
-	}
-	return next;
 }
 
 function mapError(error: unknown): { status: number; message: string } {

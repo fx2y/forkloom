@@ -59,5 +59,24 @@ if [[ "$HTTP_CODE" != "400" ]]; then
   exit 1
 fi
 
+echo "checking raw upload..."
+RAW_META=$(curl -fsS -H "content-type: text/plain" --data-binary "raw content" "http://localhost:8080/artifacts")
+RAW_SHA=$(echo "$RAW_META" | jq -r '.sha256')
+if [[ -z "$RAW_SHA" ]]; then
+  echo "raw upload failed" >&2
+  exit 1
+fi
+
+echo "checking overwrite 409 protection..."
+HTTP_CODE=$(curl -sS -o /tmp/artifact.overwrite.err -w "%{http_code}" \
+  -H "content-type: text/plain" \
+  --data-binary "raw content" \
+  "http://localhost:8080/artifacts?force=1")
+if [[ "$HTTP_CODE" != "409" ]]; then
+  echo "expected immutable 409 rejection, got status $HTTP_CODE" >&2
+  cat /tmp/artifact.overwrite.err >&2 || true
+  exit 1
+fi
+
 write_mark "test:int:artifact"
 echo "test:int:artifact ok"
