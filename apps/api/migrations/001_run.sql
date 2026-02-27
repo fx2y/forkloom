@@ -8,8 +8,11 @@ create table if not exists runs(
   pi_session_id text,
   pi_session_file text,
   result_text text,
+  result_stats jsonb not null default '{}'::jsonb,
   error text
 );
+
+alter table if exists runs add column if not exists result_stats jsonb not null default '{}'::jsonb;
 
 create index if not exists runs_status_idx on runs(status, updated_at desc);
 

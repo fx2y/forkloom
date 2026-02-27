@@ -10,3 +10,6 @@ export const RUN_WORKFLOW_STEPS = [
 ] as const;
 
 export type RunWorkflowStep = (typeof RUN_WORKFLOW_STEPS)[number];
+
+export { executeRunOnce, registerRunOnceWorkflow } from "./runonce";
+export type { RunOnceDeps } from "./runonce";

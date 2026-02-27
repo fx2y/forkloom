@@ -27,6 +27,7 @@ export type RunModel = {
 	piSessionId: string | null;
 	piSessionFile: string | null;
 	resultText: string | null;
+	resultStats: Record<string, unknown> | null;
 	error: string | null;
 };
 
@@ -70,6 +71,7 @@ export interface RunRepo {
 	markDone(input: {
 		runId: string;
 		resultText: string;
+		resultStats: Record<string, unknown>;
 		piSessionId?: string | undefined;
 		piSessionFile?: string | undefined;
 	}): Promise<RunModel | null>;

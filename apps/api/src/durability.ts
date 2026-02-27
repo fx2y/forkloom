@@ -6,15 +6,22 @@ export interface StepRunner {
 }
 
 let dbosLaunched = false;
-const pendingStepFns = new Map<string, () => Promise<unknown>>();
+const stepCallbacks = Object.create(null) as Record<
+	string,
+	() => Promise<unknown>
+>;
 
 const PendingStepWorkflow = DBOS.registerWorkflow(
 	async (token: string, stepName: string): Promise<unknown> => {
-		const fn = pendingStepFns.get(token);
+		const fn = stepCallbacks[token];
 		if (!fn) {
-			throw new Error(`missing pending step function: ${token}`);
+			throw new Error(`missing step callback: ${token}`);
 		}
-		return DBOS.runStep(fn, { name: stepName });
+		try {
+			return await DBOS.runStep(fn, { name: stepName });
+		} finally {
+			delete stepCallbacks[token];
+		}
 	},
 	{
 		name: "forkloomPendingStepWorkflow",
@@ -31,7 +38,7 @@ export class DbosStepRunner implements StepRunner {
 	async runStep<T>(name: string, fn: () => Promise<T>): Promise<T> {
 		const token = randomUUID();
 		const workflowID = `forkloom-step-${token}`;
-		pendingStepFns.set(token, fn as () => Promise<unknown>);
+		stepCallbacks[token] = fn as () => Promise<unknown>;
 		try {
 			const handle = await DBOS.startWorkflow(PendingStepWorkflow, {
 				workflowID,
@@ -39,7 +46,7 @@ export class DbosStepRunner implements StepRunner {
 			const result = await handle.getResult();
 			return result as T;
 		} finally {
-			pendingStepFns.delete(token);
+			delete stepCallbacks[token];
 		}
 	}
 }

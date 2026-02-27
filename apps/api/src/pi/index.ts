@@ -9,3 +9,22 @@ export const PI_COMMANDS = [
 ] as const;
 
 export type PiCommand = (typeof PI_COMMANDS)[number];
+
+export { PiRpcClient, spawnPiRpcProcess } from "./rpc-client";
+export type {
+	PiRpcEvent,
+	PiRpcPayload,
+	PiRpcProcess,
+	PiRpcResponse,
+	SpawnPiRpcInput,
+} from "./rpc-client";
+export { createPiSessionPort, RpcPiSessionPort } from "./session-port";
+export type {
+	CreatePiSessionInput,
+	PiImageInput,
+	PiPromptInput,
+	PiSessionPort,
+	PiSessionState,
+	PiSessionStats,
+	PiStreamingBehavior,
+} from "./session-port";

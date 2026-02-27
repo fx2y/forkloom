@@ -63,6 +63,7 @@ function runRow(overrides: Record<string, unknown> = {}) {
 		pi_session_id: null,
 		pi_session_file: null,
 		result_text: null,
+		result_stats: {},
 		error: null,
 		...overrides,
 	};

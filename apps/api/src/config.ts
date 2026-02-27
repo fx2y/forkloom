@@ -7,6 +7,8 @@ export type AppConfig = {
 	awsAccessKeyId: string;
 	awsSecretAccessKey: string;
 	piRpcUrl: string;
+	piProvider: string;
+	piModel: string;
 };
 
 function must(name: string): string {
@@ -39,5 +41,7 @@ export function loadConfig(): AppConfig {
 		awsSecretAccessKey:
 			process.env.AWS_SECRET_ACCESS_KEY ?? must("S3_SECRET_KEY"),
 		piRpcUrl: process.env.PI_RPC_URL ?? "http://localhost:7070",
+		piProvider: process.env.PI_PROVIDER ?? "github-copilot",
+		piModel: process.env.PI_MODEL ?? "gpt-4.1",
 	};
 }

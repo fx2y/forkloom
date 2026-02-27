@@ -21,6 +21,7 @@ type RunRow = PgRowBase & {
 	pi_session_id: string | null;
 	pi_session_file: string | null;
 	result_text: string | null;
+	result_stats: Record<string, unknown> | null;
 	error: string | null;
 };
 
@@ -83,6 +84,7 @@ function toRunModel(row: RunRow): RunModel {
 		piSessionId: row.pi_session_id,
 		piSessionFile: row.pi_session_file,
 		resultText: row.result_text,
+		resultStats: row.result_stats ?? {},
 		error: row.error,
 	};
 }
@@ -127,7 +129,7 @@ export class PgRunRepo implements RunRepo {
 				 values ($1, 'running', $2::jsonb, $3)
 				 on conflict (run_id) do nothing
 				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-				 pi_session_id, pi_session_file, result_text, error`,
+				 pi_session_id, pi_session_file, result_text, result_stats, error`,
 				[input.runId, JSON.stringify(input.spec), input.workflowId],
 			);
 
@@ -141,9 +143,9 @@ export class PgRunRepo implements RunRepo {
 
 			const existing = await client.query<RunRow>(
 				`select run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-				 pi_session_id, pi_session_file, result_text, error
-				 from runs
-				 where run_id = $1`,
+					 pi_session_id, pi_session_file, result_text, result_stats, error
+					 from runs
+					 where run_id = $1`,
 				[input.runId],
 			);
 			await client.query("commit");
@@ -162,7 +164,7 @@ export class PgRunRepo implements RunRepo {
 	async getRun(runId: string): Promise<RunModel | null> {
 		const result = await this.pool.query<RunRow>(
 			`select run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-			 pi_session_id, pi_session_file, result_text, error
+			 pi_session_id, pi_session_file, result_text, result_stats, error
 			 from runs
 			 where run_id = $1`,
 			[runId],
@@ -203,22 +205,25 @@ export class PgRunRepo implements RunRepo {
 	async markDone(input: {
 		runId: string;
 		resultText: string;
+		resultStats: Record<string, unknown>;
 		piSessionId?: string | undefined;
 		piSessionFile?: string | undefined;
 	}): Promise<RunModel | null> {
 		const result = await this.pool.query<RunRow>(
 			`update runs
-			 set status = 'done',
-				 result_text = $2,
-				 pi_session_id = coalesce($3, pi_session_id),
-				 pi_session_file = coalesce($4, pi_session_file),
-				 updated_at = now()
-			 where run_id = $1
-			 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-			 pi_session_id, pi_session_file, result_text, error`,
+				 set status = 'done',
+					 result_text = $2,
+					 result_stats = $3::jsonb,
+					 pi_session_id = coalesce($4, pi_session_id),
+					 pi_session_file = coalesce($5, pi_session_file),
+					 updated_at = now()
+				 where run_id = $1
+				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+				 pi_session_id, pi_session_file, result_text, result_stats, error`,
 			[
 				input.runId,
 				input.resultText,
+				JSON.stringify(input.resultStats),
 				input.piSessionId ?? null,
 				input.piSessionFile ?? null,
 			],
@@ -232,12 +237,12 @@ export class PgRunRepo implements RunRepo {
 	async markFailed(runId: string, error: string): Promise<RunModel | null> {
 		const result = await this.pool.query<RunRow>(
 			`update runs
-			 set status = 'failed',
-				 error = $2,
-				 updated_at = now()
-			 where run_id = $1
-			 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-			 pi_session_id, pi_session_file, result_text, error`,
+				 set status = 'failed',
+					 error = $2,
+					 updated_at = now()
+				 where run_id = $1
+				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+				 pi_session_id, pi_session_file, result_text, result_stats, error`,
 			[runId, error],
 		);
 		if (!result.rowCount) {
