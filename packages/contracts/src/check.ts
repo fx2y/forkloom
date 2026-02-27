@@ -1,15 +1,13 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import {
-	type RunContractName,
-	getRunContractNames,
-	validateRunByName,
-} from "./run-validate";
 import { renderTypes } from "./typegen";
 import {
 	type ContractName,
+	type RunContractName,
 	getContractNames,
+	getRunContractNames,
 	validateByName,
+	validateRunByName,
 } from "./validate";
 
 const V0_EXAMPLES_DIR = resolve("contracts/v0/examples");
@@ -176,10 +174,42 @@ function assertNoBannedNounsInV0(): void {
 	}
 }
 
+function assertRunNounsScopedToV1(): void {
+	const runNouns: RunContractName[] = ["RunSpec", "RunState", "RunEvent"];
+	const v0Files = readdirSync(V0_SCHEMA_DIR).filter((file) =>
+		file.endsWith(".schema.json"),
+	);
+	const v1Files = readdirSync(V1_SCHEMA_DIR).filter((file) =>
+		file.endsWith(".schema.json"),
+	);
+
+	for (const file of v0Files) {
+		const content = readFileSync(resolve(V0_SCHEMA_DIR, file), "utf8");
+		for (const noun of runNouns) {
+			if (new RegExp(`"${noun}"`).test(content)) {
+				throw new Error(`run noun leaked into v0 schema ${file}: "${noun}"`);
+			}
+		}
+	}
+
+	for (const noun of runNouns) {
+		const found = v1Files.some((file) => {
+			const content = readFileSync(resolve(V1_SCHEMA_DIR, file), "utf8");
+			return new RegExp(`"${noun}"`).test(content);
+		});
+		if (!found) {
+			throw new Error(
+				`required v1 run noun missing from v1 schemas: "${noun}"`,
+			);
+		}
+	}
+}
+
 function main(): void {
 	assertSchemasStrict(V0_SCHEMA_DIR);
 	assertSchemasStrict(V1_SCHEMA_DIR);
 	assertNoBannedNounsInV0();
+	assertRunNounsScopedToV1();
 	assertV0Examples();
 	assertV1Examples();
 	assertTypesInSync();

@@ -9,8 +9,20 @@ export type Role = "user" | "agent" | "system";
 export type ArtifactType = "raw" | "md" | "json" | "trace" | "other";
 export type WorkflowStatus = "queued" | "running" | "done" | "err";
 export type ExtensionCapability = "tool" | "cmd" | "ui" | "gate";
+export type RunScope = "me" | "team" | "org";
+export type RunStatus = "queued" | "running" | "done" | "failed";
+export type RunEventKind =
+	| "run_started"
+	| "pi_event"
+	| "artifact_written"
+	| "run_done"
+	| "run_failed";
 
 export type ArtifactRef = {
+	sha256: string;
+};
+
+export type RunArtifactRef = {
 	sha256: string;
 };
 
@@ -59,4 +71,32 @@ export type Extension = {
 	version: string;
 	entry: string;
 	capabilities: ExtensionCapability[];
+};
+
+export type RunSpec = {
+	runId: string;
+	scope: RunScope;
+	userMsg: string;
+	attachments: RunArtifactRef[];
+	workdirRef?: RunArtifactRef;
+	modelPref?: string;
+};
+
+export type RunState = {
+	runId: string;
+	status: RunStatus;
+	startedAt: string;
+	finishedAt?: string;
+	dbosWfId: string;
+	piSessionId?: string;
+	piSessionFile?: string;
+	artifacts: RunArtifactRef[];
+};
+
+export type RunEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: RunEventKind;
+	payload: Record<string, unknown>;
 };

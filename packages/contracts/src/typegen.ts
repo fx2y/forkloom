@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const SCHEMA_DIR = resolve("contracts/v0");
+const V0_SCHEMA_DIR = resolve("contracts/v0");
+const V1_SCHEMA_DIR = resolve("contracts/v1");
 const TYPES_PATH = resolve("packages/contracts/src/types.ts");
 
 function requireLiteralEnum(
@@ -18,8 +19,8 @@ function requireLiteralEnum(
 	return maybeEnum;
 }
 
-function readSchema(name: string): Record<string, unknown> {
-	const fullPath = resolve(SCHEMA_DIR, `${name}.schema.json`);
+function readSchema(dir: string, name: string): Record<string, unknown> {
+	const fullPath = resolve(dir, `${name}.schema.json`);
 	return JSON.parse(readFileSync(fullPath, "utf8")) as Record<string, unknown>;
 }
 
@@ -39,14 +40,27 @@ function schemaProp(
 }
 
 function toUnion(name: string, values: string[]): string {
-	return `export type ${name} = ${values.map((v) => JSON.stringify(v)).join(" | ")};`;
+	const oneLine = `export type ${name} = ${values.map((value) => JSON.stringify(value)).join(" | ")};`;
+	if (oneLine.length <= 80) {
+		return oneLine;
+	}
+	return [
+		`export type ${name} =`,
+		...values.map((value, idx) => {
+			const suffix = idx === values.length - 1 ? ";" : "";
+			return `\t| ${JSON.stringify(value)}${suffix}`;
+		}),
+	].join("\n");
 }
 
 export function renderTypes(): string {
-	const message = readSchema("Message");
-	const artifact = readSchema("Artifact");
-	const workflow = readSchema("Workflow");
-	const extension = readSchema("Extension");
+	const message = readSchema(V0_SCHEMA_DIR, "Message");
+	const artifact = readSchema(V0_SCHEMA_DIR, "Artifact");
+	const workflow = readSchema(V0_SCHEMA_DIR, "Workflow");
+	const extension = readSchema(V0_SCHEMA_DIR, "Extension");
+	const runSpec = readSchema(V1_SCHEMA_DIR, "RunSpec");
+	const runState = readSchema(V1_SCHEMA_DIR, "RunState");
+	const runEvent = readSchema(V1_SCHEMA_DIR, "RunEvent");
 
 	const delivery = requireLiteralEnum(schemaProp(message, "delivery"), "enum");
 	const scope = requireLiteralEnum(schemaProp(message, "scope"), "enum");
@@ -62,6 +76,9 @@ export function renderTypes(): string {
 		throw new Error("extension.capabilities.items is required");
 	}
 	const capability = requireLiteralEnum(capabilityItems, "enum");
+	const runScope = requireLiteralEnum(schemaProp(runSpec, "scope"), "enum");
+	const runStatus = requireLiteralEnum(schemaProp(runState, "status"), "enum");
+	const runEventKind = requireLiteralEnum(schemaProp(runEvent, "kind"), "enum");
 
 	return [
 		"/*",
@@ -75,8 +92,15 @@ export function renderTypes(): string {
 		toUnion("ArtifactType", artifactType),
 		toUnion("WorkflowStatus", workflowStatus),
 		toUnion("ExtensionCapability", capability),
+		toUnion("RunScope", runScope),
+		toUnion("RunStatus", runStatus),
+		toUnion("RunEventKind", runEventKind),
 		"",
 		"export type ArtifactRef = {",
+		"\tsha256: string;",
+		"};",
+		"",
+		"export type RunArtifactRef = {",
 		"\tsha256: string;",
 		"};",
 		"",
@@ -125,6 +149,34 @@ export function renderTypes(): string {
 		"\tversion: string;",
 		"\tentry: string;",
 		"\tcapabilities: ExtensionCapability[];",
+		"};",
+		"",
+		"export type RunSpec = {",
+		"\trunId: string;",
+		"\tscope: RunScope;",
+		"\tuserMsg: string;",
+		"\tattachments: RunArtifactRef[];",
+		"\tworkdirRef?: RunArtifactRef;",
+		"\tmodelPref?: string;",
+		"};",
+		"",
+		"export type RunState = {",
+		"\trunId: string;",
+		"\tstatus: RunStatus;",
+		"\tstartedAt: string;",
+		"\tfinishedAt?: string;",
+		"\tdbosWfId: string;",
+		"\tpiSessionId?: string;",
+		"\tpiSessionFile?: string;",
+		"\tartifacts: RunArtifactRef[];",
+		"};",
+		"",
+		"export type RunEvent = {",
+		"\trunId: string;",
+		"\tseq: number;",
+		"\tt: string;",
+		"\tkind: RunEventKind;",
+		"\tpayload: Record<string, unknown>;",
 		"};",
 		"",
 	].join("\n");
