@@ -1,0 +1,162 @@
+import { MockPiProviderManager } from "./mock-provider";
+import {
+	type CreatePiSessionInput,
+	type PiImageInput,
+	type PiPromptInput,
+	type PiSessionPort,
+	type PiSessionState,
+	type PiSessionStats,
+	type PiStreamingBehavior,
+	createPiSessionPort,
+} from "./session-port";
+
+type ManagedPiSessionInput = CreatePiSessionInput & {
+	strictReal?: boolean | undefined;
+	bootstrapTimeoutMs?: number | undefined;
+	mockBootstrapTimeoutMs?: number | undefined;
+};
+
+type SessionFactoryDeps = {
+	createSessionPort?:
+		| ((input: CreatePiSessionInput) => PiSessionPort)
+		| undefined;
+	mockProviderManager?: MockPiProviderManager | undefined;
+};
+
+class ManagedPiSessionPort implements PiSessionPort {
+	private closed = false;
+
+	constructor(
+		private readonly inner: PiSessionPort,
+		private readonly cleanup: () => Promise<void>,
+	) {}
+
+	prompt(input: PiPromptInput): Promise<void> {
+		return this.inner.prompt(input);
+	}
+
+	steer(message: string): Promise<void> {
+		return this.inner.steer(message);
+	}
+
+	followUp(message: string): Promise<void> {
+		return this.inner.followUp(message);
+	}
+
+	abort(): Promise<void> {
+		return this.inner.abort();
+	}
+
+	getState(): Promise<PiSessionState> {
+		return this.inner.getState();
+	}
+
+	getLastAssistantText(): Promise<string> {
+		return this.inner.getLastAssistantText();
+	}
+
+	getSessionStats(): Promise<PiSessionStats> {
+		return this.inner.getSessionStats();
+	}
+
+	waitUntilIdle(options?: {
+		pollMs?: number | undefined;
+		timeoutMs?: number | undefined;
+		onEvent?:
+			| ((event: Record<string, unknown>) => Promise<void> | void)
+			| undefined;
+	}): Promise<void> {
+		return this.inner.waitUntilIdle(options);
+	}
+
+	async close(): Promise<void> {
+		if (this.closed) {
+			return;
+		}
+		this.closed = true;
+		try {
+			await this.inner.close();
+		} finally {
+			await this.cleanup();
+		}
+	}
+}
+
+async function awaitWithTimeout<T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	label: string,
+): Promise<T> {
+	return Promise.race([
+		promise,
+		new Promise<never>((_, reject) => {
+			setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+		}),
+	]);
+}
+
+async function safeClose(session: PiSessionPort | null): Promise<void> {
+	if (!session) {
+		return;
+	}
+	try {
+		await session.close();
+	} catch {
+		// Ignore cleanup failures while switching providers.
+	}
+}
+
+export function createManagedPiSessionFactory(
+	input: ManagedPiSessionInput,
+	deps: SessionFactoryDeps = {},
+): () => Promise<PiSessionPort> {
+	const createSessionPort = deps.createSessionPort ?? createPiSessionPort;
+	const mockProviderManager =
+		deps.mockProviderManager ?? new MockPiProviderManager();
+
+	return async (): Promise<PiSessionPort> => {
+		const {
+			strictReal = false,
+			bootstrapTimeoutMs = 1_500,
+			mockBootstrapTimeoutMs = 5_000,
+			...sessionInput
+		} = input;
+		let realSession: PiSessionPort | null = null;
+
+		try {
+			realSession = createSessionPort(sessionInput);
+			await awaitWithTimeout(
+				realSession.getState(),
+				bootstrapTimeoutMs,
+				"real pi bootstrap",
+			);
+			return realSession;
+		} catch (error) {
+			await safeClose(realSession);
+			if (strictReal) {
+				throw error;
+			}
+		}
+
+		const lease = await mockProviderManager.acquire();
+		let mockSession: PiSessionPort | null = null;
+		try {
+			mockSession = createSessionPort({
+				...sessionInput,
+				provider: lease.provider,
+				model: lease.model,
+				homeOverride: lease.homeOverride,
+			});
+			await awaitWithTimeout(
+				mockSession.getState(),
+				mockBootstrapTimeoutMs,
+				"mock pi bootstrap",
+			);
+			return new ManagedPiSessionPort(mockSession, () => lease.release());
+		} catch (error) {
+			await safeClose(mockSession);
+			await lease.release();
+			throw error;
+		}
+	};
+}

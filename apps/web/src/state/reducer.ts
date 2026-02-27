@@ -36,7 +36,9 @@ function appendArtifact(
 	return [...artifacts, artifact];
 }
 
-function artifactFromPayload(payload: Record<string, unknown>): RunArtifactView | null {
+function artifactFromPayload(
+	payload: Record<string, unknown>,
+): RunArtifactView | null {
 	if (typeof payload.sha256 !== "string" || typeof payload.kind !== "string") {
 		return null;
 	}

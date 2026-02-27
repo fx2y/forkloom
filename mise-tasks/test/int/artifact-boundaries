@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+mkdir -p .cache/test-int
+pnpm exec tsx scripts/harness/run-artifact-boundaries.ts
+pnpm exec vitest run tests/int/artifact-boundaries-live.test.ts
+
+write_mark "test:int:artifact-boundaries"
+echo "test:int:artifact-boundaries ok"

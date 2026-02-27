@@ -11,7 +11,7 @@ import {
 } from "./durability";
 import { buildHealthHandler } from "./http/health";
 import { buildApiRouter } from "./http/routes";
-import { createPiSessionPort } from "./pi";
+import { MockPiProviderManager, createManagedPiSessionFactory } from "./pi";
 import { PgArtifactRepo } from "./repo/postgres";
 import { PgRunRepo, RunService } from "./run";
 import { ArtifactService } from "./service";
@@ -61,6 +61,15 @@ async function bootstrap() {
 		s3Bucket: config.s3Bucket,
 		stepRunner: new InlineStepRunner(),
 	});
+	const mockProviderManager = new MockPiProviderManager();
+	const createPiSession = createManagedPiSessionFactory(
+		{
+			provider: config.piProvider,
+			model: config.piModel,
+			strictReal: config.piStrictReal,
+		},
+		{ mockProviderManager },
+	);
 
 	let runWorkflow: ((runId: string) => Promise<void>) | null = null;
 	const runService = new RunService({
@@ -80,11 +89,7 @@ async function bootstrap() {
 		runRepo,
 		runService,
 		artifactService: workflowArtifactService,
-		createPiSession: async () =>
-			createPiSessionPort({
-				provider: config.piProvider,
-				model: config.piModel,
-			}),
+		createPiSession: async () => createPiSession(),
 	});
 	await launchDbos(config.databaseUrl);
 

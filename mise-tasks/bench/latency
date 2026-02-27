@@ -3,31 +3,10 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds pnpm python3
+require_cmds pnpm
 
 mkdir -p .cache/bench
-START_NS=$(python3 - <<'PY'
-import time
-print(time.perf_counter_ns())
-PY
-)
-
-for _ in $(seq 1 100); do
-  pnpm exec tsx scripts/harness/canonicalize-jsonl.ts fixtures/sessions/sample.session.jsonl .cache/bench/sample.session.canon.jsonl >/dev/null
-done
-
-END_NS=$(python3 - <<'PY'
-import time
-print(time.perf_counter_ns())
-PY
-)
-
-python3 - <<PY > .cache/bench/latency.json
-start_ns=$START_NS
-end_ns=$END_NS
-elapsed_ms=(end_ns-start_ns)/1_000_000
-print('{"iterations":100,"elapsed_ms":'+str(round(elapsed_ms,3))+',"avg_ms":'+str(round(elapsed_ms/100,6))+'}')
-PY
+pnpm exec tsx scripts/harness/run-bench-live.ts latency
 
 write_mark "bench:latency"
 echo "bench:latency ok"

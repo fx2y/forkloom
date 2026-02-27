@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker
+
+docker compose up -d postgres
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+  echo "postgres is not ready" >&2
+  exit 1
+fi
+
+WORKFLOW_ID="forkloom-runonce-live-$(date +%s)-$RANDOM"
+rm -f .cache/dbos/runonce.crash.once
+
+set +e
+pnpm exec tsx scripts/harness/dbos-live-runonce.ts first "$WORKFLOW_ID" >/tmp/runonce-live.first.log 2>&1
+FIRST_EXIT=$?
+set -e
+if [[ "$FIRST_EXIT" -eq 0 ]]; then
+  echo "expected first RunOnce live run to crash/terminate" >&2
+  cat /tmp/runonce-live.first.log >&2
+  exit 1
+fi
+
+pnpm exec tsx scripts/harness/dbos-live-runonce.ts recover "$WORKFLOW_ID" >/tmp/runonce-live.recover.log 2>&1
+pnpm exec vitest run tests/int/run-idempotency.test.ts tests/int/runonce-live.test.ts
+
+write_mark "test:int:run-durability"
+echo "test:int:run-durability ok"

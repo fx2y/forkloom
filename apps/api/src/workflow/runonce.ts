@@ -132,17 +132,18 @@ export async function executeRunOnce(
 	};
 
 	try {
-		await steps.runStep("initRun", async () => {
+		ctx.run = await steps.runStep("initRun", async () => {
 			const run = await deps.runRepo.getRun(runId);
 			if (!run) {
 				throw new Error(`run not found: ${runId}`);
 			}
-			ctx.run = run;
 			await deps.runService.appendRunStarted(runId, {});
+			return run;
 		});
 
-		await steps.runStep("stageInputs", async () => {
+		ctx.artifactShas = await steps.runStep("stageInputs", async () => {
 			const run = assertRun(ctx);
+			const artifactShas: string[] = [];
 			for (const pointer of run.spec.attachments) {
 				await deps.runService.linkArtifact(
 					runId,
@@ -153,8 +154,9 @@ export async function executeRunOnce(
 					sha256: pointer.sha256,
 					kind: "input_attachment",
 				});
-				ctx.artifactShas.push(pointer.sha256);
+				artifactShas.push(pointer.sha256);
 			}
+			return artifactShas;
 		});
 
 		await steps.runStep("startPi", async () => {
@@ -182,14 +184,19 @@ export async function executeRunOnce(
 			});
 		});
 
-		await steps.runStep("finalize", async () => {
+		const finalized = await steps.runStep("finalize", async () => {
 			const session = assertSession(ctx);
-			ctx.state = await session.getState();
-			ctx.resultText = await session.getLastAssistantText();
-			ctx.stats = await session.getSessionStats();
+			return {
+				state: await session.getState(),
+				resultText: await session.getLastAssistantText(),
+				stats: await session.getSessionStats(),
+			};
 		});
+		ctx.state = finalized.state;
+		ctx.resultText = finalized.resultText;
+		ctx.stats = finalized.stats;
 
-		await steps.runStep("persistSession", async () => {
+		const persistedSession = await steps.runStep("persistSession", async () => {
 			const state = assertState(ctx);
 			const bytes = await readFileBytes(state.sessionFile);
 			const artifact = await deps.artifactService.putArtifact({
@@ -201,9 +208,6 @@ export async function executeRunOnce(
 					"pi.session": state.sessionId,
 				},
 			});
-			ctx.sessionArtifactSha = artifact.sha256;
-			ctx.sessionArtifactUri = artifact.uri;
-			ctx.artifactShas.push(artifact.sha256);
 			await deps.runService.linkArtifact(
 				runId,
 				artifact.sha256,
@@ -213,7 +217,16 @@ export async function executeRunOnce(
 				sha256: artifact.sha256,
 				kind: "pi_session_jsonl",
 			});
+			return {
+				sha256: artifact.sha256,
+				uri: artifact.uri,
+			};
 		});
+		ctx.sessionArtifactSha = persistedSession.sha256;
+		ctx.sessionArtifactUri = persistedSession.uri;
+		if (!ctx.artifactShas.includes(persistedSession.sha256)) {
+			ctx.artifactShas.push(persistedSession.sha256);
+		}
 
 		await steps.runStep("markDone", async () => {
 			const state = assertState(ctx);

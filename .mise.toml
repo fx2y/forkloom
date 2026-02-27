@@ -127,13 +127,37 @@ depends = ["svc:health"]
 sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/artifact"]
 outputs = [".cache/mise-marks/test__int__artifact.ok", ".cache/test-int/artifact.meta.1.json", ".cache/test-int/artifact.meta.2.json"]
 
+[tasks."test:int:artifact-boundaries"]
+run = "bash ./mise-tasks/test/int/artifact-boundaries"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/artifact-boundaries"]
+outputs = [".cache/mise-marks/test__int__artifact-boundaries.ok", ".cache/test-int/artifact-boundaries.json"]
+
+[tasks."test:int:run-functional"]
+run = "bash ./mise-tasks/test/int/run-functional"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "README.md", "mise-tasks/test/int/run-functional"]
+outputs = [".cache/mise-marks/test__int__run-functional.ok", ".cache/test-int/run-functional.json"]
+
+[tasks."test:int:run-durability"]
+run = "bash ./mise-tasks/test/int/run-durability"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/run-durability"]
+outputs = [".cache/mise-marks/test__int__run-durability.ok", ".cache/test-int/runonce-live.json", "/tmp/runonce-live.first.log", "/tmp/runonce-live.recover.log"]
+
+[tasks."test:int:run-sse"]
+run = "bash ./mise-tasks/test/int/run-sse"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "README.md", "mise-tasks/test/int/run-sse"]
+outputs = [".cache/mise-marks/test__int__run-sse.ok", ".cache/test-int/run-sse.json"]
+
 [tasks."test:int:ocr-doc"]
 run = "bash ./mise-tasks/test/int/ocr-doc"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]
 outputs = [".cache/mise-marks/test__int__ocr-doc.ok", ".cache/test-int/ocr.out.1.md", ".cache/test-int/ocr.out.1.json", ".cache/test-int/ocr.out.1.manifest.json", ".cache/test-int/ocr.out.2.md", ".cache/test-int/ocr.out.2.json", ".cache/test-int/ocr.out.2.manifest.json"]
 
 [tasks."test:int"]
-depends = ["test:int:dbos-durability", "test:int:dbos-runtime", "test:int:pi-rpc", "test:int:pi-rpc-live", "test:int:artifact", "test:int:ocr-doc"]
+depends = ["test:int:dbos-durability", "test:int:dbos-runtime", "test:int:pi-rpc", "test:int:pi-rpc-live", "test:int:artifact", "test:int:artifact-boundaries", "test:int:run-functional", "test:int:run-durability", "test:int:run-sse", "test:int:ocr-doc"]
 
 [tasks."golden:canonicalize"]
 run = "bash ./mise-tasks/golden/canonicalize"
@@ -171,12 +195,14 @@ depends = ["fault:kill-resume", "fault:once-guard"]
 
 [tasks."bench:latency"]
 run = "bash ./mise-tasks/bench/latency"
-sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/sessions/**/*.jsonl", "package.json", "pnpm-lock.yaml", "mise-tasks/bench/latency"]
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "README.md", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/bench/latency"]
 outputs = [".cache/mise-marks/bench__latency.ok", ".cache/bench/latency.json"]
 
 [tasks."bench:cost"]
 run = "bash ./mise-tasks/bench/cost"
-sources = ["fixtures/sessions/**/*.jsonl", "mise-tasks/bench/cost"]
+depends = ["bench:latency"]
+sources = [".cache/bench/latency.json", "scripts/**/*.ts", "mise-tasks/bench/cost"]
 outputs = [".cache/mise-marks/bench__cost.ok", ".cache/bench/cost.json"]
 
 [tasks.bench]

@@ -131,10 +131,7 @@ export async function streamRunEvents(
 	deps: {
 		sinceEventId: number;
 		limit: number;
-		listEvents(
-			sinceEventId: number,
-			limit: number,
-		): Promise<RunEvent[]>;
+		listEvents(sinceEventId: number, limit: number): Promise<RunEvent[]>;
 	},
 ): Promise<void> {
 	res.status(200);

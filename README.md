@@ -1,6 +1,6 @@
-# forkloom C0
+# forkloom C1
 
-`forkloom` ships a mise-first C0/C1 stack with 5 services (`postgres`, `seaweedfs`, `pi`, `api`, `web`) and frozen v0 nouns.
+`forkloom` ships a mise-first C1 stack with 5 default services (`postgres`, `seaweedfs`, `pi`, `api`, `web`) plus an optional `worker` profile and frozen v0 nouns.
 
 ## Invariants
 
@@ -9,7 +9,7 @@
 - Artifact identity is immutable `sha256`; bytes stored once in CAS layout `cas/aa/<sha256>`
 - Orchestration is `mise` only; secrets are `fnox` only; `.env*` is forbidden
 - Durability proof requires SQL unique guard plus DBOS live crash/recover test
-- PI protocol gate runs real RPC process with deterministic mock-provider fallback by default
+- PI protocol gate runs a real `pi --mode rpc` process; the API falls back to a local mock provider unless `PI_RPC_STRICT_REAL=1`
 
 ## Ports
 
@@ -37,6 +37,12 @@ MISE_EXPERIMENTAL=1 mise run svc
 
 Open `http://127.0.0.1:5173` for the single-screen run UI.
 
+Optional worker seam:
+
+```bash
+docker compose --profile worker up -d worker
+```
+
 ## Quick Artifact Demo
 
 ```bash
@@ -63,7 +69,31 @@ curl -fsS http://localhost:8080/artifacts/$SHA/meta | jq .
 
 - `web` proxies `/runs`, `/artifacts`, `/health` to `api`
 - flow: upload file -> `POST /artifacts` -> `POST /runs` -> `GET /runs/:runId/events`
+- SSE replay uses `Last-Event-ID` or `?since=<event_id>` cursor semantics
 - trace drawer is reducer-derived from append-only `RunEvent` SSE
+
+## Run API Smoke
+
+```bash
+curl -fsS -F file=@README.md http://localhost:8080/artifacts | tee /tmp/run-artifact.json
+SHA=$(jq -r .sha256 /tmp/run-artifact.json)
+RUN_ID=$(node -e 'const {createRunId}=require("./packages/shared/dist/index.js"); console.log(createRunId())' 2>/dev/null || python3 - <<'PY'
+import random, time
+alphabet="0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+now=int(time.time()*1000)
+head=""
+for _ in range(10):
+    head=alphabet[now % 32] + head
+    now//=32
+tail="".join(alphabet[random.randrange(32)] for _ in range(16))
+print(head + tail)
+PY
+)
+curl -fsS http://localhost:8080/runs \
+  -H 'content-type: application/json' \
+  -d "{\"runId\":\"$RUN_ID\",\"scope\":\"team\",\"userMsg\":\"reply with one concise line\",\"attachments\":[{\"sha256\":\"$SHA\"}]}" | jq .
+curl -N http://localhost:8080/runs/$RUN_ID/events
+```
 
 ## Data Layout
 

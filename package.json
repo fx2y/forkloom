@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "lint": "biome check src scripts tests apps packages",
+    "lint": "biome check src scripts tests apps/api apps/web/src apps/web/test packages",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run tests/unit",
     "test:contract": "vitest run tests/contract",

@@ -68,9 +68,7 @@ describe("run-request-parsers", () => {
 	});
 
 	it("falls back to query cursor and rejects malformed integers", () => {
-		expect(
-			parseRunCursor(makeRequest({ query: { since: "7" } })),
-		).toEqual({
+		expect(parseRunCursor(makeRequest({ query: { since: "7" } }))).toEqual({
 			sinceEventId: 7,
 			limit: 100,
 		});

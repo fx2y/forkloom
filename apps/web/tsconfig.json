@@ -16,7 +16,12 @@
 			"@forkloom/shared": ["../../packages/shared/src/index"]
 		}
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts", "vite.config.ts", "vitest.config.ts"],
+	"include": [
+		"src/**/*.ts",
+		"test/**/*.ts",
+		"vite.config.ts",
+		"vitest.config.ts"
+	],
 	"references": [
 		{ "path": "../../packages/contracts" },
 		{ "path": "../../packages/shared" }

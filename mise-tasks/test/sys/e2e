@@ -26,6 +26,8 @@ run_forced_gate fault
 
 echo "running product smoke..."
 curl -fsS http://localhost:8080/health | jq -e '.deps.pg and .deps.s3 and .deps.pi and .deps.api' >/dev/null
+curl -fsS http://localhost:5173 >/tmp/test-sys.web.html
+rg -q 'forkloom run surface' /tmp/test-sys.web.html
 curl -fsS -F file=@README.md http://localhost:8080/artifacts > .cache/test-int/sys.upload.json
 SYS_SHA=$(jq -r '.sha256' .cache/test-int/sys.upload.json)
 curl -fsS "http://localhost:8080/artifacts/$SYS_SHA" > .cache/test-int/sys.download.bin

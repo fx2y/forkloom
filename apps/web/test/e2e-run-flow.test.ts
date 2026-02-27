@@ -90,7 +90,9 @@ describe("web run flow", () => {
 			configurable: true,
 		});
 		fileInput.dispatchEvent(new Event("change"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await vi.waitFor(() => {
 			expect(fetchImpl).toHaveBeenCalledTimes(2);
 		});
@@ -138,5 +140,64 @@ describe("web run flow", () => {
 		);
 		expect(root.querySelectorAll("[data-artifacts] a")).toHaveLength(1);
 		expect(root.textContent).toContain("note.txt");
+	});
+
+	it("reconnects from the last delivered cursor after a gap frame", async () => {
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					runId: RUN_ID,
+					created: true,
+					status: "running",
+				}),
+				{
+					status: 201,
+					headers: { "content-type": "application/json" },
+				},
+			),
+		);
+
+		const root = document.createElement("div");
+		document.body.append(root);
+		mountApp(root, {
+			fetchImpl,
+			createEventSource: (url) =>
+				new FakeEventSource(url) as unknown as EventSource,
+			createRunId: () => RUN_ID,
+		});
+
+		const textarea = root.querySelector("textarea");
+		const form = root.querySelector("form");
+		if (!(textarea && form instanceof HTMLFormElement)) {
+			throw new Error("missing form controls");
+		}
+
+		textarea.value = "hello run";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => {
+			expect(FakeEventSource.instances[0]?.url).toBe(`/runs/${RUN_ID}/events`);
+		});
+
+		const first = FakeEventSource.instances[0];
+		if (!first) {
+			throw new Error("missing initial fake event source");
+		}
+
+		first.emit("run_started", {
+			runId: RUN_ID,
+			seq: 1,
+			t: "2026-02-27T00:00:00.000Z",
+			kind: "run_started",
+			payload: {},
+		});
+		first.emit("gap", { reason: "overflow", reconnectFrom: 1 });
+
+		await vi.waitFor(() => {
+			expect(FakeEventSource.instances[1]?.url).toBe(
+				`/runs/${RUN_ID}/events?since=1`,
+			);
+		});
 	});
 });

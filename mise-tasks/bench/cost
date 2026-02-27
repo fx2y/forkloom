@@ -3,19 +3,10 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds python3
+require_cmds pnpm
 
 mkdir -p .cache/bench
-python3 - <<'PY' > .cache/bench/cost.json
-from pathlib import Path
-raw = Path('fixtures/sessions/sample.session.jsonl').read_text(encoding='utf8')
-chars = len(raw)
-tokens_est = max(1, chars // 4)
-# conservative local estimate, provider-specific billing is external
-cost_per_1k = 0.0005
-cost = tokens_est / 1000 * cost_per_1k
-print('{"chars":%d,"tokens_est":%d,"cost_est_usd":%.8f}' % (chars, tokens_est, cost))
-PY
+pnpm exec tsx scripts/harness/run-bench-live.ts cost
 
 write_mark "bench:cost"
 echo "bench:cost ok"

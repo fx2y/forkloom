@@ -9,6 +9,7 @@ export type AppConfig = {
 	piRpcUrl: string;
 	piProvider: string;
 	piModel: string;
+	piStrictReal: boolean;
 };
 
 function must(name: string): string {
@@ -30,6 +31,19 @@ function parsePort(value: string | undefined, fallback: number): number {
 	return parsed;
 }
 
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+	if (value == null || value === "") {
+		return fallback;
+	}
+	if (value === "1" || value.toLowerCase() === "true") {
+		return true;
+	}
+	if (value === "0" || value.toLowerCase() === "false") {
+		return false;
+	}
+	throw new Error(`invalid boolean: ${value}`);
+}
+
 export function loadConfig(): AppConfig {
 	return {
 		port: parsePort(process.env.PORT, 8080),
@@ -43,5 +57,6 @@ export function loadConfig(): AppConfig {
 		piRpcUrl: process.env.PI_RPC_URL ?? "http://localhost:7070",
 		piProvider: process.env.PI_PROVIDER ?? "github-copilot",
 		piModel: process.env.PI_MODEL ?? "gpt-4.1",
+		piStrictReal: parseBoolean(process.env.PI_RPC_STRICT_REAL, false),
 	};
 }

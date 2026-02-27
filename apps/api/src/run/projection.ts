@@ -1,9 +1,5 @@
 import type { RunEvent, RunState } from "@forkloom/contracts";
-import type {
-	RunArtifactLinkModel,
-	RunEventModel,
-	RunModel,
-} from "./ports";
+import type { RunArtifactLinkModel, RunEventModel, RunModel } from "./ports";
 
 export function toRunEventContract(event: RunEventModel): RunEvent {
 	return {

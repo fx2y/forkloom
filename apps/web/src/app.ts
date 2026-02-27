@@ -1,9 +1,9 @@
 import type { RunEvent } from "@forkloom/contracts";
 import { createRunId } from "./run-id";
 import {
+	type RunViewState,
 	initialRunViewState,
 	reduceRunEvent,
-	type RunViewState,
 } from "./state/reducer";
 import "./styles.css";
 
@@ -28,6 +28,14 @@ type UploadedAttachment = {
 	name: string;
 	sha256: string;
 };
+
+export function buildRunEventsUrl(runId: string, sinceEventId: number): string {
+	const query =
+		sinceEventId > 0
+			? `?since=${encodeURIComponent(String(sinceEventId))}`
+			: "";
+	return `/runs/${runId}/events${query}`;
+}
 
 function browserDeps(): AppDeps {
 	return {
@@ -117,8 +125,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 	`;
 
 	const form = root.querySelector("[data-form]");
-	const textarea = root.querySelector<HTMLTextAreaElement>('textarea[name="userMsg"]');
-	const fileInput = root.querySelector<HTMLInputElement>('input[name="attachments"]');
+	const textarea = root.querySelector<HTMLTextAreaElement>(
+		'textarea[name="userMsg"]',
+	);
+	const fileInput = root.querySelector<HTMLInputElement>(
+		'input[name="attachments"]',
+	);
 	const status = root.querySelector<HTMLElement>("[data-status]");
 	const runIdNode = root.querySelector<HTMLElement>("[data-run-id]");
 	const errorNode = root.querySelector<HTMLElement>("[data-error]");
@@ -147,11 +159,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 	const update = () => {
 		status.textContent = renderStatus(state, submitting);
 		status.dataset.state = state.status;
-		runIdNode.textContent = state.runId ? `run ${state.runId}` : "No run started.";
+		runIdNode.textContent = state.runId
+			? `run ${state.runId}`
+			: "No run started.";
 		errorNode.hidden = errorMessage.length === 0;
 		errorNode.textContent = errorMessage;
-		resultNode.textContent =
-			state.resultText || "Final text appears here.";
+		resultNode.textContent = state.resultText || "Final text appears here.";
 		uploadsNode.innerHTML = uploaded
 			.map(
 				(artifact) =>
@@ -183,9 +196,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 		update();
 	};
 
-	const connect = (runId: string) => {
+	const connect = (runId: string, sinceEventId = state.lastSeq) => {
 		stream?.close();
-		stream = deps.createEventSource(`/runs/${runId}/events`);
+		stream = deps.createEventSource(buildRunEventsUrl(runId, sinceEventId));
 		for (const kind of [
 			"run_started",
 			"pi_event",
@@ -201,7 +214,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 			errorMessage = "stream gap detected; reconnecting";
 			update();
 			stream?.close();
-			connect(runId);
+			connect(runId, state.lastSeq);
 		});
 		stream.onerror = () => {
 			if (state.status === "done" || state.status === "failed") {
@@ -225,7 +238,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 		if (
 			target instanceof HTMLInputElement &&
 			target.name === "scope" &&
-			(target.value === "me" || target.value === "team" || target.value === "org")
+			(target.value === "me" ||
+				target.value === "team" ||
+				target.value === "org")
 		) {
 			scope = target.value;
 		}

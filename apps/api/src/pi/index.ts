@@ -18,6 +18,8 @@ export type {
 	PiRpcResponse,
 	SpawnPiRpcInput,
 } from "./rpc-client";
+export { MockPiProviderManager } from "./mock-provider";
+export type { MockPiProviderLease } from "./mock-provider";
 export { createPiSessionPort, RpcPiSessionPort } from "./session-port";
 export type {
 	CreatePiSessionInput,
@@ -28,3 +30,4 @@ export type {
 	PiSessionStats,
 	PiStreamingBehavior,
 } from "./session-port";
+export { createManagedPiSessionFactory } from "./session-factory";

@@ -50,7 +50,10 @@ function parseInteger(
 export function parseRunCreatePayload(input: unknown): RunSpecModel {
 	const result = validateRunByName("RunSpec", input);
 	if (!result.valid) {
-		throw new HttpError(400, `invalid run payload: ${result.errors.join("; ")}`);
+		throw new HttpError(
+			400,
+			`invalid run payload: ${result.errors.join("; ")}`,
+		);
 	}
 
 	const record = input as Record<string, unknown>;

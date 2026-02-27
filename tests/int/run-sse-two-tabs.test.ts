@@ -188,7 +188,10 @@ async function openSseStream(
 				const chunk = await Promise.race([
 					reader.read(),
 					new Promise<never>((_, reject) => {
-						setTimeout(() => reject(new Error("timed out waiting for SSE")), 2000);
+						setTimeout(
+							() => reject(new Error("timed out waiting for SSE")),
+							2000,
+						);
 					}),
 				]);
 
