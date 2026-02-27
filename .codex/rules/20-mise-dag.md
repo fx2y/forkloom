@@ -17,5 +17,6 @@ paths:
   - fail on purge errors (no mask).
   - use docker-root fallback for root-owned `.data/seaweed`.
 - **Health:** Ready = retry loop + hard-fail diagnostic. `common.sh:wait_for_url` used for reachability.
+- **PI Runtime Mode:** `pi` compose service runs real `pi --mode rpc` as stdio (no HTTP server). Health for `pi` is container-running check, not `/health` probe.
 - **CI:** `ci:force` MUST remain a sequential list of forced phases: `check,test:int,golden,fault,bench`. No single multi-arg runs.
 - **Docs:** README command blocks = real entrypoints. Docs drift is build breakage.

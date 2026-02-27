@@ -8,6 +8,9 @@ type HealthDeps = {
 };
 
 async function pingPi(url: string): Promise<boolean> {
+	if (url.startsWith("stdio://")) {
+		return true;
+	}
 	try {
 		const response = await fetch(`${url}/health`);
 		return response.ok;

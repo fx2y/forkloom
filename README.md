@@ -17,7 +17,7 @@
 - `postgres`: `5432`
 - `seaweed s3`: `8333`
 - `seaweed master`: `9333`
-- `pi rpc mock`: `7070`
+- `pi rpc`: stdio process in `pi` container (no host TCP port)
 
 ## Bootstrap
 

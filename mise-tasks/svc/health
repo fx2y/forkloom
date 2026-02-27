@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds docker curl
+require_cmds docker curl rg
 
 docker compose ps postgres seaweedfs pi api >/tmp/svc.ps
 
@@ -21,8 +21,15 @@ if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/tmp/svc
 fi
 
 wait_for_url "seaweed" "http://localhost:8333" "/tmp/svc.s3" "-sS" || exit 1
-wait_for_url "pi" "http://localhost:7070/health" "/tmp/svc.pi" "-fsS" || exit 1
 wait_for_url "api" "http://localhost:8080/health" "/tmp/svc.api" "-fsS" || exit 1
+
+# PI runs as stdio RPC process (no HTTP health endpoint); treat running container as ready.
+docker compose ps pi --format json > /tmp/svc.pi.ps
+if ! rg -q '"State":"running"' /tmp/svc.pi.ps; then
+  echo "pi container is not running" >&2
+  exit 1
+fi
+echo '{"ok":true,"mode":"stdio-rpc"}' > /tmp/svc.pi
 
 # Extra safety: ensure API reports OK
 if ! grep -q '"ok":true' /tmp/svc.api; then

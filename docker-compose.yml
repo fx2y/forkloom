@@ -26,11 +26,16 @@ services:
   pi:
     image: node:24-alpine
     working_dir: /work
-    command: ["node", "apps/pi-mock/server.mjs"]
+    command:
+      [
+        "sh",
+        "-lc",
+        "corepack enable && tail -f /dev/null | pnpm exec pi --mode rpc --provider ${PI_PROVIDER:-github-copilot} --model ${PI_MODEL:-gpt-4.1}"
+      ]
     volumes:
       - ./:/work
-    ports:
-      - "7070:7070"
+      - ${HOME}/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro
+      - ${HOME}/.pi/agent/settings.json:/root/.pi/agent/settings.json:ro
 
   api:
     image: node:24-alpine
@@ -47,7 +52,7 @@ services:
       S3_SECRET_KEY: key
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: key
-      PI_RPC_URL: http://pi:7070
+      PI_RPC_URL: stdio://pi
       PORT: "8080"
     ports:
       - "8080:8080"
