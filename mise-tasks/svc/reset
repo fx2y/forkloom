@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds docker
+
+echo "svc:reset: cleaning up docker volumes and local caches..."
+docker compose down -v --remove-orphans || true
+rm -rf .cache/dbos .data/seaweed .tmp/svc.* || true
+write_mark "svc:reset"
+echo "svc:reset ok"

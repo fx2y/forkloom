@@ -5,6 +5,13 @@ S3_ACCESS_KEY = { default = "admin" }
 S3_SECRET_KEY = { default = "key" }
 PI_MODEL = { default = "openai/gpt-4o-mini" }
 
+[profiles.dev.secrets]
+DBOS_SYSTEM_DATABASE_URL = { default = "postgresql://postgres:postgres@localhost:5432/agentos" }
+S3_ENDPOINT = { default = "http://localhost:8333" }
+S3_ACCESS_KEY = { default = "admin" }
+S3_SECRET_KEY = { default = "key" }
+PI_MODEL = { default = "openai/gpt-4o-mini" }
+
 [profiles.production.secrets]
 DBOS_SYSTEM_DATABASE_URL = { default = "postgresql://postgres:postgres@localhost:5432/agentos" }
 S3_ENDPOINT = { default = "http://localhost:8333" }

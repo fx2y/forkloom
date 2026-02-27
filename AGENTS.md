@@ -19,6 +19,7 @@ Hard invariants:
 Entrypoints (canonical):
 - Bootstrap: `mise trust && mise install && MISE_EXPERIMENTAL=1 mise prep && MISE_EXPERIMENTAL=1 mise run bootstrap`
 - Dev loop: `MISE_EXPERIMENTAL=1 mise watch check test:int golden`
+- Service management: `mise run svc` (up+health), `mise run svc:logs`, `mise run svc:reset` (purge)
 - Ordered verify: `bootstrap:doctor -> check:contract -> check:unit -> test:int -> test:sys -> golden -> fault -> bench`
 - Full refresh gates: `MISE_EXPERIMENTAL=1 mise run ci:force`
 
