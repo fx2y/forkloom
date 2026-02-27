@@ -4,7 +4,8 @@
 
 ## Invariants
 
-- 5 nouns only: `Message`, `Artifact`, `Workflow`, `Skill`, `Extension` (+ `ArtifactRef` pointer)
+- v0 nouns frozen: `Message`, `Artifact`, `Workflow`, `Skill`, `Extension` (+ `ArtifactRef` pointer)
+- v1 run namespace is additive only: `RunSpec`, `RunState`, `RunEvent` under `contracts/v1`
 - Artifact identity is immutable `sha256`; bytes stored once in CAS layout `cas/aa/<sha256>`
 - Orchestration is `mise` only; secrets are `fnox` only; `.env*` is forbidden
 - Durability proof requires SQL unique guard plus DBOS live crash/recover test

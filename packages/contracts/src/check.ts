@@ -1,12 +1,24 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import {
+	type RunContractName,
+	getRunContractNames,
+	validateRunByName,
+} from "./run-validate";
 import { renderTypes } from "./typegen";
-import { getContractNames, validateByName } from "./validate";
+import {
+	type ContractName,
+	getContractNames,
+	validateByName,
+} from "./validate";
 
-const EXAMPLES_DIR = resolve("contracts/v0/examples");
+const V0_EXAMPLES_DIR = resolve("contracts/v0/examples");
+const V1_EXAMPLES_DIR = resolve("contracts/v1/examples");
+const V0_SCHEMA_DIR = resolve("contracts/v0");
+const V1_SCHEMA_DIR = resolve("contracts/v1");
 const TYPES_PATH = resolve("packages/contracts/src/types.ts");
 
-function contractForExample(name: string): string {
+function contractForV0Example(name: string): ContractName | "" {
 	const head = name.split(".")[0];
 	switch (head) {
 		case "message":
@@ -24,19 +36,44 @@ function contractForExample(name: string): string {
 	}
 }
 
-function assertExamples(): void {
-	const files = readdirSync(EXAMPLES_DIR).filter((file) =>
-		file.endsWith(".json"),
-	);
+function contractForV1Example(name: string): RunContractName | "" {
+	const head = name.split(".")[0];
+	switch (head) {
+		case "run-spec":
+			return "RunSpec";
+		case "run-state":
+			return "RunState";
+		case "run-event":
+			return "RunEvent";
+		default:
+			return "";
+	}
+}
+
+type Validation = {
+	valid: boolean;
+	errors: string[];
+};
+
+function assertExamples<TName extends string>(params: {
+	examplesDir: string;
+	inferContract: (file: string) => TName | "";
+	getNames: () => TName[];
+	validate: (name: TName, payload: unknown) => Validation;
+}): void {
+	const files = readdirSync(params.examplesDir)
+		.filter((file) => file.endsWith(".json"))
+		.sort();
+
 	for (const file of files) {
 		const payload = JSON.parse(
-			readFileSync(resolve(EXAMPLES_DIR, file), "utf8"),
+			readFileSync(resolve(params.examplesDir, file), "utf8"),
 		) as unknown;
 
 		if (file.endsWith(".invalid.json")) {
-			const anyValid = getContractNames().some(
-				(name) => validateByName(name, payload).valid,
-			);
+			const anyValid = params.getNames().some((name) => {
+				return params.validate(name, payload).valid;
+			});
 			if (anyValid) {
 				throw new Error(
 					`invalid fixture accepted by at least one schema: ${file}`,
@@ -45,12 +82,12 @@ function assertExamples(): void {
 			continue;
 		}
 
-		const contract = contractForExample(file);
+		const contract = params.inferContract(file);
 		if (!contract) {
 			throw new Error(`cannot infer schema from fixture name: ${file}`);
 		}
 
-		const result = validateByName(contract as never, payload);
+		const result = params.validate(contract, payload);
 		if (!result.valid) {
 			throw new Error(
 				`${file} failed ${contract}: ${result.errors.join("; ") || "unknown"}`,
@@ -59,13 +96,31 @@ function assertExamples(): void {
 	}
 }
 
-function assertSchemasStrict(): void {
-	const schemaFiles = readdirSync(resolve("contracts/v0")).filter((file) =>
+function assertV0Examples(): void {
+	assertExamples({
+		examplesDir: V0_EXAMPLES_DIR,
+		inferContract: contractForV0Example,
+		getNames: getContractNames,
+		validate: validateByName,
+	});
+}
+
+function assertV1Examples(): void {
+	assertExamples({
+		examplesDir: V1_EXAMPLES_DIR,
+		inferContract: contractForV1Example,
+		getNames: getRunContractNames,
+		validate: validateRunByName,
+	});
+}
+
+function assertSchemasStrict(schemaDir: string): void {
+	const schemaFiles = readdirSync(schemaDir).filter((file) =>
 		file.endsWith(".schema.json"),
 	);
 	for (const file of schemaFiles) {
 		const schema = JSON.parse(
-			readFileSync(resolve("contracts/v0", file), "utf8"),
+			readFileSync(resolve(schemaDir, file), "utf8"),
 		) as { type?: string; additionalProperties?: unknown };
 		if (schema.type === "object" && schema.additionalProperties !== false) {
 			throw new Error(`${file} must have additionalProperties: false`);
@@ -83,7 +138,7 @@ function assertTypesInSync(): void {
 	}
 }
 
-function assertNoBannedNouns(): void {
+function assertNoBannedNounsInV0(): void {
 	const bannedNouns = [
 		"Task",
 		"Agent",
@@ -94,9 +149,8 @@ function assertNoBannedNouns(): void {
 		"Connector",
 		"Doc",
 	];
-	const schemaDir = resolve("contracts/v0");
-	const schemaFiles = readdirSync(schemaDir).filter((f) =>
-		f.endsWith(".schema.json"),
+	const schemaFiles = readdirSync(V0_SCHEMA_DIR).filter((file) =>
+		file.endsWith(".schema.json"),
 	);
 
 	const srcDir = resolve("packages/contracts/src");
@@ -105,8 +159,8 @@ function assertNoBannedNouns(): void {
 	);
 
 	const allFiles = [
-		...schemaFiles.map((f) => resolve(schemaDir, f)),
-		...srcFiles.map((f) => resolve(srcDir, f)),
+		...schemaFiles.map((file) => resolve(V0_SCHEMA_DIR, file)),
+		...srcFiles.map((file) => resolve(srcDir, file)),
 	];
 
 	for (const fullPath of allFiles) {
@@ -123,9 +177,11 @@ function assertNoBannedNouns(): void {
 }
 
 function main(): void {
-	assertSchemasStrict();
-	assertNoBannedNouns();
-	assertExamples();
+	assertSchemasStrict(V0_SCHEMA_DIR);
+	assertSchemasStrict(V1_SCHEMA_DIR);
+	assertNoBannedNounsInV0();
+	assertV0Examples();
+	assertV1Examples();
 	assertTypesInSync();
 	console.log("contract check: ok");
 }

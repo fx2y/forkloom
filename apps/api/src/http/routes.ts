@@ -1,33 +1,15 @@
 import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import multer from "multer";
-import { isHttpError } from "../errors";
 import type { ArtifactService } from "../service";
 import {
 	parseLinkPayload,
 	parseUpload,
 	requireRouteParam,
 } from "./request-parsers";
+import { asyncHandler, mapError } from "./route-utils";
 
 const upload = multer({ storage: multer.memoryStorage() });
-
-function mapError(error: unknown): { status: number; message: string } {
-	if (isHttpError(error)) {
-		return { status: error.status, message: error.message };
-	}
-	if (error instanceof SyntaxError) {
-		return { status: 400, message: error.message };
-	}
-	return { status: 500, message: "internal error" };
-}
-
-function asyncHandler(
-	handler: (req: Request, res: Response, next: NextFunction) => Promise<void>,
-) {
-	return (req: Request, res: Response, next: NextFunction): void => {
-		handler(req, res, next).catch(next);
-	};
-}
 
 export function buildApiRouter(service: ArtifactService) {
 	const app = express();

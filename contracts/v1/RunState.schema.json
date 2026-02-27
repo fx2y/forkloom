@@ -1,0 +1,51 @@
+{
+  "$id": "https://forkloom/contracts/v1/RunState.schema.json",
+  "title": "RunState",
+  "type": "object",
+  "required": ["runId", "status", "startedAt", "dbosWfId", "artifacts"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "done", "failed"]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dbosWfId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "piSessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "piSessionFile": {
+      "type": "string",
+      "pattern": "^(s3://|https?://).+"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sha256"],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

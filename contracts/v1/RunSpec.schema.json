@@ -1,0 +1,50 @@
+{
+  "$id": "https://forkloom/contracts/v1/RunSpec.schema.json",
+  "title": "RunSpec",
+  "type": "object",
+  "required": ["runId", "scope", "userMsg", "attachments"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["me", "team", "org"]
+    },
+    "userMsg": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sha256"],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "workdirRef": {
+      "type": "object",
+      "required": ["sha256"],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "modelPref": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

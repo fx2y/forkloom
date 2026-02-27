@@ -1,0 +1,35 @@
+{
+  "$id": "https://forkloom/contracts/v1/RunEvent.schema.json",
+  "title": "RunEvent",
+  "type": "object",
+  "required": ["runId", "seq", "t", "kind", "payload"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "t": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "run_started",
+        "pi_event",
+        "artifact_written",
+        "run_done",
+        "run_failed"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

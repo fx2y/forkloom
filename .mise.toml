@@ -88,7 +88,7 @@ outputs = [".cache/mise-marks/check__unit.ok"]
 
 [tasks."check:contract"]
 run = "bash ./mise-tasks/check/contract"
-sources = ["src/**/*.ts", "packages/contracts/**/*.ts", "tests/contract/**/*.ts", "schema/**/*.json", "fixtures/contract/**/*.json", "contracts/v0/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/contract"]
+sources = ["src/**/*.ts", "packages/contracts/**/*.ts", "tests/contract/**/*.ts", "schema/**/*.json", "fixtures/contract/**/*.json", "contracts/v0/**/*.json", "contracts/v1/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/check/contract"]
 outputs = [".cache/mise-marks/check__contract.ok"]
 
 [tasks."check:lesson-guard"]
@@ -185,7 +185,7 @@ depends = ["bench:latency", "bench:cost"]
 [tasks."test:sys:e2e"]
 run = "bash ./mise-tasks/test/sys/e2e"
 depends = ["bootstrap", "svc:health"]
-sources = [".mise.toml", "mise-tasks/test/sys/e2e", "src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "contracts/v0/**/*.json", "fixtures/**/*.jsonl", "schema/**/*.json", "docker-compose.yml"]
+sources = [".mise.toml", "mise-tasks/test/sys/e2e", "src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "contracts/v0/**/*.json", "contracts/v1/**/*.json", "fixtures/**/*.jsonl", "schema/**/*.json", "docker-compose.yml"]
 outputs = [".cache/mise-marks/test__sys__e2e.ok"]
 
 [tasks."test:sys"]
