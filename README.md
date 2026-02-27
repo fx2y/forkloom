@@ -10,6 +10,7 @@
 - Orchestration is `mise` only; secrets are `fnox` only; `.env*` is forbidden
 - Durability proof requires SQL unique guard plus DBOS live crash/recover test
 - PI protocol gate runs a real `pi --mode rpc` process; the API falls back to a local mock provider unless `PI_RPC_STRICT_REAL=1`
+- Compose mounts host `~/.pi/agent` into `api`/`pi`/`worker`, so persisted `pi auth` state is visible inside containers
 
 ## Ports
 
@@ -41,6 +42,12 @@ Optional worker seam:
 
 ```bash
 docker compose --profile worker up -d worker
+```
+
+Strict real PI (fail if local `pi` auth/model state is unusable):
+
+```bash
+PI_RPC_STRICT_REAL=1 MISE_EXPERIMENTAL=1 mise run svc
 ```
 
 ## Quick Artifact Demo

@@ -34,8 +34,7 @@ services:
       ]
     volumes:
       - ./:/work
-      - ${HOME}/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro
-      - ${HOME}/.pi/agent/settings.json:/root/.pi/agent/settings.json:ro
+      - ${HOME}/.pi/agent:/root/.pi/agent:ro
 
   api:
     image: node:24-alpine
@@ -43,6 +42,7 @@ services:
     command: ["sh", "-lc", "corepack enable && pnpm exec tsx apps/api/src/server.ts"]
     volumes:
       - ./:/work
+      - ${HOME}/.pi/agent:/root/.pi/agent:ro
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
       DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
@@ -93,6 +93,7 @@ services:
     command: ["sh", "-lc", "tail -f /dev/null"]
     volumes:
       - ./:/work
+      - ${HOME}/.pi/agent:/root/.pi/agent:ro
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
       DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
