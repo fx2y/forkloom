@@ -15,6 +15,16 @@ type S3Deps = {
 	region: string;
 	accessKeyId: string;
 	secretAccessKey: string;
+	client?: Pick<S3Client, "send"> | undefined;
+};
+
+type S3ErrorLike = {
+	name?: string;
+	code?: string;
+	Code?: string;
+	$metadata?: {
+		httpStatusCode?: number;
+	};
 };
 
 function toReadable(body: unknown): Readable {
@@ -35,18 +45,44 @@ function toReadable(body: unknown): Readable {
 }
 
 export class S3ArtifactStore implements ArtifactStore {
-	private readonly client: S3Client;
+	private readonly client: Pick<S3Client, "send">;
 
 	constructor(private readonly deps: S3Deps) {
-		this.client = new S3Client({
-			endpoint: deps.endpoint,
-			region: deps.region,
-			forcePathStyle: true,
-			credentials: {
-				accessKeyId: deps.accessKeyId,
-				secretAccessKey: deps.secretAccessKey,
-			},
-		});
+		this.client =
+			deps.client ??
+			new S3Client({
+				endpoint: deps.endpoint,
+				region: deps.region,
+				forcePathStyle: true,
+				credentials: {
+					accessKeyId: deps.accessKeyId,
+					secretAccessKey: deps.secretAccessKey,
+				},
+			});
+	}
+
+	private static isMissingBucketError(error: unknown): boolean {
+		const s3Error = error as S3ErrorLike;
+		return (
+			s3Error?.$metadata?.httpStatusCode === 404 ||
+			s3Error?.name === "NotFound" ||
+			s3Error?.code === "NotFound" ||
+			s3Error?.Code === "NotFound" ||
+			s3Error?.name === "NoSuchBucket"
+		);
+	}
+
+	private static isBucketAlreadyExistsError(error: unknown): boolean {
+		const s3Error = error as S3ErrorLike;
+		return (
+			s3Error?.$metadata?.httpStatusCode === 409 ||
+			s3Error?.name === "BucketAlreadyExists" ||
+			s3Error?.name === "BucketAlreadyOwnedByYou" ||
+			s3Error?.code === "BucketAlreadyExists" ||
+			s3Error?.code === "BucketAlreadyOwnedByYou" ||
+			s3Error?.Code === "BucketAlreadyExists" ||
+			s3Error?.Code === "BucketAlreadyOwnedByYou"
+		);
 	}
 
 	async ensureBucket(): Promise<void> {
@@ -55,16 +91,20 @@ export class S3ArtifactStore implements ArtifactStore {
 				new HeadBucketCommand({ Bucket: this.deps.bucket }),
 			);
 			return;
-		} catch {
-			// Fallthrough: create when missing or unreachable race.
+		} catch (error) {
+			if (!S3ArtifactStore.isMissingBucketError(error)) {
+				throw error;
+			}
 		}
 
 		try {
 			await this.client.send(
 				new CreateBucketCommand({ Bucket: this.deps.bucket }),
 			);
-		} catch {
-			// Seaweed and AWS S3 can both return errors when bucket already exists.
+		} catch (error) {
+			if (!S3ArtifactStore.isBucketAlreadyExistsError(error)) {
+				throw error;
+			}
 		}
 	}
 

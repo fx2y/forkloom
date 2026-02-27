@@ -1,6 +1,7 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildApiRouter } from "../../apps/api/src/http/routes";
 import type {
+	RunEventModel,
 	RunModel,
 	RunRepo,
 	RunSpecModel,
@@ -10,56 +11,116 @@ import { ArtifactService } from "../../apps/api/src/service";
 
 const RUN_ID = "01HS7Z6E5R4W6NED8MH4D9Y6A0";
 
-function makeRun(spec: RunSpecModel): RunModel {
+function makeRun(
+	spec: RunSpecModel,
+	overrides: Partial<RunModel> = {},
+): RunModel {
 	return {
 		runId: spec.runId,
-		status: "running",
+		status: "queued",
 		spec,
 		createdAt: "2026-02-27T00:00:00.000Z",
 		updatedAt: "2026-02-27T00:00:00.000Z",
-		dbosWorkflowId: spec.runId,
+		dbosWorkflowId: null,
 		piSessionId: null,
 		piSessionFile: null,
 		resultText: null,
 		resultStats: null,
 		error: null,
+		...overrides,
 	};
 }
 
-describe("run idempotency over POST /runs", () => {
-	const launches: string[] = [];
-	let created = false;
+class InMemoryRunRepo implements RunRepo {
+	private run: RunModel | null = null;
+	private nextEventId = 1;
 
-	const runRepo: RunRepo = {
-		createRun: async ({ spec }) => {
-			if (!created) {
-				created = true;
-				return { run: makeRun(spec), created: true };
-			}
-			return { run: makeRun(spec), created: false };
-		},
-		getRun: async () => null,
-		appendEvent: async () => {
-			throw new Error("unused");
-		},
-		listEventsSince: async () => {
-			throw new Error("unused");
-		},
-		listArtifacts: async () => [],
-		markDone: async () => null,
-		markFailed: async () => null,
-		linkArtifact: async () => undefined,
-	};
+	async createRun({
+		spec,
+	}: {
+		runId: string;
+		spec: RunSpecModel;
+	}): Promise<{ run: RunModel; created: boolean }> {
+		if (!this.run) {
+			this.run = makeRun(spec);
+			return { run: this.run, created: true };
+		}
+		return { run: this.run, created: false };
+	}
 
-	const runService = new RunService({
-		runRepo,
-		workflowLauncher: {
-			startRunOnce: async (runId) => {
-				launches.push(runId);
-			},
-		},
-	});
-	const artifactService = new ArtifactService({
+	async recordWorkflowLaunch(
+		runId: string,
+		workflowId: string,
+	): Promise<RunModel | null> {
+		if (!this.run || this.run.runId !== runId) {
+			return null;
+		}
+		this.run = {
+			...this.run,
+			dbosWorkflowId: workflowId,
+		};
+		return this.run;
+	}
+
+	async beginRun(input: {
+		runId: string;
+		workflowId: string;
+		payload: Record<string, unknown>;
+	}): Promise<RunEventModel> {
+		if (!this.run || this.run.runId !== input.runId) {
+			throw new Error("run not found");
+		}
+		this.run = {
+			...this.run,
+			status: "running",
+			dbosWorkflowId: input.workflowId,
+		};
+		return {
+			eventId: this.nextEventId++,
+			runId: input.runId,
+			kind: "run_started",
+			payload: input.payload,
+			createdAt: "2026-02-27T00:00:00.000Z",
+		};
+	}
+
+	async getRun(runId: string): Promise<RunModel | null> {
+		return this.run?.runId === runId ? this.run : null;
+	}
+
+	async appendEvent(): Promise<RunEventModel> {
+		throw new Error("unused");
+	}
+
+	async listEventsSince(): Promise<RunEventModel[]> {
+		throw new Error("unused");
+	}
+
+	async listArtifacts(): Promise<[]> {
+		return [];
+	}
+
+	async completeRun(): Promise<{
+		run: RunModel | null;
+		event: RunEventModel | null;
+	}> {
+		return { run: this.run, event: null };
+	}
+
+	async failRun(): Promise<{
+		run: RunModel | null;
+		event: RunEventModel | null;
+	}> {
+		return { run: this.run, event: null };
+	}
+
+	async linkArtifact(): Promise<void> {
+		return;
+	}
+}
+
+function createArtifactService() {
+	return new ArtifactService({
 		repo: {
 			ping: async () => true,
 			getBySha256: async () => null,
@@ -79,15 +140,29 @@ describe("run idempotency over POST /runs", () => {
 		},
 		s3Bucket: "agentos",
 	});
+}
 
+async function withServer(
+	repo: RunRepo,
+	launcher: { startRunOnce(runId: string): Promise<void> },
+	run: (base: string) => Promise<void>,
+): Promise<void> {
+	const runService = new RunService({
+		runRepo: repo,
+		workflowLauncher: launcher as never,
+	});
 	const app = buildApiRouter({
-		artifactService,
+		artifactService: createArtifactService(),
 		runService,
 	});
-
 	const server = app.listen(0);
-
-	afterAll(async () => {
+	try {
+		const address = server.address();
+		if (!address || typeof address === "string") {
+			throw new Error("failed to bind test server");
+		}
+		await run(`http://127.0.0.1:${address.port}`);
+	} finally {
 		await new Promise<void>((resolveClose, rejectClose) => {
 			server.close((error) => {
 				if (error) {
@@ -97,34 +172,77 @@ describe("run idempotency over POST /runs", () => {
 				resolveClose();
 			});
 		});
+	}
+}
+
+function runPayload() {
+	return {
+		runId: RUN_ID,
+		scope: "team",
+		userMsg: "hello",
+		attachments: [],
+	};
+}
+
+describe("run idempotency over POST /runs", () => {
+	it("starts workflow once for duplicate runId requests", async () => {
+		const launches: string[] = [];
+		await withServer(
+			new InMemoryRunRepo(),
+			{
+				startRunOnce: async (runId) => {
+					launches.push(runId);
+				},
+			},
+			async (base) => {
+				const first = await fetch(`${base}/runs`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(runPayload()),
+				});
+				const second = await fetch(`${base}/runs`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(runPayload()),
+				});
+
+				expect(first.status).toBe(201);
+				expect(second.status).toBe(200);
+			},
+		);
+		expect(launches).toEqual([RUN_ID]);
 	});
 
-	it("starts workflow once for duplicate runId requests", async () => {
-		const address = server.address();
-		if (!address || typeof address === "string") {
-			throw new Error("failed to bind test server");
-		}
-		const base = `http://127.0.0.1:${address.port}`;
-		const payload = {
-			runId: RUN_ID,
-			scope: "team",
-			userMsg: "hello",
-			attachments: [],
-		};
+	it("retries a queued run after the first launch attempt fails", async () => {
+		const launches: string[] = [];
+		let failFirst = true;
+		await withServer(
+			new InMemoryRunRepo(),
+			{
+				startRunOnce: async (runId) => {
+					launches.push(runId);
+					if (failFirst) {
+						failFirst = false;
+						throw new Error("launcher offline");
+					}
+				},
+			},
+			async (base) => {
+				const first = await fetch(`${base}/runs`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(runPayload()),
+				});
+				const second = await fetch(`${base}/runs`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(runPayload()),
+				});
 
-		const first = await fetch(`${base}/runs`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(payload),
-		});
-		const second = await fetch(`${base}/runs`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(payload),
-		});
-
-		expect(first.status).toBe(201);
-		expect(second.status).toBe(200);
-		expect(launches).toEqual([RUN_ID]);
+				expect(first.status).toBe(500);
+				expect(second.status).toBe(200);
+			},
+		);
+		expect(launches).toEqual([RUN_ID, RUN_ID]);
 	});
 });

@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import type {
 	PiPromptInput,
@@ -70,7 +71,9 @@ function sampleRun(): RunModel {
 			runId: RUN_ID,
 			scope: "team",
 			userMsg: "hello",
-			attachments: [{ sha256: "a".repeat(64) }],
+			attachments: [{ sha256: "a".repeat(64) }, { sha256: "b".repeat(64) }],
+			workdirRef: { sha256: "c".repeat(64) },
+			modelPref: "gpt-5-codex",
 		},
 		createdAt: "2026-02-27T00:00:00.000Z",
 		updatedAt: "2026-02-27T00:00:00.000Z",
@@ -97,7 +100,7 @@ describe("run pi adapter integration", () => {
 					getRun: async () => sampleRun(),
 				},
 				runService: {
-					appendRunStarted: async () => {
+					beginRun: async () => {
 						lifecycle.push("run_started");
 						return {
 							eventId: 1,
@@ -140,9 +143,122 @@ describe("run pi adapter integration", () => {
 					},
 				},
 				artifactService: {
+					getArtifactMeta: async (sha256) => ({
+						sha256,
+						uri: `s3://agentos/cas/${sha256}`,
+						mime: sha256.startsWith("a") ? "image/png" : "text/plain",
+						bytes: 4,
+						createdAt: "2026-02-27T00:00:00.000Z",
+						type: "raw",
+						parents: [],
+						meta: {},
+					}),
+					getArtifactBytes: async () => ({
+						body: Readable.from(Buffer.from("png!", "utf8")),
+						contentType: "image/png",
+					}),
 					putArtifact: async () => ({
 						sha256: "c".repeat(64),
 						uri: "s3://agentos/cas/cc/cccc",
+						mime: "application/jsonl",
+						bytes: 4,
+						createdAt: "2026-02-27T00:00:00.000Z",
+						type: "trace",
+						parents: [],
+						meta: {},
+					}),
+				},
+				createPiSession: async (run) => {
+					expect(run.spec.modelPref).toBe("gpt-5-codex");
+					return session;
+				},
+				readFileBytes: async () => Buffer.from("line\n"),
+			},
+			{
+				runStep: async (_name, fn) => fn(),
+			},
+		);
+
+		expect(session.promptInputs[0]?.message).toContain("hello");
+		expect(session.promptInputs[0]?.message).toContain("attachmentRefs");
+		expect(session.promptInputs[0]?.message).toContain("workdirRef");
+		expect(session.promptInputs[0]?.message).toContain("modelPref");
+		expect(session.promptInputs[0]?.images).toHaveLength(1);
+		expect(linked).toContainEqual({
+			sha: "c".repeat(64),
+			kind: "pi_session_jsonl",
+		});
+		expect(donePayload).toMatchObject({
+			resultText: "done",
+			stats: { totalTokens: 2, costUsd: 0.001 },
+		});
+		expect(lifecycle).toContain("run_started");
+		expect(lifecycle).toContain("pi_event");
+		expect(lifecycle).toContain("artifact_written");
+		expect(lifecycle).toContain("run_done");
+		expect(session.closed).toBe(true);
+	});
+
+	it("allows blank final text when artifacts still complete the run", async () => {
+		const session = new StubSession();
+		session.getLastAssistantText = async () => "";
+		let completed = false;
+
+		await executeRunOnce(
+			RUN_ID,
+			{
+				runRepo: {
+					getRun: async () => sampleRun(),
+				},
+				runService: {
+					beginRun: async () => ({
+						eventId: 1,
+						runId: RUN_ID,
+						kind: "run_started",
+						payload: {},
+						createdAt: "2026-02-27T00:00:00.000Z",
+					}),
+					appendPiEvent: async () => ({
+						eventId: 2,
+						runId: RUN_ID,
+						kind: "pi_event",
+						payload: {},
+						createdAt: "2026-02-27T00:00:00.000Z",
+					}),
+					appendArtifactWritten: async () => ({
+						eventId: 3,
+						runId: RUN_ID,
+						kind: "artifact_written",
+						payload: {},
+						createdAt: "2026-02-27T00:00:00.000Z",
+					}),
+					completeRun: async () => {
+						completed = true;
+						return sampleRun();
+					},
+					failRun: async () => {
+						throw new Error("unexpected failRun");
+					},
+					linkArtifact: async () => undefined,
+				},
+				artifactService: {
+					getArtifactMeta: async (sha256) => ({
+						sha256,
+						uri: `s3://agentos/cas/${sha256}`,
+						mime: "text/plain",
+						bytes: 4,
+						createdAt: "2026-02-27T00:00:00.000Z",
+						type: "raw",
+						parents: [],
+						meta: {},
+					}),
+					getArtifactBytes: async () => ({
+						body: Readable.from(Buffer.from("txt", "utf8")),
+						contentType: "text/plain",
+					}),
+					putArtifact: async () => ({
+						sha256: "d".repeat(64),
+						uri: "s3://agentos/cas/dd/dddd",
 						mime: "application/jsonl",
 						bytes: 4,
 						createdAt: "2026-02-27T00:00:00.000Z",
@@ -159,19 +275,6 @@ describe("run pi adapter integration", () => {
 			},
 		);
 
-		expect(session.promptInputs[0]?.message).toBe("hello");
-		expect(linked).toContainEqual({
-			sha: "c".repeat(64),
-			kind: "pi_session_jsonl",
-		});
-		expect(donePayload).toMatchObject({
-			resultText: "done",
-			stats: { totalTokens: 2, costUsd: 0.001 },
-		});
-		expect(lifecycle).toContain("run_started");
-		expect(lifecycle).toContain("pi_event");
-		expect(lifecycle).toContain("artifact_written");
-		expect(lifecycle).toContain("run_done");
-		expect(session.closed).toBe(true);
+		expect(completed).toBe(true);
 	});
 });

@@ -30,4 +30,8 @@ export type {
 	PiSessionStats,
 	PiStreamingBehavior,
 } from "./session-port";
-export { createManagedPiSessionFactory } from "./session-factory";
+export {
+	createManagedPiSessionFactory,
+	probePiSession,
+} from "./session-factory";
+export type { ManagedPiSessionOverrides } from "./session-factory";

@@ -80,7 +80,7 @@ describe("run SSE helpers", () => {
 				seq: 3,
 				t: "2026-02-27T00:00:02.000Z",
 				kind: "run_done",
-				payload: { ok: true },
+				payload: { resultText: "done", stats: {}, artifacts: [] },
 			}),
 		).toBe(false);
 

@@ -11,7 +11,11 @@ import {
 } from "./durability";
 import { buildHealthHandler } from "./http/health";
 import { buildApiRouter } from "./http/routes";
-import { MockPiProviderManager, createManagedPiSessionFactory } from "./pi";
+import {
+	MockPiProviderManager,
+	createManagedPiSessionFactory,
+	probePiSession,
+} from "./pi";
 import { PgArtifactRepo } from "./repo/postgres";
 import { PgRunRepo, RunService } from "./run";
 import { ArtifactService } from "./service";
@@ -89,14 +93,21 @@ async function bootstrap() {
 		runRepo,
 		runService,
 		artifactService: workflowArtifactService,
-		createPiSession: async () => createPiSession(),
+		createPiSession: async (run) =>
+			createPiSession({
+				model: run.spec.modelPref ?? config.piModel,
+			}),
 	});
 	await launchDbos(config.databaseUrl);
 
 	const app = buildApiRouter({ artifactService: service, runService });
 	app.get(
 		"/health",
-		buildHealthHandler({ repo, store, piRpcUrl: config.piRpcUrl }),
+		buildHealthHandler({
+			repo,
+			store,
+			pingPi: () => probePiSession(createPiSession),
+		}),
 	);
 
 	return { app, config, repo, runRepo };

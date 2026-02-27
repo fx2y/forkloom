@@ -5,7 +5,10 @@ import type {
 	PiSessionState,
 	PiSessionStats,
 } from "../../apps/api/src/pi";
-import { createManagedPiSessionFactory } from "../../apps/api/src/pi/session-factory";
+import {
+	createManagedPiSessionFactory,
+	probePiSession,
+} from "../../apps/api/src/pi/session-factory";
 
 class StubSession implements PiSessionPort {
 	public closed = false;
@@ -127,5 +130,22 @@ describe("createManagedPiSessionFactory", () => {
 
 		await expect(createSession()).rejects.toThrow("missing auth");
 		expect(acquire).not.toHaveBeenCalled();
+	});
+
+	it("reports false when probing an unavailable session factory", async () => {
+		const createSessionPort = vi
+			.fn<(input: CreatePiSessionInput) => PiSessionPort>()
+			.mockReturnValue(new StubSession(new Error("missing auth")));
+		const createSession = createManagedPiSessionFactory(
+			{
+				...baseInput(),
+				strictReal: true,
+			},
+			{
+				createSessionPort,
+			},
+		);
+
+		await expect(probePiSession(createSession)).resolves.toBe(false);
 	});
 });

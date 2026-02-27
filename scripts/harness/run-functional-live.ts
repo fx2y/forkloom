@@ -27,8 +27,8 @@ async function main(): Promise<void> {
 		throw new Error("missing run_done event");
 	}
 	if (
-		typeof runDone.payload.text !== "string" ||
-		runDone.payload.text.length === 0
+		typeof runDone.payload.resultText !== "string" ||
+		runDone.payload.resultText.length === 0
 	) {
 		throw new Error("run_done payload missing result text");
 	}

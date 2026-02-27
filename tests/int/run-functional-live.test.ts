@@ -12,7 +12,7 @@ type FunctionalProof = {
 		artifacts: Array<{ sha256: string }>;
 	};
 	runDone: {
-		text: string;
+		resultText: string;
 		artifacts: string[];
 	};
 	sessionArtifactSha256: string;
@@ -37,7 +37,7 @@ describe("run functional live proof", () => {
 		expect(parsed.runState?.status).toBe("done");
 		expect(typeof parsed.runState?.piSessionId).toBe("string");
 		expect(typeof parsed.runState?.piSessionFile).toBe("string");
-		expect(parsed.runDone?.text.length).toBeGreaterThan(0);
+		expect(parsed.runDone?.resultText.length).toBeGreaterThan(0);
 		expect(parsed.runDone?.artifacts).toContain(parsed.sessionArtifactSha256);
 		expect(
 			parsed.runState?.artifacts.some(

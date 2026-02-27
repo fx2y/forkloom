@@ -99,7 +99,9 @@ export function reduceRunEvent(
 				...next,
 				status: "done",
 				resultText:
-					typeof event.payload.text === "string" ? event.payload.text : "",
+					typeof event.payload.resultText === "string"
+						? event.payload.resultText
+						: "",
 				artifacts,
 			};
 			break;

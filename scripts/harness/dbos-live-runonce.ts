@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
+import { Readable } from "node:stream";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import pg from "pg";
 import type {
@@ -201,7 +202,7 @@ async function run(): Promise<void> {
 			getRun: async () => sampleRun(),
 		},
 		runService: {
-			appendRunStarted: async () => {
+			beginRun: async () => {
 				await recordEffect("run_started");
 				return {
 					eventId: 1,
@@ -245,6 +246,20 @@ async function run(): Promise<void> {
 			},
 		},
 		artifactService: {
+			getArtifactMeta: async (sha256) => ({
+				sha256,
+				uri: `s3://agentos/cas/${sha256}`,
+				mime: "text/plain",
+				bytes: 5,
+				createdAt: "2026-02-27T00:00:03.000Z",
+				type: "raw" as const,
+				parents: [],
+				meta: {},
+			}),
+			getArtifactBytes: async () => ({
+				body: Readable.from(Buffer.from("attachment\n", "utf8")),
+				contentType: "text/plain",
+			}),
 			putArtifact: async () => {
 				await recordEffect("persist_session");
 				return {

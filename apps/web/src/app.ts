@@ -94,17 +94,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 							<label><input type="radio" name="scope" value="org" /> Org</label>
 						</fieldset>
 					</div>
-					<div class="upload-list" data-uploads></div>
-					<div class="actions">
-						<button type="submit" class="primary">Start run</button>
-						<div class="ghost-group">
-							<button type="button" disabled>Abort</button>
-							<button type="button" disabled>Steer</button>
-							<button type="button" disabled>Follow-up</button>
+						<div class="upload-list" data-uploads></div>
+						<div class="actions">
+							<button type="submit" class="primary">Start run</button>
 						</div>
-					</div>
-				</form>
-			</section>
+					</form>
+				</section>
 			<section class="grid">
 				<article class="panel panel-result">
 					<div class="panel-head">
@@ -116,10 +111,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 					<div class="result-text" data-result>Final text appears here.</div>
 					<div class="chips" data-artifacts></div>
 				</article>
-				<details class="panel trace" open>
-					<summary>Trace drawer</summary>
-					<ol data-trace class="trace-list"></ol>
-				</details>
+					<details class="panel trace">
+						<summary>Trace drawer</summary>
+						<ol data-trace class="trace-list"></ol>
+					</details>
 			</section>
 		</div>
 	`;
@@ -192,6 +187,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 				typeof event.payload.error === "string"
 					? event.payload.error
 					: "run failed";
+		}
+		if (event.kind === "run_done" || event.kind === "run_failed") {
+			stream?.close();
+			stream = null;
 		}
 		update();
 	};

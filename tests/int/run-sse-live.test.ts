@@ -10,6 +10,8 @@ type SseProof = {
 	runState: {
 		status: string;
 	};
+	replayClosed: boolean;
+	secondTabClosed: boolean;
 };
 
 describe("run SSE live proof", () => {
@@ -35,5 +37,7 @@ describe("run SSE live proof", () => {
 		expect(new Set(parsed.secondTabSeqs ?? []).size).toBe(
 			parsed.secondTabSeqs?.length ?? 0,
 		);
+		expect(parsed.replayClosed).toBe(true);
+		expect(parsed.secondTabClosed).toBe(true);
 	});
 });

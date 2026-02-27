@@ -50,7 +50,7 @@ const ISO = "2026-02-27T00:00:00.000Z";
 function runRow(overrides: Record<string, unknown> = {}) {
 	return {
 		run_id: RUN_ID,
-		status: "running",
+		status: "queued",
 		spec: {
 			runId: RUN_ID,
 			scope: "team" as RunScope,
@@ -59,7 +59,7 @@ function runRow(overrides: Record<string, unknown> = {}) {
 		},
 		created_at: ISO,
 		updated_at: ISO,
-		dbos_workflow_id: RUN_ID,
+		dbos_workflow_id: null,
 		pi_session_id: null,
 		pi_session_file: null,
 		result_text: null,
@@ -79,7 +79,6 @@ describe("PgRunRepo", () => {
 
 		const out = await repo.createRun({
 			runId: RUN_ID,
-			workflowId: RUN_ID,
 			spec: {
 				runId: RUN_ID,
 				scope: "team",
@@ -89,7 +88,8 @@ describe("PgRunRepo", () => {
 		});
 
 		expect(out.created).toBe(true);
-		expect(out.run.dbosWorkflowId).toBe(RUN_ID);
+		expect(out.run.status).toBe("queued");
+		expect(out.run.dbosWorkflowId).toBeNull();
 		expect(pool.calls.map((c) => c.sql.toLowerCase())).toEqual([
 			"begin",
 			expect.stringContaining("insert into runs"),
@@ -111,7 +111,6 @@ describe("PgRunRepo", () => {
 
 		const out = await repo.createRun({
 			runId: RUN_ID,
-			workflowId: RUN_ID,
 			spec: {
 				runId: RUN_ID,
 				scope: "team",
@@ -170,5 +169,65 @@ describe("PgRunRepo", () => {
 		expect(pool.calls[1]?.sql.toLowerCase()).toContain("event_id > $2");
 		expect(pool.calls[1]?.sql.toLowerCase()).toContain("order by event_id asc");
 		expect(pool.calls[1]?.params).toEqual([RUN_ID, 2, 1000]);
+	});
+
+	it("records workflow launch without mutating queued status", async () => {
+		const pool = new StubPool([
+			{ rows: [runRow({ dbos_workflow_id: RUN_ID })] },
+		]);
+		const repo = new PgRunRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const updated = await repo.recordWorkflowLaunch(RUN_ID, RUN_ID);
+
+		expect(updated?.status).toBe("queued");
+		expect(updated?.dbosWorkflowId).toBe(RUN_ID);
+	});
+
+	it("wraps terminal row + event writes in one transaction", async () => {
+		const pool = new StubPool([
+			{},
+			{
+				rows: [runRow({ status: "done", dbos_workflow_id: RUN_ID })],
+				rowCount: 1,
+			},
+			{
+				rows: [
+					{
+						event_id: 4,
+						run_id: RUN_ID,
+						kind: "run_done",
+						payload: { resultText: "done", artifacts: [], stats: {} },
+						created_at: ISO,
+					},
+				],
+				rowCount: 1,
+			},
+			{},
+		]);
+		const repo = new PgRunRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const completed = await repo.completeRun({
+			runId: RUN_ID,
+			resultText: "done",
+			resultStats: {},
+			eventPayload: { resultText: "done", artifacts: [], stats: {} },
+			piSessionId: "pi-session-1",
+			piSessionFile: "s3://agentos/cas/cc/cccc",
+		});
+
+		expect(completed.run?.status).toBe("done");
+		expect(completed.event?.kind).toBe("run_done");
+		expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
+			"begin",
+			expect.stringContaining("update runs"),
+			expect.stringContaining("insert into events"),
+			"commit",
+		]);
 	});
 });

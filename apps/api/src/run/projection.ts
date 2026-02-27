@@ -1,14 +1,52 @@
-import type { RunEvent, RunState } from "@forkloom/contracts";
+import type {
+	ArtifactWrittenPayload,
+	PiEventPayload,
+	RunDonePayload,
+	RunEvent,
+	RunFailedPayload,
+	RunStartedPayload,
+	RunState,
+} from "@forkloom/contracts";
 import type { RunArtifactLinkModel, RunEventModel, RunModel } from "./ports";
 
 export function toRunEventContract(event: RunEventModel): RunEvent {
-	return {
+	const base = {
 		runId: event.runId,
 		seq: event.eventId,
 		t: event.createdAt,
-		kind: event.kind,
-		payload: event.payload,
 	};
+	switch (event.kind) {
+		case "run_started":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunStartedPayload,
+			};
+		case "pi_event":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as PiEventPayload,
+			};
+		case "artifact_written":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as ArtifactWrittenPayload,
+			};
+		case "run_done":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunDonePayload,
+			};
+		case "run_failed":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunFailedPayload,
+			};
+	}
 }
 
 export function toRunStateContract(

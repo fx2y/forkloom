@@ -15,6 +15,15 @@ fi
 
 mise env >/dev/null
 
+if [[ "${PI_RPC_STRICT_REAL:-0}" == "1" ]]; then
+  for pi_state in "${HOME}/.pi/agent/auth.json" "${HOME}/.pi/agent/settings.json"; do
+    if [[ ! -f "$pi_state" ]]; then
+      echo "strict-real PI requires host state file: $pi_state" >&2
+      exit 1
+    fi
+  done
+fi
+
 if command -v docker >/dev/null 2>&1; then
   docker compose ps >/dev/null || true
 fi

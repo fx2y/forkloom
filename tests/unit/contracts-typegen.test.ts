@@ -8,6 +8,7 @@ describe("contracts typegen", () => {
 		expect(out).toContain('\t| "run_started"');
 		expect(out).toContain("export type RunSpec = {");
 		expect(out).toContain("export type RunState = {");
-		expect(out).toContain("export type RunEvent = {");
+		expect(out).toContain("export type RunDonePayload = {");
+		expect(out).toContain("export type RunEvent =");
 	});
 });

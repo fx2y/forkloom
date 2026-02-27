@@ -1,10 +1,16 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import type { RunEvent, RunState } from "@forkloom/contracts";
-import type { RunEventKind } from "./event";
+import type {
+	RunDonePayload,
+	RunEvent,
+	RunFailedPayload,
+	RunStartedPayload,
+	RunState,
+} from "@forkloom/contracts";
+import type { RunEventKind, RunEventPayloadMap } from "./event";
 import type { RunEventModel, RunModel, RunRepo, RunSpecModel } from "./ports";
 import { toRunEventContract, toRunStateContract } from "./projection";
 
-export type RunDonePayload = {
+export type CompleteRunInput = {
 	resultText: string;
 	stats: Record<string, unknown>;
 	artifacts: string[];
@@ -48,19 +54,18 @@ export class RunService {
 		spec: RunSpecModel,
 	): Promise<{ run: RunModel; created: boolean }> {
 		const runId = spec.runId;
-		const created = await this.deps.runRepo.createRun({
-			runId,
-			workflowId: runId,
-			spec,
-		});
-
-		if (created.created) {
+		const created = await this.deps.runRepo.createRun({ runId, spec });
+		let run = created.run;
+		if (run.status === "queued" && run.dbosWorkflowId === null) {
 			await this.deps.workflowLauncher.startRunOnce(runId, {
 				workflowID: runId,
 			});
+			run =
+				(await this.deps.runRepo.recordWorkflowLaunch(runId, runId)) ??
+				created.run;
 		}
 
-		return created;
+		return { run, created: created.created };
 	}
 
 	async getRunState(runId: string): Promise<RunState | null> {
@@ -85,53 +90,60 @@ export class RunService {
 		return events.map(toRunEventContract);
 	}
 
-	async appendRunStarted(
+	async beginRun(
 		runId: string,
-		payload: Record<string, unknown> = {},
+		payload: RunStartedPayload = {},
 	): Promise<RunEventModel> {
-		return this.appendLifecycleEvent(runId, "run_started", payload);
+		return this.deps.runRepo.beginRun({
+			runId,
+			workflowId: runId,
+			payload,
+		});
 	}
 
 	async appendPiEvent(
 		runId: string,
-		payload: Record<string, unknown>,
+		payload: RunEventPayloadMap["pi_event"],
 	): Promise<RunEventModel> {
 		return this.appendLifecycleEvent(runId, "pi_event", payload);
 	}
 
 	async appendArtifactWritten(
 		runId: string,
-		payload: Record<string, unknown>,
+		payload: RunEventPayloadMap["artifact_written"],
 	): Promise<RunEventModel> {
 		return this.appendLifecycleEvent(runId, "artifact_written", payload);
 	}
 
 	async completeRun(
 		runId: string,
-		payload: RunDonePayload,
+		payload: CompleteRunInput,
 	): Promise<RunModel | null> {
-		const updated = await this.deps.runRepo.markDone({
+		const eventPayload: RunDonePayload = {
+			resultText: payload.resultText,
+			stats: payload.stats,
+			artifacts: payload.artifacts,
+		};
+		const updated = await this.deps.runRepo.completeRun({
 			runId,
 			resultText: payload.resultText,
 			resultStats: payload.stats,
+			eventPayload,
 			piSessionId: payload.piSessionId,
 			piSessionFile: payload.piSessionFile,
 		});
-
-		await this.appendLifecycleEvent(runId, "run_done", {
-			text: payload.resultText,
-			stats: payload.stats,
-			artifacts: payload.artifacts,
-		});
-
-		return updated;
+		return updated.run;
 	}
 
 	async failRun(runId: string, error: unknown): Promise<RunModel | null> {
 		const message = normalizeErrorMessage(error);
-		const updated = await this.deps.runRepo.markFailed(runId, message);
-		await this.appendLifecycleEvent(runId, "run_failed", { error: message });
-		return updated;
+		const eventPayload: RunFailedPayload = { error: message };
+		const updated = await this.deps.runRepo.failRun({
+			runId,
+			error: message,
+			eventPayload,
+		});
+		return updated.run;
 	}
 
 	async linkArtifact(
@@ -149,7 +161,7 @@ export class RunService {
 	private async appendLifecycleEvent(
 		runId: string,
 		kind: RunEventKind,
-		payload: Record<string, unknown>,
+		payload: RunEventPayloadMap[RunEventKind],
 	): Promise<RunEventModel> {
 		return this.deps.runRepo.appendEvent({
 			runId,

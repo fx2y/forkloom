@@ -10,6 +10,10 @@ import {
 	createPiSessionPort,
 } from "./session-port";
 
+export type ManagedPiSessionOverrides = Partial<
+	Pick<CreatePiSessionInput, "cwd" | "extraEnv" | "homeOverride" | "model">
+>;
+
 type ManagedPiSessionInput = CreatePiSessionInput & {
 	strictReal?: boolean | undefined;
 	bootstrapTimeoutMs?: number | undefined;
@@ -109,18 +113,24 @@ async function safeClose(session: PiSessionPort | null): Promise<void> {
 export function createManagedPiSessionFactory(
 	input: ManagedPiSessionInput,
 	deps: SessionFactoryDeps = {},
-): () => Promise<PiSessionPort> {
+): (overrides?: ManagedPiSessionOverrides) => Promise<PiSessionPort> {
 	const createSessionPort = deps.createSessionPort ?? createPiSessionPort;
 	const mockProviderManager =
 		deps.mockProviderManager ?? new MockPiProviderManager();
 
-	return async (): Promise<PiSessionPort> => {
+	return async (
+		overrides: ManagedPiSessionOverrides = {},
+	): Promise<PiSessionPort> => {
 		const {
 			strictReal = false,
 			bootstrapTimeoutMs = 1_500,
 			mockBootstrapTimeoutMs = 5_000,
-			...sessionInput
+			...baseSessionInput
 		} = input;
+		const sessionInput = {
+			...baseSessionInput,
+			...overrides,
+		};
 		let realSession: PiSessionPort | null = null;
 
 		try {
@@ -159,4 +169,21 @@ export function createManagedPiSessionFactory(
 			throw error;
 		}
 	};
+}
+
+export async function probePiSession(
+	createSession: (
+		overrides?: ManagedPiSessionOverrides,
+	) => Promise<PiSessionPort>,
+): Promise<boolean> {
+	let session: PiSessionPort | null = null;
+	try {
+		session = await createSession();
+		await session.getState();
+		return true;
+	} catch {
+		return false;
+	} finally {
+		await safeClose(session);
+	}
 }

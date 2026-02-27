@@ -93,10 +93,72 @@ export type RunState = {
 	artifacts: RunArtifactRef[];
 };
 
-export type RunEvent = {
+export type RunStartedPayload = {
+	scope?: RunScope;
+};
+
+export type PiEventPayload = Record<string, unknown>;
+
+export type ArtifactWrittenPayload = {
+	sha256: string;
+	kind: string;
+};
+
+export type RunDonePayload = {
+	resultText: string;
+	stats: Record<string, unknown>;
+	artifacts: string[];
+};
+
+export type RunFailedPayload = {
+	error: string;
+};
+
+export type RunStartedEvent = {
 	runId: string;
 	seq: number;
 	t: string;
-	kind: RunEventKind;
-	payload: Record<string, unknown>;
+	kind: "run_started";
+	payload: RunStartedPayload;
 };
+
+export type PiEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "pi_event";
+	payload: PiEventPayload;
+};
+
+export type ArtifactWrittenEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "artifact_written";
+	payload: ArtifactWrittenPayload;
+};
+
+export type RunDoneEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_done";
+	payload: RunDonePayload;
+};
+
+export type RunFailedEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_failed";
+	payload: RunFailedPayload;
+};
+
+export type RunEvent =
+	| RunStartedEvent
+	| PiEvent
+	| ArtifactWrittenEvent
+	| RunDoneEvent
+	| RunFailedEvent;
+
+export type TerminalRunEvent = RunDoneEvent | RunFailedEvent;

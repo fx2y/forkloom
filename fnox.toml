@@ -3,18 +3,24 @@ DBOS_SYSTEM_DATABASE_URL = { default = "postgresql://postgres:postgres@localhost
 S3_ENDPOINT = { default = "http://localhost:8333" }
 S3_ACCESS_KEY = { default = "admin" }
 S3_SECRET_KEY = { default = "key" }
-PI_MODEL = { default = "openai/gpt-4o-mini" }
+PI_PROVIDER = { default = "github-copilot" }
+PI_MODEL = { default = "gpt-4.1" }
+PI_RPC_STRICT_REAL = { default = "0" }
 
 [profiles.dev.secrets]
 DBOS_SYSTEM_DATABASE_URL = { default = "postgresql://postgres:postgres@localhost:5432/agentos" }
 S3_ENDPOINT = { default = "http://localhost:8333" }
 S3_ACCESS_KEY = { default = "admin" }
 S3_SECRET_KEY = { default = "key" }
-PI_MODEL = { default = "openai/gpt-4o-mini" }
+PI_PROVIDER = { default = "github-copilot" }
+PI_MODEL = { default = "gpt-4.1" }
+PI_RPC_STRICT_REAL = { default = "0" }
 
 [profiles.production.secrets]
 DBOS_SYSTEM_DATABASE_URL = { default = "postgresql://postgres:postgres@localhost:5432/agentos" }
 S3_ENDPOINT = { default = "http://localhost:8333" }
 S3_ACCESS_KEY = { default = "admin" }
 S3_SECRET_KEY = { default = "key" }
-PI_MODEL = { default = "openai/gpt-4o-mini" }
+PI_PROVIDER = { default = "github-copilot" }
+PI_MODEL = { default = "gpt-4.1" }
+PI_RPC_STRICT_REAL = { default = "0" }

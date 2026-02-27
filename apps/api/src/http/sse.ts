@@ -1,5 +1,6 @@
 import type { RunEvent } from "@forkloom/contracts";
 import type { Request, Response } from "express";
+import { isTerminalRunEventKind } from "../run";
 
 const POLL_MS = 250;
 export const MAX_BUFFER = 100;
@@ -165,6 +166,12 @@ export async function streamRunEvents(
 				cursor = event.seq;
 				if (!stream.enqueueEvent(event)) {
 					clearInterval(timer);
+					return;
+				}
+				if (isTerminalRunEventKind(event.kind)) {
+					closed = true;
+					clearInterval(timer);
+					stream.close();
 					return;
 				}
 			}

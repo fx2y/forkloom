@@ -129,8 +129,9 @@ describe("web run flow", () => {
 			t: "2026-02-27T00:00:02.000Z",
 			kind: "run_done",
 			payload: {
-				text: "answer ready",
+				resultText: "answer ready",
 				artifacts: ["b".repeat(64)],
+				stats: {},
 			},
 		});
 
@@ -140,6 +141,9 @@ describe("web run flow", () => {
 		);
 		expect(root.querySelectorAll("[data-artifacts] a")).toHaveLength(1);
 		expect(root.textContent).toContain("note.txt");
+		expect(source.closed).toBe(true);
+		expect(root.querySelector("details")?.hasAttribute("open")).toBe(false);
+		expect(root.textContent).not.toContain("Abort");
 	});
 
 	it("reconnects from the last delivered cursor after a gap frame", async () => {

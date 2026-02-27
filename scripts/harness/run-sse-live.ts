@@ -67,6 +67,8 @@ async function main(): Promise<void> {
 			) {
 				throw new Error("live SSE replay emitted unexpected gap control frame");
 			}
+			await replay.waitClosed();
+			await secondTab.waitClosed();
 
 			await writeJson(".cache/test-int/run-sse.json", {
 				runId: spec.runId,
@@ -75,6 +77,8 @@ async function main(): Promise<void> {
 				replaySeqs: toSeqList(replayTail.events),
 				secondTabSeqs: toSeqList(secondEvents),
 				runState: await fetchRunState(spec.runId),
+				replayClosed: true,
+				secondTabClosed: true,
 			});
 		} finally {
 			replay.close();

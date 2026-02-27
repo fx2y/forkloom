@@ -91,7 +91,7 @@ function toRunModel(row: RunRow): RunModel {
 		piSessionId: row.pi_session_id,
 		piSessionFile: row.pi_session_file,
 		resultText: row.result_text,
-		resultStats: row.result_stats ?? {},
+		resultStats: row.result_stats,
 		error: row.error,
 	};
 }
@@ -142,11 +142,11 @@ export class PgRunRepo implements RunRepo {
 			await client.query("begin");
 			const inserted = await client.query<RunRow>(
 				`insert into runs(run_id, status, spec, dbos_workflow_id)
-				 values ($1, 'running', $2::jsonb, $3)
-				 on conflict (run_id) do nothing
-				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-				 pi_session_id, pi_session_file, result_text, result_stats, error`,
-				[input.runId, JSON.stringify(input.spec), input.workflowId],
+					 values ($1, 'queued', $2::jsonb, null)
+					 on conflict (run_id) do nothing
+					 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+					 pi_session_id, pi_session_file, result_text, result_stats, error`,
+				[input.runId, JSON.stringify(input.spec)],
 			);
 
 			if (inserted.rowCount && inserted.rowCount > 0) {
@@ -169,6 +169,62 @@ export class PgRunRepo implements RunRepo {
 				run: toRunModel(requireRow(existing, "create run select existing")),
 				created: false,
 			};
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
+		}
+	}
+
+	async recordWorkflowLaunch(
+		runId: string,
+		workflowId: string,
+	): Promise<RunModel | null> {
+		const result = await this.pool.query<RunRow>(
+			`update runs
+				 set dbos_workflow_id = coalesce(dbos_workflow_id, $2),
+					 updated_at = now()
+				 where run_id = $1
+				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+				 pi_session_id, pi_session_file, result_text, result_stats, error`,
+			[runId, workflowId],
+		);
+		if (!result.rowCount) {
+			return null;
+		}
+		return toRunModel(requireRow(result, "record workflow launch"));
+	}
+
+	async beginRun(input: {
+		runId: string;
+		workflowId: string;
+		payload: Record<string, unknown>;
+	}): Promise<RunEventModel> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			const runResult = await client.query<RunRow>(
+				`update runs
+					 set status = 'running',
+						 dbos_workflow_id = coalesce(dbos_workflow_id, $2),
+						 updated_at = now()
+					 where run_id = $1
+					 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+					 pi_session_id, pi_session_file, result_text, result_stats, error`,
+				[input.runId, input.workflowId],
+			);
+			if (!runResult.rowCount) {
+				throw new Error(`begin run: missing run ${input.runId}`);
+			}
+			const eventResult = await client.query<RunEventRow>(
+				`insert into events(run_id, kind, payload)
+				 values ($1, 'run_started', $2::jsonb)
+				 returning event_id, run_id, kind, payload, created_at`,
+				[input.runId, JSON.stringify(input.payload)],
+			);
+			await client.query("commit");
+			return toRunEventModel(requireRow(eventResult, "begin run event"));
 		} catch (error) {
 			await client.query("rollback");
 			throw error;
@@ -229,53 +285,98 @@ export class PgRunRepo implements RunRepo {
 		return result.rows.map(toRunArtifactLinkModel);
 	}
 
-	async markDone(input: {
+	async completeRun(input: {
 		runId: string;
 		resultText: string;
 		resultStats: Record<string, unknown>;
+		eventPayload: Record<string, unknown>;
 		piSessionId?: string | undefined;
 		piSessionFile?: string | undefined;
-	}): Promise<RunModel | null> {
-		const result = await this.pool.query<RunRow>(
-			`update runs
-				 set status = 'done',
-					 result_text = $2,
-					 result_stats = $3::jsonb,
-					 pi_session_id = coalesce($4, pi_session_id),
-					 pi_session_file = coalesce($5, pi_session_file),
-					 updated_at = now()
-				 where run_id = $1
-				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-				 pi_session_id, pi_session_file, result_text, result_stats, error`,
-			[
-				input.runId,
-				input.resultText,
-				JSON.stringify(input.resultStats),
-				input.piSessionId ?? null,
-				input.piSessionFile ?? null,
-			],
-		);
-		if (!result.rowCount) {
-			return null;
+	}): Promise<{ run: RunModel | null; event: RunEventModel | null }> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			const runResult = await client.query<RunRow>(
+				`update runs
+					 set status = 'done',
+						 result_text = $2,
+						 result_stats = $3::jsonb,
+						 pi_session_id = coalesce($4, pi_session_id),
+						 pi_session_file = coalesce($5, pi_session_file),
+						 updated_at = now()
+					 where run_id = $1
+					 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+					 pi_session_id, pi_session_file, result_text, result_stats, error`,
+				[
+					input.runId,
+					input.resultText,
+					JSON.stringify(input.resultStats),
+					input.piSessionId ?? null,
+					input.piSessionFile ?? null,
+				],
+			);
+			if (!runResult.rowCount) {
+				await client.query("rollback");
+				return { run: null, event: null };
+			}
+			const eventResult = await client.query<RunEventRow>(
+				`insert into events(run_id, kind, payload)
+				 values ($1, 'run_done', $2::jsonb)
+				 returning event_id, run_id, kind, payload, created_at`,
+				[input.runId, JSON.stringify(input.eventPayload)],
+			);
+			await client.query("commit");
+			return {
+				run: toRunModel(requireRow(runResult, "complete run")),
+				event: toRunEventModel(requireRow(eventResult, "complete run event")),
+			};
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
 		}
-		return toRunModel(requireRow(result, "mark done"));
 	}
 
-	async markFailed(runId: string, error: string): Promise<RunModel | null> {
-		const result = await this.pool.query<RunRow>(
-			`update runs
-				 set status = 'failed',
-					 error = $2,
-					 updated_at = now()
-				 where run_id = $1
-				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-				 pi_session_id, pi_session_file, result_text, result_stats, error`,
-			[runId, error],
-		);
-		if (!result.rowCount) {
-			return null;
+	async failRun(input: {
+		runId: string;
+		error: string;
+		eventPayload: Record<string, unknown>;
+	}): Promise<{ run: RunModel | null; event: RunEventModel | null }> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			const runResult = await client.query<RunRow>(
+				`update runs
+					 set status = 'failed',
+						 error = $2,
+						 updated_at = now()
+					 where run_id = $1
+					 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+					 pi_session_id, pi_session_file, result_text, result_stats, error`,
+				[input.runId, input.error],
+			);
+			if (!runResult.rowCount) {
+				await client.query("rollback");
+				return { run: null, event: null };
+			}
+			const eventResult = await client.query<RunEventRow>(
+				`insert into events(run_id, kind, payload)
+				 values ($1, 'run_failed', $2::jsonb)
+				 returning event_id, run_id, kind, payload, created_at`,
+				[input.runId, JSON.stringify(input.eventPayload)],
+			);
+			await client.query("commit");
+			return {
+				run: toRunModel(requireRow(runResult, "fail run")),
+				event: toRunEventModel(requireRow(eventResult, "fail run event")),
+			};
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
 		}
-		return toRunModel(requireRow(result, "mark failed"));
 	}
 
 	async linkArtifact(input: {

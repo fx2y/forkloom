@@ -310,6 +310,22 @@ export class RunEventStream {
 	close(): void {
 		this.controller.abort();
 	}
+
+	async waitClosed(): Promise<void> {
+		const response = await this.responsePromise;
+		if (!response.body) {
+			return;
+		}
+		if (!this.reader) {
+			this.reader = response.body.getReader();
+		}
+		while (true) {
+			const chunk = await this.reader.read();
+			if (chunk.done) {
+				return;
+			}
+		}
+	}
 }
 
 export async function runLiveFlow(input: {

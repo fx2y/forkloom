@@ -1,3 +1,8 @@
+import type {
+	RunDonePayload,
+	RunFailedPayload,
+	RunStartedPayload,
+} from "@forkloom/contracts";
 import type { RunEventKind } from "./event";
 
 export type RunScope = "me" | "team" | "org";
@@ -48,7 +53,6 @@ export type RunArtifactLinkModel = {
 
 export type CreateRunInput = {
 	runId: string;
-	workflowId: string;
 	spec: RunSpecModel;
 };
 
@@ -68,6 +72,15 @@ export interface RunRepo {
 	createRun(
 		input: CreateRunInput,
 	): Promise<{ run: RunModel; created: boolean }>;
+	recordWorkflowLaunch(
+		runId: string,
+		workflowId: string,
+	): Promise<RunModel | null>;
+	beginRun(input: {
+		runId: string;
+		workflowId: string;
+		payload: RunStartedPayload;
+	}): Promise<RunEventModel>;
 	getRun(runId: string): Promise<RunModel | null>;
 	appendEvent(input: AppendRunEventInput): Promise<RunEventModel>;
 	listEventsSince(
@@ -76,13 +89,18 @@ export interface RunRepo {
 		limit: number,
 	): Promise<RunEventModel[]>;
 	listArtifacts(runId: string): Promise<RunArtifactLinkModel[]>;
-	markDone(input: {
+	completeRun(input: {
 		runId: string;
 		resultText: string;
 		resultStats: Record<string, unknown>;
+		eventPayload: RunDonePayload;
 		piSessionId?: string | undefined;
 		piSessionFile?: string | undefined;
-	}): Promise<RunModel | null>;
-	markFailed(runId: string, error: string): Promise<RunModel | null>;
+	}): Promise<{ run: RunModel | null; event: RunEventModel | null }>;
+	failRun(input: {
+		runId: string;
+		error: string;
+		eventPayload: RunFailedPayload;
+	}): Promise<{ run: RunModel | null; event: RunEventModel | null }>;
 	linkArtifact(input: LinkRunArtifactInput): Promise<void>;
 }

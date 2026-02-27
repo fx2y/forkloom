@@ -24,6 +24,7 @@ type SseStream = {
 			payload: Record<string, unknown>;
 		}>
 	>;
+	waitClosed(): Promise<void>;
 };
 
 class InMemoryRunRepo implements RunRepo {
@@ -34,7 +35,6 @@ class InMemoryRunRepo implements RunRepo {
 
 	async createRun(input: {
 		runId: string;
-		workflowId: string;
 		spec: RunSpecModel;
 	}): Promise<{ run: RunModel; created: boolean }> {
 		const existing = this.runs.get(input.runId);
@@ -44,11 +44,11 @@ class InMemoryRunRepo implements RunRepo {
 
 		const run: RunModel = {
 			runId: input.runId,
-			status: "running",
+			status: "queued",
 			spec: input.spec,
 			createdAt: "2026-02-27T00:00:00.000Z",
 			updatedAt: "2026-02-27T00:00:00.000Z",
-			dbosWorkflowId: input.workflowId,
+			dbosWorkflowId: null,
 			piSessionId: null,
 			piSessionFile: null,
 			resultText: null,
@@ -57,6 +57,42 @@ class InMemoryRunRepo implements RunRepo {
 		};
 		this.runs.set(input.runId, run);
 		return { run, created: true };
+	}
+
+	async recordWorkflowLaunch(runId: string): Promise<RunModel | null> {
+		const run = this.runs.get(runId);
+		if (!run) {
+			return null;
+		}
+		const updated: RunModel = {
+			...run,
+			dbosWorkflowId: runId,
+			updatedAt: "2026-02-27T00:00:00.000Z",
+		};
+		this.runs.set(runId, updated);
+		return updated;
+	}
+
+	async beginRun(input: {
+		runId: string;
+		workflowId: string;
+		payload: Record<string, unknown>;
+	}): Promise<RunEventModel> {
+		const run = this.runs.get(input.runId);
+		if (!run) {
+			throw new Error("run not found");
+		}
+		this.runs.set(input.runId, {
+			...run,
+			status: "running",
+			dbosWorkflowId: input.workflowId,
+			updatedAt: "2026-02-27T00:00:01.000Z",
+		});
+		return this.appendEvent({
+			runId: input.runId,
+			kind: "run_started",
+			payload: input.payload,
+		});
 	}
 
 	async getRun(runId: string): Promise<RunModel | null> {
@@ -93,16 +129,17 @@ class InMemoryRunRepo implements RunRepo {
 		return this.artifacts.filter((artifact) => artifact.runId === runId);
 	}
 
-	async markDone(input: {
+	async completeRun(input: {
 		runId: string;
 		resultText: string;
 		resultStats: Record<string, unknown>;
+		eventPayload: Record<string, unknown>;
 		piSessionId?: string | undefined;
 		piSessionFile?: string | undefined;
-	}): Promise<RunModel | null> {
+	}): Promise<{ run: RunModel | null; event: RunEventModel | null }> {
 		const run = this.runs.get(input.runId);
 		if (!run) {
-			return null;
+			return { run: null, event: null };
 		}
 		const updated: RunModel = {
 			...run,
@@ -114,22 +151,36 @@ class InMemoryRunRepo implements RunRepo {
 			piSessionFile: input.piSessionFile ?? null,
 		};
 		this.runs.set(input.runId, updated);
-		return updated;
+		const event = await this.appendEvent({
+			runId: input.runId,
+			kind: "run_done",
+			payload: input.eventPayload,
+		});
+		return { run: updated, event };
 	}
 
-	async markFailed(runId: string, error: string): Promise<RunModel | null> {
-		const run = this.runs.get(runId);
+	async failRun(input: {
+		runId: string;
+		error: string;
+		eventPayload: Record<string, unknown>;
+	}): Promise<{ run: RunModel | null; event: RunEventModel | null }> {
+		const run = this.runs.get(input.runId);
 		if (!run) {
-			return null;
+			return { run: null, event: null };
 		}
 		const updated: RunModel = {
 			...run,
 			status: "failed",
-			error,
+			error: input.error,
 			updatedAt: "2026-02-27T00:00:09.000Z",
 		};
-		this.runs.set(runId, updated);
-		return updated;
+		this.runs.set(input.runId, updated);
+		const event = await this.appendEvent({
+			runId: input.runId,
+			kind: "run_failed",
+			payload: input.eventPayload,
+		});
+		return { run: updated, event };
 	}
 
 	async linkArtifact(input: {
@@ -221,6 +272,14 @@ async function openSseStream(
 			}
 
 			return events;
+		},
+		async waitClosed() {
+			while (true) {
+				const chunk = await reader.read();
+				if (chunk.done) {
+					return;
+				}
+			}
 		},
 	};
 }
@@ -314,7 +373,7 @@ describe("run SSE two-tab replay", () => {
 		const tab1 = await openSseStream(`${base}/runs/${RUN_ID}/events`);
 		const tab2 = await openSseStream(`${base}/runs/${RUN_ID}/events`);
 
-		await runService.appendRunStarted(RUN_ID, {});
+		await runService.beginRun(RUN_ID, {});
 		await runService.appendPiEvent(RUN_ID, { chunk: "hello" });
 
 		const tab1First = await tab1.readEvents(2);
@@ -355,6 +414,8 @@ describe("run SSE two-tab replay", () => {
 			"artifact_written",
 			"run_done",
 		]);
+		await expect(tab1.waitClosed()).resolves.toBeUndefined();
+		await expect(replay.waitClosed()).resolves.toBeUndefined();
 
 		const runStateResponse = await fetch(`${base}/runs/${RUN_ID}`);
 		expect(runStateResponse.status).toBe(200);

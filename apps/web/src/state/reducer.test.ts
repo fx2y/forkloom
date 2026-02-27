@@ -1,3 +1,4 @@
+import type { RunEvent } from "@forkloom/contracts";
 import { describe, expect, it } from "vitest";
 import {
 	initialRunViewState,
@@ -9,7 +10,7 @@ const RUN_ID = "01HS7Z6E5R4W6NED8MH4D9Y6A0";
 
 describe("run event reducer", () => {
 	it("derives final view state from append-only events", () => {
-		const events = [
+		const events: RunEvent[] = [
 			{
 				runId: RUN_ID,
 				seq: 1,
@@ -33,11 +34,12 @@ describe("run event reducer", () => {
 				t: "2026-02-27T00:00:02.000Z",
 				kind: "run_done",
 				payload: {
-					text: "done",
+					resultText: "done",
 					artifacts: ["b".repeat(64)],
+					stats: {},
 				},
 			},
-		] as const;
+		];
 
 		const state = replayRunEvents([...events]);
 

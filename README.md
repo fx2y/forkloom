@@ -48,7 +48,10 @@ Strict real PI (fail if local `pi` auth/model state is unusable):
 
 ```bash
 PI_RPC_STRICT_REAL=1 MISE_EXPERIMENTAL=1 mise run svc
+curl -fsS localhost:8080/health | jq .
 ```
+
+Strict-real prerequisite: host `~/.pi/agent/auth.json` and `~/.pi/agent/settings.json` must exist; `bootstrap:doctor` now fails fast on that path when `PI_RPC_STRICT_REAL=1`.
 
 ## Quick Artifact Demo
 

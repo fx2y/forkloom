@@ -27,9 +27,106 @@
       ]
     },
     "payload": {
-      "type": "object",
-      "additionalProperties": true
+      "type": "object"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {
+          "const": "run_started"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": ["me", "team", "org"]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "pi_event"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "artifact_written"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["sha256", "kind"],
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_done"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["resultText", "stats", "artifacts"],
+          "properties": {
+            "resultText": {
+              "type": "string"
+            },
+            "stats": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_failed"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["error"],
+          "properties": {
+            "error": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
 }

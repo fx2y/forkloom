@@ -4,6 +4,7 @@ import type { PiSessionPort, PiSessionState, PiSessionStats } from "../pi";
 import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
+import { buildRunPromptInput } from "./prompt";
 
 type RunCoreStepName =
 	| "initRun"
@@ -39,12 +40,15 @@ export type RunOnceDeps = {
 		RunService,
 		| "appendArtifactWritten"
 		| "appendPiEvent"
-		| "appendRunStarted"
+		| "beginRun"
 		| "completeRun"
 		| "failRun"
 		| "linkArtifact"
 	>;
-	artifactService: Pick<ArtifactService, "putArtifact">;
+	artifactService: Pick<
+		ArtifactService,
+		"getArtifactBytes" | "getArtifactMeta" | "putArtifact"
+	>;
 	createPiSession(run: RunModel): Promise<PiSessionPort>;
 	readFileBytes?: ((path: string) => Promise<Buffer>) | undefined;
 };
@@ -80,7 +84,7 @@ function assertState(ctx: RunOnceContext): PiSessionState {
 }
 
 function assertText(ctx: RunOnceContext): string {
-	if (!ctx.resultText) {
+	if (ctx.resultText === null) {
 		throw new Error("result text is missing");
 	}
 	return ctx.resultText;
@@ -137,7 +141,7 @@ export async function executeRunOnce(
 			if (!run) {
 				throw new Error(`run not found: ${runId}`);
 			}
-			await deps.runService.appendRunStarted(runId, {});
+			await deps.runService.beginRun(runId, { scope: run.spec.scope });
 			return run;
 		});
 
@@ -167,9 +171,9 @@ export async function executeRunOnce(
 		await steps.runStep("promptPi", async () => {
 			const run = assertRun(ctx);
 			const session = assertSession(ctx);
-			await session.prompt({
-				message: run.spec.userMsg,
-			});
+			await session.prompt(
+				await buildRunPromptInput(run.spec, deps.artifactService),
+			);
 		});
 
 		await steps.runStep("pumpEvents", async () => {
