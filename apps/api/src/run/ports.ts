@@ -6,6 +6,7 @@ import type {
 import type { RunEventKind } from "./event";
 
 export type RunScope = "me" | "team" | "org";
+export type RunProfile = "safe" | "std" | "priv";
 
 export type RunStatus = "queued" | "running" | "done" | "failed";
 
@@ -20,6 +21,7 @@ export type RunSpecModel = {
 	attachments: ArtifactPointer[];
 	workdirRef?: ArtifactPointer | undefined;
 	modelPref?: string | undefined;
+	profile?: RunProfile | undefined;
 };
 
 export type RunModel = {

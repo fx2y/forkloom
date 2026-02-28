@@ -7,7 +7,35 @@ import type {
 	RunStartedPayload,
 	RunState,
 } from "@forkloom/contracts";
+import type { RunCommandModel, SandboxModel } from "../sandbox";
 import type { RunArtifactLinkModel, RunEventModel, RunModel } from "./ports";
+
+type ProjectedRunState = RunState & {
+	preview?: Record<string, unknown> | undefined;
+	approval?: Record<string, unknown> | undefined;
+	currentCommand?: Record<string, unknown> | undefined;
+	files?: Record<string, unknown> | undefined;
+};
+
+function asRunEvent(event: Record<string, unknown>): RunEvent {
+	return event as unknown as RunEvent;
+}
+
+function toPublicPreview(sandbox: SandboxModel): Record<string, unknown> {
+	return {
+		imageDigest: sandbox.previewSpec.imageDigest,
+		profile: sandbox.previewSpec.profile,
+		network: sandbox.previewSpec.network,
+		workdir: sandbox.previewSpec.workdir,
+		timeoutSec: sandbox.previewSpec.timeoutSec,
+		maxBytesOut: sandbox.previewSpec.maxBytesOut,
+		mounts: sandbox.previewSpec.mounts.map((mount) => ({
+			dest: mount.dest,
+			mode: mount.mode,
+			kind: mount.kind,
+		})),
+	};
+}
 
 export function toRunEventContract(event: RunEventModel): RunEvent {
 	const base = {
@@ -22,6 +50,17 @@ export function toRunEventContract(event: RunEventModel): RunEvent {
 				kind: event.kind,
 				payload: event.payload as RunStartedPayload,
 			};
+		case "run_previewed":
+		case "run_approval_required":
+		case "run_approved":
+		case "run_command_queued":
+		case "workspace_updated":
+		case "run_aborted":
+			return asRunEvent({
+				...base,
+				kind: event.kind,
+				payload: event.payload,
+			});
 		case "pi_event":
 			return {
 				...base,
@@ -52,8 +91,21 @@ export function toRunEventContract(event: RunEventModel): RunEvent {
 export function toRunStateContract(
 	run: RunModel,
 	artifacts: RunArtifactLinkModel[],
+	extra?: {
+		sandbox?: SandboxModel | undefined;
+		currentCommand?: RunCommandModel | null | undefined;
+		files?:
+			| {
+					workspaceRef?: { sha256: string } | undefined;
+					workspace_manifest: {
+						version: 1;
+						entries: Array<{ path: string; bytes: number; sha256: string }>;
+					};
+			  }
+			| undefined;
+	},
 ): RunState {
-	const state: RunState = {
+	const state: ProjectedRunState = {
 		runId: run.runId,
 		status: run.status,
 		startedAt: run.createdAt,
@@ -69,6 +121,26 @@ export function toRunStateContract(
 	}
 	if (run.piSessionFile) {
 		state.piSessionFile = run.piSessionFile;
+	}
+	if (extra?.sandbox) {
+		state.preview = toPublicPreview(extra.sandbox);
+		state.approval = {
+			required: extra.sandbox.approvalState !== "not_required",
+			state: extra.sandbox.approvalState,
+		};
+	}
+	if (extra?.currentCommand) {
+		state.currentCommand = {
+			seq: extra.currentCommand.seq,
+			kind: extra.currentCommand.kind,
+			state: extra.currentCommand.state,
+		};
+	}
+	if (extra?.files) {
+		state.files = {
+			workspaceRef: extra.files.workspaceRef,
+			entries: extra.files.workspace_manifest.entries,
+		};
 	}
 
 	return state;

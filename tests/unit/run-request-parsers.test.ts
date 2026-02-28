@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { describe, expect, it } from "vitest";
 import {
+	parseRunCommandPayload,
 	parseRunCreatePayload,
 	parseRunCursor,
 } from "../../apps/api/src/http/run-request-parsers";
@@ -35,6 +36,18 @@ describe("run-request-parsers", () => {
 		expect(payload.userMsg).toBe("hello");
 		expect(payload.attachments[0]?.sha256).toBe("a".repeat(64));
 		expect(payload.workdirRef?.sha256).toBe("b".repeat(64));
+	});
+
+	it("accepts an additive sandbox profile outside the frozen contract body", () => {
+		const payload = parseRunCreatePayload({
+			runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
+			scope: "team",
+			userMsg: "hello",
+			attachments: [],
+			profile: "safe",
+		});
+
+		expect(payload.profile).toBe("safe");
 	});
 
 	it("rejects invalid run payloads", () => {
@@ -75,5 +88,22 @@ describe("run-request-parsers", () => {
 		expect(() =>
 			parseRunCursor(makeRequest({ headers: { "Last-Event-ID": "abc" } })),
 		).toThrow("cursor must be a non-negative integer");
+	});
+
+	it("parses command posts and rejects bad kinds", () => {
+		expect(
+			parseRunCommandPayload({
+				kind: "followUp",
+				payload: { text: "continue" },
+				dedupeKey: "abc",
+			}),
+		).toEqual({
+			kind: "followUp",
+			payload: { text: "continue" },
+			dedupeKey: "abc",
+		});
+		expect(() => parseRunCommandPayload({ kind: "nope" })).toThrow(
+			"kind must be one of",
+		);
 	});
 });

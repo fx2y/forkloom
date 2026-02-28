@@ -23,7 +23,17 @@ import {
 	probePiSession,
 } from "./pi";
 import { PgArtifactRepo } from "./repo/postgres";
-import { LazyDbosRunWorkflowLauncher, PgRunRepo, RunService } from "./run";
+import {
+	LazyDbosRunWorkflowLauncher,
+	PgRunRepo,
+	RunService,
+	createRunPlan,
+} from "./run";
+import {
+	DockerBackend,
+	PgSandboxRepo,
+	createSandboxPiSessionFactory,
+} from "./sandbox";
 import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
 import { registerActorTickWorkflow, registerRunOnceWorkflow } from "./workflow";
@@ -38,6 +48,9 @@ async function bootstrap() {
 		migrationsDir,
 	});
 	const runRepo = new PgRunRepo({
+		databaseUrl: config.databaseUrl,
+	});
+	const sandboxRepo = new PgSandboxRepo({
 		databaseUrl: config.databaseUrl,
 	});
 	const actorRepo = new PgActorRepo({
@@ -85,7 +98,30 @@ async function bootstrap() {
 	);
 
 	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
-	const runService = new RunService({ runRepo, workflowLauncher });
+	const workflowSandboxBackend = new DockerBackend({
+		writeSnapshot: async (body, meta) => {
+			const artifact = await workflowArtifactService.putArtifact({
+				body,
+				mime: "application/gzip",
+				type: "raw",
+				meta: {
+					"run.sandbox": meta.sandboxId,
+					"workspace.include": meta.include.join(","),
+					"workspace.exclude": meta.exclude.join(","),
+				},
+			});
+			return { sha256: artifact.sha256 };
+		},
+	});
+	const runService = new RunService({
+		runRepo,
+		workflowLauncher,
+		sandbox: {
+			sandboxRepo,
+			createRunPlan: (spec) => createRunPlan(spec, config),
+			artifactService: workflowArtifactService,
+		},
+	});
 	const actorWorkflowLauncher = new LazyDbosActorWorkflowLauncher();
 	const actorService = new ActorService({
 		repo: actorRepo,
@@ -104,6 +140,28 @@ async function bootstrap() {
 		runRepo,
 		runService,
 		artifactService: workflowArtifactService,
+		sandbox: {
+			runRepo,
+			runService,
+			artifactService: workflowArtifactService,
+			sandboxRepo,
+			backend: workflowSandboxBackend,
+			workflowLauncher,
+			createPiSession: async (run, sandbox) =>
+				createSandboxPiSessionFactory(
+					{
+						containerName: sandbox.containerName,
+						cwd: sandbox.spec.workdir,
+						homeHostDir: sandbox.spec.piHomeHostDir,
+						homePath: sandbox.spec.piHomePath,
+						provider: config.piProvider,
+						model: run.spec.modelPref ?? config.piModel,
+						sessionPath: `${sandbox.spec.piHomePath}/.pi/agent/sessions/${run.runId}.jsonl`,
+						strictReal: config.piStrictReal,
+					},
+					{ mockProviderManager },
+				)(),
+		},
 		createPiSession: async (run) =>
 			createPiSession({
 				model: run.spec.modelPref ?? config.piModel,
@@ -135,11 +193,19 @@ async function bootstrap() {
 		}),
 	);
 
-	return { app, config, repo, runRepo, actorRepo, actorProcessor };
+	return { app, config, repo, runRepo, sandboxRepo, actorRepo, actorProcessor };
 }
 
 async function main(): Promise<void> {
-	const { app, config, repo, runRepo, actorRepo, actorProcessor } =
+	const {
+		app,
+		config,
+		repo,
+		runRepo,
+		sandboxRepo,
+		actorRepo,
+		actorProcessor,
+	} =
 		await bootstrap();
 
 	const server = app.listen(config.port, () => {
@@ -166,6 +232,7 @@ async function main(): Promise<void> {
 			});
 			await repo.close();
 			await runRepo.close();
+			await sandboxRepo.close();
 			await actorRepo.close();
 			await actorProcessor.closeAll();
 			await shutdownDbos();

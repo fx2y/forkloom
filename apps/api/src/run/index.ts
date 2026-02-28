@@ -15,6 +15,8 @@ export {
 	RUN_PUBLIC_TOP_LEVEL_NOUNS,
 } from "./public-surface";
 export type * from "./ports";
+export { createRunPlan } from "./plan";
+export type { RunPlan } from "./plan";
 export { PgRunRepo } from "./repo/postgres";
 export {
 	DbosRunWorkflowLauncher,

@@ -406,12 +406,12 @@ export class PgSandboxRepo implements SandboxRepo {
 			`with claimable as (
 				 select rc.run_id, rc.seq
 				 from run_command rc
+				 join sandbox s on s.run_id = rc.run_id
 				 where rc.run_id = $1
-				   and exists (
-					 select 1
-					 from sandbox s
-					 where s.run_id = rc.run_id
-					   and s.inflight_workflow_id = $2
+				   and s.inflight_workflow_id = $2
+				   and (
+					 s.approval_state <> 'pending'
+					 or rc.kind = 'approve'
 				   )
 				   and (
 					 rc.state = 'queued'
@@ -606,6 +606,42 @@ export class PgSandboxRepo implements SandboxRepo {
 		}
 	}
 
+	async requeueCommand(input: {
+		runId: string;
+		workflowId: string;
+		commandSeq: number;
+		error: string;
+	}): Promise<number | null> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			await client.query(
+				`update run_command
+				 set state = 'queued',
+					 claimed_by = null,
+					 claimed_at = null,
+					 lease_expires_at = null,
+					 done_at = null,
+					 error = $4
+				 where run_id = $1
+				   and seq = $2
+				   and claimed_by = $3`,
+				[input.runId, input.commandSeq, input.workflowId, input.error],
+			);
+			const nextPendingSeq = await this.getFirstPendingSeqFrom(
+				client,
+				input.runId,
+			);
+			await client.query("commit");
+			return nextPendingSeq;
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
+		}
+	}
+
 	async releaseLease(runId: string, workflowId: string): Promise<void> {
 		await this.pool.query(
 			`update sandbox
@@ -635,6 +671,25 @@ export class PgSandboxRepo implements SandboxRepo {
 			return null;
 		}
 		return toSandboxModel(requireRow(result, "mark approved"));
+	}
+
+	async getCurrentCommand(runId: string): Promise<RunCommandModel | null> {
+		const result = await this.pool.query<RunCommandRow>(
+			`select run_id, seq, kind, payload, dedupe_key, state, claimed_by,
+			 claimed_at, lease_expires_at, done_at, error, created_at
+			 from run_command
+			 where run_id = $1
+			 order by
+			   case when state in ('queued', 'claimed') then 0 else 1 end asc,
+			   case when state in ('queued', 'claimed') then seq end asc,
+			   case when state not in ('queued', 'claimed') then seq end desc
+			 limit 1`,
+			[runId],
+		);
+		if (!result.rowCount) {
+			return null;
+		}
+		return toRunCommandModel(requireRow(result, "get current command"));
 	}
 
 	async listExecs(runId: string): Promise<SandboxExecModel[]> {

@@ -26,6 +26,20 @@ export type ActorTickWorkflowStep = (typeof ACTOR_TICK_WORKFLOW_STEPS)[number];
 
 export { executeRunOnce, registerRunOnceWorkflow } from "./runonce";
 export type { RunOnceDeps } from "./runonce";
+export const RUN_SANDBOX_WORKFLOW_STEPS = [
+	"load_plan",
+	"ensure_sandbox",
+	"stage_inputs",
+	"ensure_pi",
+	"apply_command",
+	"collect",
+	"snapshot",
+	"release",
+] as const;
+export type RunSandboxWorkflowStep =
+	(typeof RUN_SANDBOX_WORKFLOW_STEPS)[number];
+export { executeRunSandbox, registerRunSandboxWorkflow } from "./run-sandbox";
+export type { RunSandboxDeps } from "./run-sandbox";
 export { executeActorTick, registerActorTickWorkflow } from "./actor-tick";
 export type {
 	ActorTickDeps,

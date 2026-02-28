@@ -237,7 +237,14 @@ export interface SandboxRepo {
 		commandSeq: number;
 		error: string;
 	}): Promise<number | null>;
+	requeueCommand(input: {
+		runId: string;
+		workflowId: string;
+		commandSeq: number;
+		error: string;
+	}): Promise<number | null>;
 	releaseLease(runId: string, workflowId: string): Promise<void>;
 	markApproved(runId: string): Promise<SandboxModel | null>;
+	getCurrentCommand(runId: string): Promise<RunCommandModel | null>;
 	listExecs(runId: string): Promise<SandboxExecModel[]>;
 }

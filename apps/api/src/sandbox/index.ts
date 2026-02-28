@@ -25,4 +25,12 @@ export {
 	createSandboxPiSessionFactory,
 	hydrateSandboxPiHome,
 } from "./pi-session-factory";
+export { materializeSandboxInputs, readArtifactBuffer } from "./input-staging";
+export {
+	WORKSPACE_SNAPSHOT_RULE,
+	buildWorkspaceManifest,
+	filterDurableWorkspaceEntries,
+	isDurableWorkspacePath,
+} from "./snapshot";
+export { exportWorkspaceFiles, listWorkspaceFiles } from "./files";
 export { PgSandboxRepo } from "./repo/postgres";

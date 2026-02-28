@@ -5,6 +5,7 @@ import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
 import { buildRunPromptInput } from "./prompt";
+import { executeRunSandbox, type RunSandboxDeps } from "./run-sandbox";
 
 type RunCoreStepName =
 	| "initRun"
@@ -51,6 +52,7 @@ export type RunOnceDeps = {
 	>;
 	createPiSession(run: RunModel): Promise<PiSessionPort>;
 	readFileBytes?: ((path: string) => Promise<Buffer>) | undefined;
+	sandbox?: RunSandboxDeps | undefined;
 };
 
 const dbosStepRunner: RunOnceStepRunner = {
@@ -259,6 +261,11 @@ export function registerRunOnceWorkflow(
 				const currentDeps = activeDeps;
 				if (!currentDeps) {
 					throw new Error("RunOnce deps are not registered");
+				}
+				const run = await currentDeps.runRepo.getRun(runId);
+				if (run?.spec.profile && currentDeps.sandbox) {
+					await executeRunSandbox(runId, currentDeps.sandbox);
+					return;
 				}
 				await executeRunOnce(runId, currentDeps, dbosStepRunner);
 			},

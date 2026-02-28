@@ -3,11 +3,21 @@ import type {
 	RunDonePayload,
 	RunEvent,
 	RunFailedPayload,
-	RunStartedPayload,
 	RunState,
 } from "@forkloom/contracts";
+import {
+	exportWorkspaceFiles,
+	listWorkspaceFiles,
+	type RunCommandKind,
+	type RunCommandModel,
+	type SandboxModel,
+	type SandboxRepo,
+} from "../sandbox";
+import type { ArtifactService } from "../service";
+import { toRunSandboxWorkflowId } from "../workflow/run-sandbox";
 import type { RunEventKind, RunEventPayloadMap } from "./event";
 import type { RunEventModel, RunModel, RunRepo, RunSpecModel } from "./ports";
+import { type RunPlan } from "./plan";
 import { toRunEventContract, toRunStateContract } from "./projection";
 
 export type CompleteRunInput = {
@@ -37,7 +47,7 @@ export class DbosRunWorkflowLauncher implements RunWorkflowLauncher {
 
 /**
  * Late-bound launcher that breaks the RunService↔workflow circular dep.
- * Call bind() after registerRunOnceWorkflow returns.
+ * Call bind() after the target workflow is registered.
  */
 export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
 	private inner: RunWorkflowLauncher | null = null;
@@ -51,15 +61,40 @@ export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
 		opts: { workflowID: string },
 	): Promise<void> {
 		if (!this.inner) {
-			throw new Error("RunOnce workflow is not registered");
+			throw new Error("Run workflow is not registered");
 		}
 		return this.inner.startRunOnce(runId, opts);
 	}
 }
 
+type SandboxDeps = {
+	sandboxRepo: Pick<
+		SandboxRepo,
+		| "createSandbox"
+		| "getSandbox"
+		| "getCurrentCommand"
+		| "listExecs"
+		| "markApproved"
+		| "queueCommand"
+	>;
+	createRunPlan(spec: RunSpecModel): RunPlan;
+	artifactService: Pick<
+		ArtifactService,
+		"getArtifactBytes" | "getArtifactMeta" | "putArtifact"
+	>;
+};
+
 export type RunServiceDeps = {
 	runRepo: RunRepo;
 	workflowLauncher: RunWorkflowLauncher;
+	sandbox?: SandboxDeps | undefined;
+};
+
+export type StartRunResult = {
+	run: RunModel;
+	created: boolean;
+	sandbox?: SandboxModel | undefined;
+	command?: RunCommandModel | undefined;
 };
 
 function normalizeErrorMessage(error: unknown): string {
@@ -69,25 +104,116 @@ function normalizeErrorMessage(error: unknown): string {
 	return String(error);
 }
 
+function usesSandbox(spec: RunSpecModel, deps: RunServiceDeps): boolean {
+	return spec.profile != null && deps.sandbox != null;
+}
+
 export class RunService {
 	constructor(private readonly deps: RunServiceDeps) {}
 
-	async startRun(
-		spec: RunSpecModel,
-	): Promise<{ run: RunModel; created: boolean }> {
+	async startRun(spec: RunSpecModel): Promise<StartRunResult> {
 		const runId = spec.runId;
 		const created = await this.deps.runRepo.createRun({ runId, spec });
 		let run = created.run;
-		if (run.status === "queued" && run.dbosWorkflowId === null) {
-			await this.deps.workflowLauncher.startRunOnce(runId, {
-				workflowID: runId,
+
+		if (!usesSandbox(spec, this.deps)) {
+			if (run.status === "queued" && run.dbosWorkflowId === null) {
+				await this.deps.workflowLauncher.startRunOnce(runId, {
+					workflowID: runId,
+				});
+				run =
+					(await this.deps.runRepo.recordWorkflowLaunch(runId, runId)) ??
+					created.run;
+			}
+			return { run, created: created.created };
+		}
+
+		const sandboxDeps = this.requireSandboxDeps();
+		const plan = sandboxDeps.createRunPlan(spec);
+		const persistedSandbox = await sandboxDeps.sandboxRepo.createSandbox({
+			runId,
+			spec: plan.sandboxSpec,
+			previewSpec: plan.previewSpec,
+		});
+		if (persistedSandbox.created) {
+			await this.appendRunEvent(runId, "run_previewed", {
+				preview: plan.previewSpec,
 			});
+		}
+		if (
+			persistedSandbox.created &&
+			persistedSandbox.sandbox.approvalState === "pending"
+		) {
+			await this.appendRunEvent(runId, "run_approval_required", {
+				profile: persistedSandbox.sandbox.profile,
+			});
+		}
+		const queued = await sandboxDeps.sandboxRepo.queueCommand({
+			runId,
+			kind: plan.initialCommand.kind,
+			payload: plan.initialCommand.payload,
+			dedupeKey: plan.initialCommand.dedupeKey,
+		});
+		if (queued.created) {
+			await this.appendRunEvent(runId, "run_command_queued", {
+				seq: queued.command.seq,
+				kind: queued.command.kind,
+			});
+		}
+		if (
+			persistedSandbox.sandbox.approvalState !== "pending" &&
+			queued.firstPendingSeq != null
+		) {
+			const workflowID = toRunSandboxWorkflowId(runId, queued.firstPendingSeq);
+			await this.deps.workflowLauncher.startRunOnce(runId, { workflowID });
 			run =
-				(await this.deps.runRepo.recordWorkflowLaunch(runId, runId)) ??
+				(await this.deps.runRepo.recordWorkflowLaunch(runId, workflowID)) ??
 				created.run;
 		}
 
-		return { run, created: created.created };
+		return {
+			run,
+			created: created.created,
+			sandbox: persistedSandbox.sandbox,
+			command: queued.command,
+		};
+	}
+
+	async queueCommand(input: {
+		runId: string;
+		kind: RunCommandKind;
+		payload?: Record<string, unknown> | undefined;
+		dedupeKey?: string | undefined;
+	}): Promise<{ command: RunCommandModel; created: boolean }> {
+		const sandboxDeps = this.requireSandboxDeps();
+		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(input.runId);
+		if (!sandbox) {
+			throw new Error(`run sandbox not found: ${input.runId}`);
+		}
+		if (sandbox.approvalState === "pending" && input.kind !== "approve") {
+			throw new Error("run requires approve before interactive commands");
+		}
+		const queued = await sandboxDeps.sandboxRepo.queueCommand({
+			runId: input.runId,
+			kind: input.kind,
+			payload: input.payload ?? {},
+			dedupeKey: input.dedupeKey,
+		});
+		if (queued.created) {
+			await this.appendRunEvent(input.runId, "run_command_queued", {
+				seq: queued.command.seq,
+				kind: queued.command.kind,
+			});
+		}
+		if (queued.firstPendingSeq != null) {
+			await this.deps.workflowLauncher.startRunOnce(input.runId, {
+				workflowID: toRunSandboxWorkflowId(input.runId, queued.firstPendingSeq),
+			});
+		}
+		return {
+			command: queued.command,
+			created: queued.created,
+		};
 	}
 
 	async getRunState(runId: string): Promise<RunState | null> {
@@ -96,7 +222,27 @@ export class RunService {
 			return null;
 		}
 		const artifacts = await this.deps.runRepo.listArtifacts(runId);
-		return toRunStateContract(run, artifacts);
+		const sandboxDeps = this.deps.sandbox;
+		if (!sandboxDeps) {
+			return toRunStateContract(run, artifacts);
+		}
+		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(runId);
+		if (!sandbox) {
+			return toRunStateContract(run, artifacts);
+		}
+		const currentCommand = await sandboxDeps.sandboxRepo.getCurrentCommand(runId);
+		const files =
+			sandbox.workspaceRef != null
+				? await listWorkspaceFiles({
+						workspaceRef: sandbox.workspaceRef,
+						artifactService: sandboxDeps.artifactService,
+					})
+				: undefined;
+		return toRunStateContract(run, artifacts, {
+			sandbox,
+			currentCommand,
+			files,
+		});
 	}
 
 	async listRunEvents(
@@ -112,9 +258,68 @@ export class RunService {
 		return events.map(toRunEventContract);
 	}
 
+	async listFiles(runId: string): Promise<{
+		workspaceRef?: { sha256: string } | undefined;
+		workspace_manifest: {
+			version: 1;
+			entries: Array<{ path: string; bytes: number; sha256: string }>;
+		};
+	}> {
+		const sandboxDeps = this.requireSandboxDeps();
+		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(runId);
+		if (!sandbox) {
+			throw new Error(`run sandbox not found: ${runId}`);
+		}
+		if (!sandbox.workspaceRef) {
+			return {
+				workspace_manifest: {
+					version: 1,
+					entries: [],
+				},
+			};
+		}
+		return listWorkspaceFiles({
+			workspaceRef: sandbox.workspaceRef,
+			artifactService: sandboxDeps.artifactService,
+		});
+	}
+
+	async exportFiles(input: {
+		runId: string;
+		paths?: string[] | undefined;
+	}): Promise<{
+		workspace_export: { sha256: string };
+		workspace_manifest: {
+			version: 1;
+			entries: Array<{ path: string; bytes: number; sha256: string }>;
+		};
+	}> {
+		const sandboxDeps = this.requireSandboxDeps();
+		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(input.runId);
+		if (!sandbox?.workspaceRef) {
+			throw new Error(`workspace snapshot not found: ${input.runId}`);
+		}
+		const exported = await exportWorkspaceFiles({
+			runId: input.runId,
+			workspaceRef: sandbox.workspaceRef,
+			paths: input.paths,
+			artifactService: sandboxDeps.artifactService,
+		});
+		await this.linkArtifact(
+			input.runId,
+			exported.workspace_export.sha256,
+			"workspace_export",
+		);
+		await this.appendArtifactWritten(input.runId, {
+			sha256: exported.workspace_export.sha256,
+			kind: "workspace_export",
+		});
+		return exported;
+	}
+
 	async beginRun(
 		runId: string,
-		payload: RunStartedPayload = {},
+		payload: RunEventPayloadMap["run_started"] = {},
 	): Promise<RunEventModel> {
 		return this.deps.runRepo.beginRun({
 			runId,
@@ -127,14 +332,26 @@ export class RunService {
 		runId: string,
 		payload: RunEventPayloadMap["pi_event"],
 	): Promise<RunEventModel> {
-		return this.appendLifecycleEvent(runId, "pi_event", payload);
+		return this.appendRunEvent(runId, "pi_event", payload);
 	}
 
 	async appendArtifactWritten(
 		runId: string,
 		payload: RunEventPayloadMap["artifact_written"],
 	): Promise<RunEventModel> {
-		return this.appendLifecycleEvent(runId, "artifact_written", payload);
+		return this.appendRunEvent(runId, "artifact_written", payload);
+	}
+
+	async appendRunEvent<K extends RunEventKind>(
+		runId: string,
+		kind: K,
+		payload: RunEventPayloadMap[K],
+	): Promise<RunEventModel> {
+		return this.deps.runRepo.appendEvent({
+			runId,
+			kind,
+			payload,
+		});
 	}
 
 	async completeRun(
@@ -180,15 +397,10 @@ export class RunService {
 		});
 	}
 
-	private async appendLifecycleEvent(
-		runId: string,
-		kind: RunEventKind,
-		payload: RunEventPayloadMap[RunEventKind],
-	): Promise<RunEventModel> {
-		return this.deps.runRepo.appendEvent({
-			runId,
-			kind,
-			payload,
-		});
+	private requireSandboxDeps(): SandboxDeps {
+		if (!this.deps.sandbox) {
+			throw new Error("sandbox control is not configured");
+		}
+		return this.deps.sandbox;
 	}
 }
