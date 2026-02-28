@@ -6,7 +6,11 @@ export {
 export type { RunEventKind, RunTerminalEventKind } from "./event";
 export type * from "./ports";
 export { PgRunRepo } from "./repo/postgres";
-export { DbosRunWorkflowLauncher, RunService } from "./service";
+export {
+	DbosRunWorkflowLauncher,
+	LazyDbosRunWorkflowLauncher,
+	RunService,
+} from "./service";
 export type {
 	CompleteRunInput,
 	RegisteredRunWorkflow,

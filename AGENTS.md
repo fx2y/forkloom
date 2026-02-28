@@ -1,24 +1,21 @@
-# forkloom AGENT policy (living spec index)
+# forkloom AGENT policy (v1.0.0)
 
-Scope: repo memory root. Keep terse; push detail to `.codex/rules/*`.
-Model: `AGENTS.md` (root) + `.codex/rules/*.md` (modular).
+Doctrine: `mise` only. `fnox` secrets. `.env` banned. `MISE_EXPERIMENTAL=1` mandatory.
+Model: `AGENTS.md` + `.codex/rules/*.md`. `check:lesson-guard` enforces rule-sync.
 
-## Doctrine (Hard Invariants)
-- **Runner:** `mise` only. No `make/just/npm` orchestration. `MISE_EXPERIMENTAL=1` mandatory.
-- **Secrets:** `fnox` only. `.env*` strictly banned (deep scan). Hydrate via `bootstrap:secrets`.
-- **Repro:** `mise.lock` + `MISE_LOCKED=1`. Refresh platform URLs via `mise lock --platform ...`.
-- **Durability:** Dual-layer proof: SQL unique-idempotency + DBOS crash/recover runtime trace.
-- **Artifacts:** CAS immutable. Reserve-first (SQL) -> write. Overwrite=409. Meta=namespaced lowercase.
-- **Contracts:** Schema source-of-truth. Drift-check (schema vs typegen vs examples) + noun-ban (5-noun freeze).
-- **Protocol:** PI gate must run real RPC mock/live. Local mock default for CI; `PI_RPC_STRICT_REAL=1` for live.
-- **Compounding:** Every bug/PR must add invariant (rule) or test. `check:lesson-guard` enforces this.
+## Doctrine
+- **Runner:** `mise`. No orchestration in `package.json`/shell.
+- **Secrets:** `fnox` profiles. Hydrate via `bootstrap:secrets`.
+- **Durability:** SQL idempotency + DBOS `runStep` trace. Reserve-first writes.
+- **Contracts:** Schema source-of-truth. 5-noun freeze. v1 isolation.
+- **PI:** RPC mock default; `PI_RPC_STRICT_REAL=1` for live.
+- **Artifacts:** Immutable CAS. Overwrite=409. Meta=lowercase namespaced.
 
-## Entrypoints (Canonical)
-- **Init:** `mise trust && mise install && MISE_EXPERIMENTAL=1 mise prep && MISE_EXPERIMENTAL=1 mise run bootstrap`
-- **Loop:** `MISE_EXPERIMENTAL=1 mise watch check test:int golden`
-- **Ops:** `mise run svc` (up+health), `svc:logs`, `svc:reset` (purge+unroot)
-- **Verify:** `bootstrap:doctor -> check:* -> test:int:* -> golden:* -> fault:* -> test:sys -> bench:*`
-- **Gate:** `MISE_EXPERIMENTAL=1 mise run ci:force` (sequential phase force)
+## Entrypoints
+- **Init:** `mise trust && mise install && mise prep && mise run bootstrap`
+- **Loop:** `mise watch check test:int golden`
+- **Ops:** `mise run svc` (up/health/logs/reset)
+- **Verify:** `ci:force` (sequential: check -> test:int -> golden -> fault -> bench)
 
 Imports:
 @.codex/rules/00-global.md

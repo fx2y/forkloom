@@ -1,6 +1,5 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DBOS } from "@dbos-inc/dbos-sdk";
 import { waitFor } from "@forkloom/shared";
 import { loadConfig } from "./config";
 import {
@@ -17,7 +16,7 @@ import {
 	probePiSession,
 } from "./pi";
 import { PgArtifactRepo } from "./repo/postgres";
-import { PgRunRepo, RunService } from "./run";
+import { LazyDbosRunWorkflowLauncher, PgRunRepo, RunService } from "./run";
 import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
 import { registerRunOnceWorkflow } from "./workflow";
@@ -75,21 +74,9 @@ async function bootstrap() {
 		{ mockProviderManager },
 	);
 
-	let runWorkflow: ((runId: string) => Promise<void>) | null = null;
-	const runService = new RunService({
-		runRepo,
-		workflowLauncher: {
-			async startRunOnce(runId, opts) {
-				const workflow = runWorkflow;
-				if (!workflow) {
-					throw new Error("RunOnce workflow is not registered");
-				}
-				await DBOS.startWorkflow(workflow, opts)(runId);
-			},
-		},
-	});
-
-	runWorkflow = registerRunOnceWorkflow({
+	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
+	const runService = new RunService({ runRepo, workflowLauncher });
+	const runWorkflow = registerRunOnceWorkflow({
 		runRepo,
 		runService,
 		artifactService: workflowArtifactService,
@@ -98,6 +85,7 @@ async function bootstrap() {
 				model: run.spec.modelPref ?? config.piModel,
 			}),
 	});
+	workflowLauncher.bind(runWorkflow);
 	await launchDbos(config.databaseUrl);
 
 	const app = buildApiRouter({ artifactService: service, runService });

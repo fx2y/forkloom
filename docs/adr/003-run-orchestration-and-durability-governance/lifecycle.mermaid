@@ -1,0 +1,28 @@
+graph TD
+    subgraph Client
+        P[POST /runs] --> S[SSE /events?cursor=0]
+        S --> R[Render Frame]
+        R -->|Update| R
+    end
+
+    subgraph API_HTTP
+        P --> RN[Create Run Row]
+        RN --> WF[Spawn DBOS Workflow]
+        WF -->|Return| P
+    end
+
+    subgraph DBOS_Workflow
+        WFID[WorkflowID == RunID]
+        WFID --> S1[runStep: Stage Inputs]
+        S1 --> S2[runStep: Start PI]
+        S2 --> S3[Pump Events to SQL]
+        S3 -->|On PiMsg| E[INSERT events RETURNING id]
+        E -->|Notify| S
+        S3 --> S4[runStep: Finalize]
+    end
+
+    subgraph SQL_Truth
+        RN
+        E
+        S4 --> RD[Mark run_done]
+    end

@@ -1,18 +1,13 @@
 ---
-paths:
-  - "src/**/*.tsx"
-  - "src/**/*.css"
-  - "src/ui/**"
-  - "web/**"
-  - "apps/**/src/**/*.tsx"
+paths: ["src/**/*.tsx", "src/**/*.css", "web/**", "apps/**/src/**/*.tsx"]
 ---
 
-# UI/content/state policy (future-facing, conditional)
+# UI & State Rules
 
-- UI must expose deterministic state transitions; async chat flows use explicit event/state machine, not boolean soup.
-- Source-of-truth is append-only event log shape compatible with `schema/pi-session-event.schema.json`; derived view state is pure.
-- Optimistic UI allowed only with idempotency key + rollback path.
-- Copy rules: concise, imperative, operator-facing; no ambiguous status text.
-- Style rules: intentional visual direction, tokenized design vars, no ad-hoc inline style drift.
-- Accessibility baseline: semantic controls, keyboard nav, focus visibility, color contrast.
-- Tests required for reducers/selectors/replay determinism; snapshots alone are insufficient.
+- **State:** Deterministic transitions only. Append-only event log is source-of-truth.
+- **Async:** Explicit state machines. No boolean soup.
+- **Idempotency:** Optimistic UI requires key + rollback path.
+- **Copy:** Concise, imperative, operator-facing. No ambiguity.
+- **Style:** Tokenized design variables. No ad-hoc inline drift.
+- **A11y:** Keyboard nav, focus visibility, semantic controls.
+- **Tests:** Reducers/selectors/replay determinism. Snapshots are secondary.

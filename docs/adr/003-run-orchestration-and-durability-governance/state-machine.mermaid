@@ -1,0 +1,23 @@
+stateDiagram-v2
+    [*] --> Initialized: POST /runs
+    Initialized --> Staged: run_staged
+    Staged --> Running: pi_event
+    Running --> Running: pi_event
+    Running --> Completed: run_done
+    Running --> Failed: run_failed
+    Staged --> Failed: run_failed
+    
+    state Initialized {
+        [*] --> RunSpec_Saved
+    }
+    
+    state Staged {
+        Artifacts_S3_Ready
+    }
+    
+    state Running {
+        Pi_Session_Active
+    }
+    
+    Completed --> [*]
+    Failed --> [*]

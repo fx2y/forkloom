@@ -1,14 +1,14 @@
 ---
-paths:
-  - "**/*"
+paths: ["**/*"]
 ---
 
 # Global Invariants
 
-- **Runner:** `mise` only. `package.json` scripts execute tools, never order/orchestrate DAG.
-- **Secrets:** `fnox` only. `.env*` forbidden repo-wide (deep scan); exclude `.git/node_modules` ONLY.
-- **Repro:** `mise.lock` mandatory; CI runs `MISE_LOCKED=1`. Refresh via `mise lock --platform ...`.
-- **Logic:** Prefer pure TS + thin shell. Opaque shell logic is debt.
-- **Determinism:** Identical input => identical hashes/diffs. Strip volatile keys in canon.
-- **Lessons:** Every incident/PR yields rule (this folder) or test update. `check:lesson-guard` enforced.
-- **Health:** Ready = probe all deps + hard-fail diagnostic. Reachability (curl -sS) > 2xx for auth roots.
+- **Runner:** `mise` only. No shell/npm orchestration. `MISE_EXPERIMENTAL=1` required.
+- **Secrets:** `fnox` only. `.env` strictly banned. Hydrate via `bootstrap:secrets`.
+- **Repro:** `mise.lock` + `MISE_LOCKED=1`. Refresh via `mise lock --platform`.
+- **Logic:** Pure TS > shell. Opaque shell logic is technical debt.
+- **Determinism:** Identical input => identical hash. Strip volatile keys.
+- **Lessons:** Every PR adds invariant (`rules/*.md`) or test. `check:lesson-guard` enforces.
+- **Health:** Ready = probe all deps + hard-fail diagnostic. Reachability > 2xx.
+- **PI:** `PI_RPC_STRICT_REAL=1` requires local `~/.pi` auth/settings. No-mock is north-star.

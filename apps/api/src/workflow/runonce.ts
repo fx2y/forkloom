@@ -104,12 +104,6 @@ function assertSessionArtifactUri(ctx: RunOnceContext): string {
 	return ctx.sessionArtifactUri;
 }
 
-function normalizeUnknownRecord(
-	input: Record<string, unknown>,
-): Record<string, unknown> {
-	return input;
-}
-
 async function closePi(ctx: RunOnceContext): Promise<void> {
 	if (!ctx.pi) {
 		return;
@@ -180,10 +174,7 @@ export async function executeRunOnce(
 			const session = assertSession(ctx);
 			await session.waitUntilIdle({
 				onEvent: async (event) => {
-					await deps.runService.appendPiEvent(
-						runId,
-						normalizeUnknownRecord(event),
-					);
+					await deps.runService.appendPiEvent(runId, event);
 				},
 			});
 		});

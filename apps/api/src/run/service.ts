@@ -35,6 +35,28 @@ export class DbosRunWorkflowLauncher implements RunWorkflowLauncher {
 	}
 }
 
+/**
+ * Late-bound launcher that breaks the RunService↔workflow circular dep.
+ * Call bind() after registerRunOnceWorkflow returns.
+ */
+export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
+	private inner: RunWorkflowLauncher | null = null;
+
+	bind(workflow: RegisteredRunWorkflow): void {
+		this.inner = new DbosRunWorkflowLauncher(workflow);
+	}
+
+	async startRunOnce(
+		runId: string,
+		opts: { workflowID: string },
+	): Promise<void> {
+		if (!this.inner) {
+			throw new Error("RunOnce workflow is not registered");
+		}
+		return this.inner.startRunOnce(runId, opts);
+	}
+}
+
 export type RunServiceDeps = {
 	runRepo: RunRepo;
 	workflowLauncher: RunWorkflowLauncher;
