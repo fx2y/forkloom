@@ -1,9 +1,18 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 import type { RunEvent, RunSpec, RunState } from "@forkloom/contracts";
-import pg from "pg";
 import { createRunId } from "../../packages/shared/src/run-id";
+import {
+	type SseFrame,
+	apiOrigin,
+	asErrorMessage,
+	queryRows,
+	readArrayBuffer,
+	readJson,
+	withPgClient,
+	writeJson,
+} from "./live-support";
+import { JsonEventStream as SharedJsonEventStream } from "./live-support";
 
 type ArtifactMeta = {
 	sha256: string;
@@ -20,17 +29,6 @@ type RunCreateResponse = {
 	status: string;
 };
 
-type SseFrame = {
-	id: number | null;
-	event: string | null;
-	data: string | null;
-};
-
-type ReadResult = {
-	events: RunEvent[];
-	controlFrames: SseFrame[];
-};
-
 export type LiveRunProof = {
 	runId: string;
 	created: boolean;
@@ -42,29 +40,10 @@ export type LiveRunProof = {
 	sessionArtifactSha256: string;
 };
 
-const DEFAULT_API_ORIGIN = "http://127.0.0.1:8080";
-const DEFAULT_DATABASE_URL =
-	"postgresql://postgres:postgres@127.0.0.1:5432/agentos";
 const TERMINAL_EVENT_KINDS = new Set<RunEvent["kind"]>([
 	"run_done",
 	"run_failed",
 ]);
-
-export function apiOrigin(): string {
-	return process.env.FORKLOOM_API_ORIGIN ?? DEFAULT_API_ORIGIN;
-}
-
-function databaseUrl(): string {
-	return (
-		process.env.DATABASE_URL ??
-		process.env.DBOS_SYSTEM_DATABASE_URL ??
-		DEFAULT_DATABASE_URL
-	);
-}
-
-function asErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 
 function isRunEventKind(value: string): value is RunEvent["kind"] {
 	return (
@@ -74,56 +53,6 @@ function isRunEventKind(value: string): value is RunEvent["kind"] {
 		value === "run_done" ||
 		value === "run_failed"
 	);
-}
-
-function parseSseFrame(block: string): SseFrame | null {
-	if (block.startsWith(":")) {
-		return null;
-	}
-
-	const lines = block.split("\n");
-	let id: number | null = null;
-	let event: string | null = null;
-	const dataLines: string[] = [];
-	for (const line of lines) {
-		if (line.startsWith("id: ")) {
-			const parsed = Number(line.slice("id: ".length));
-			id = Number.isFinite(parsed) ? parsed : null;
-			continue;
-		}
-		if (line.startsWith("event: ")) {
-			event = line.slice("event: ".length);
-			continue;
-		}
-		if (line.startsWith("data: ")) {
-			dataLines.push(line.slice("data: ".length));
-		}
-	}
-
-	return {
-		id,
-		event,
-		data: dataLines.length > 0 ? dataLines.join("\n") : null,
-	};
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-	if (!response.ok) {
-		const body = await response.text();
-		throw new Error(`${label} failed (${response.status}): ${body}`);
-	}
-	return (await response.json()) as T;
-}
-
-async function readArrayBuffer(
-	response: Response,
-	label: string,
-): Promise<ArrayBuffer> {
-	if (!response.ok) {
-		const body = await response.text();
-		throw new Error(`${label} failed (${response.status}): ${body}`);
-	}
-	return response.arrayBuffer();
 }
 
 export function makeRunSpec(input: {
@@ -137,14 +66,6 @@ export function makeRunSpec(input: {
 		userMsg: input.userMsg,
 		attachments: (input.attachments ?? []).map((sha256) => ({ sha256 })),
 	};
-}
-
-export async function writeJson(
-	outputPath: string,
-	payload: Record<string, unknown>,
-): Promise<void> {
-	await mkdir(dirname(outputPath), { recursive: true });
-	await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
 export async function uploadArtifactBuffer(input: {
@@ -218,11 +139,7 @@ export async function fetchArtifactDigest(sha256: string): Promise<{
 }
 
 export class RunEventStream {
-	private readonly controller = new AbortController();
-	private readonly responsePromise: Promise<Response>;
-	private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-	private readonly decoder = new TextDecoder();
-	private buffer = "";
+	private readonly stream: SharedJsonEventStream<RunEvent>;
 
 	constructor(
 		runId: string,
@@ -231,100 +148,33 @@ export class RunEventStream {
 			lastEventId?: number | undefined;
 		} = {},
 	) {
-		const headers: Record<string, string> = {
-			accept: "text/event-stream",
-		};
-		if (options.lastEventId != null) {
-			headers["Last-Event-ID"] = String(options.lastEventId);
-		}
-		const query =
-			options.sinceEventId && options.sinceEventId > 0
-				? `?since=${options.sinceEventId}`
-				: "";
-		this.responsePromise = fetch(
-			`${apiOrigin()}/runs/${runId}/events${query}`,
+		this.stream = new SharedJsonEventStream(
+			`${apiOrigin()}/runs/${runId}/events`,
+			(frame) =>
+				frame.event && frame.data && isRunEventKind(frame.event)
+					? (JSON.parse(frame.data) as RunEvent)
+					: null,
 			{
-				headers,
-				signal: this.controller.signal,
+				sinceEventId: options.sinceEventId,
+				lastEventId: options.lastEventId,
+				timeoutLabel: "SSE",
 			},
 		);
 	}
 
 	async readUntil(
-		stopWhen: (current: ReadResult) => boolean,
+		stopWhen: Parameters<SharedJsonEventStream<RunEvent>["readUntil"]>[0],
 		timeoutMs = 30_000,
-	): Promise<ReadResult> {
-		const response = await this.responsePromise;
-		if (!response.ok || !response.body) {
-			const body = await response.text();
-			throw new Error(`open SSE failed (${response.status}): ${body}`);
-		}
-		if (!this.reader) {
-			this.reader = response.body.getReader();
-		}
-
-		const result: ReadResult = {
-			events: [],
-			controlFrames: [],
-		};
-		const deadline = Date.now() + timeoutMs;
-
-		while (Date.now() < deadline) {
-			const remainingMs = deadline - Date.now();
-			const chunkTimeoutMs = Math.max(1_000, Math.min(5_000, remainingMs));
-			const chunk = await Promise.race([
-				this.reader.read(),
-				new Promise<never>((_, reject) => {
-					setTimeout(
-						() => reject(new Error("timed out waiting for SSE")),
-						chunkTimeoutMs,
-					);
-				}),
-			]);
-
-			if (chunk.done) {
-				break;
-			}
-
-			this.buffer += this.decoder.decode(chunk.value, { stream: true });
-			let boundary = this.buffer.indexOf("\n\n");
-			while (boundary !== -1) {
-				const rawBlock = this.buffer.slice(0, boundary);
-				this.buffer = this.buffer.slice(boundary + 2);
-				const frame = parseSseFrame(rawBlock);
-				if (frame?.event && frame.data && isRunEventKind(frame.event)) {
-					result.events.push(JSON.parse(frame.data) as RunEvent);
-				} else if (frame?.event) {
-					result.controlFrames.push(frame);
-				}
-				if (stopWhen(result)) {
-					return result;
-				}
-				boundary = this.buffer.indexOf("\n\n");
-			}
-		}
-
-		throw new Error("SSE stream ended before stop condition");
+	) {
+		return this.stream.readUntil(stopWhen, timeoutMs);
 	}
 
 	close(): void {
-		this.controller.abort();
+		this.stream.close();
 	}
 
 	async waitClosed(): Promise<void> {
-		const response = await this.responsePromise;
-		if (!response.body) {
-			return;
-		}
-		if (!this.reader) {
-			this.reader = response.body.getReader();
-		}
-		while (true) {
-			const chunk = await this.reader.read();
-			if (chunk.done) {
-				return;
-			}
-		}
+		await this.stream.waitClosed();
 	}
 }
 
@@ -386,29 +236,10 @@ export async function runLiveFlow(input: {
 	}
 }
 
-export async function withPgClient<T>(
-	fn: (client: pg.Pool) => Promise<T>,
-): Promise<T> {
-	const pool = new pg.Pool({ connectionString: databaseUrl() });
-	try {
-		return await fn(pool);
-	} finally {
-		await pool.end();
-	}
-}
-
-export async function queryRows<TRow extends pg.QueryResultRow>(
-	text: string,
-	values: unknown[] = [],
-): Promise<TRow[]> {
-	return withPgClient(async (pool) => {
-		const result = await pool.query<TRow>(text, values);
-		return result.rows;
-	});
-}
-
 export function summarizeRunFailure(error: unknown): Record<string, unknown> {
 	return {
 		error: asErrorMessage(error),
 	};
 }
+
+export { queryRows, withPgClient, writeJson, apiOrigin };

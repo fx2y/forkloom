@@ -36,7 +36,7 @@ MISE_EXPERIMENTAL=1 mise run bootstrap
 MISE_EXPERIMENTAL=1 mise run svc
 ```
 
-Open `http://127.0.0.1:5173` for the single-screen run UI.
+Open `http://127.0.0.1:5173` for the inbox/thread actor UI.
 
 Optional worker seam:
 
@@ -83,12 +83,13 @@ curl -fsS http://localhost:8080/artifacts/$SHA/meta | jq .
 - `POST /actors/:actorId/messages` enqueue a mailbox message
 - `GET /actors/:actorId/events` stream append-only actor events over SSE (`Last-Event-ID` or `?since=<seq>`)
 
-## Run UI
+## Thread UI
 
-- `web` proxies `/runs`, `/artifacts`, `/health` to `api`
-- flow: upload file -> `POST /artifacts` -> `POST /runs` -> `GET /runs/:runId/events`
-- SSE replay uses `Last-Event-ID` or `?since=<event_id>` cursor semantics
-- trace drawer is reducer-derived from append-only `RunEvent` SSE
+- `web` proxies `/actors`, `/artifacts`, `/runs`, `/health` to `api`
+- inbox list is actor-backed; each thread pane replays append-only `ActorEvent` SSE from `/actors/:actorId/events`
+- truthful send policy: idle thread => `prompt`, streaming thread => `followUp`, explicit interrupt => `steer`
+- `@actor` routing stays client-side and still resolves onto the same actor API surface
+- trace drawer and artifact/session strip are reducer-derived, not hand-authored summaries
 
 ## Run API Smoke
 
@@ -139,6 +140,7 @@ MISE_EXPERIMENTAL=1 mise run bootstrap:doctor
 MISE_EXPERIMENTAL=1 mise run check:contract
 MISE_EXPERIMENTAL=1 mise run check:unit
 MISE_EXPERIMENTAL=1 mise run test:int
+MISE_EXPERIMENTAL=1 mise run test:int:actor-durability
 MISE_EXPERIMENTAL=1 mise run test:int:actor-functional
 MISE_EXPERIMENTAL=1 mise run test:int:actor-sse
 MISE_EXPERIMENTAL=1 mise run test:sys

@@ -6,5 +6,9 @@ cd_repo_root
 require_cmds pnpm
 
 pnpm exec vitest run tests/unit
+(
+	cd apps/web
+	pnpm exec vitest run -c vitest.config.ts
+)
 write_mark "check:unit"
 echo "check:unit ok"

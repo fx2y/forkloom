@@ -6,7 +6,7 @@ import {
 	postActorMessage,
 	writeJson,
 } from "./actor-live-support";
-import { queryRows } from "./run-live-support";
+import { queryRows } from "./live-support";
 
 function createActorId(): string {
 	return `actor-live-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;

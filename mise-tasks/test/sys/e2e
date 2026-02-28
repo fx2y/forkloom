@@ -20,14 +20,18 @@ run_forced_gate() {
 
 # gates must pass before smoke
 run_forced_gate check
-run_forced_gate test:int
+run_forced_gate test:int:force
 run_forced_gate golden
 run_forced_gate fault
 
 echo "running product smoke..."
 curl -fsS http://localhost:8080/health | jq -e '.deps.pg and .deps.s3 and .deps.pi and .deps.api' >/dev/null
 curl -fsS http://localhost:5173 >/tmp/test-sys.web.html
-rg -q 'forkloom run surface' /tmp/test-sys.web.html
+rg -q 'forkloom thread surface' /tmp/test-sys.web.html
+curl -fsS http://localhost:8080/actors \
+  -H 'content-type: application/json' \
+  -d '{"actorId":"sys-thread","name":"sys-thread"}' > .cache/test-int/sys.actor.json
+curl -fsS http://localhost:8080/actors/sys-thread | jq -e '.actorId=="sys-thread"' >/dev/null
 curl -fsS -F file=@README.md http://localhost:8080/artifacts > .cache/test-int/sys.upload.json
 SYS_SHA=$(jq -r '.sha256' .cache/test-int/sys.upload.json)
 curl -fsS "http://localhost:8080/artifacts/$SYS_SHA" > .cache/test-int/sys.download.bin

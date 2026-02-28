@@ -83,7 +83,7 @@ outputs = [".cache/mise-marks/check__type.ok"]
 
 [tasks."check:unit"]
 run = "bash ./mise-tasks/check/unit"
-sources = ["src/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/unit/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
+sources = ["src/**/*.ts", "apps/**/*.ts", "apps/**/*.css", "apps/**/*.html", "packages/**/*.ts", "tests/unit/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
 outputs = [".cache/mise-marks/check__unit.ok"]
 
 [tasks."check:contract"]
@@ -175,7 +175,38 @@ sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.
 outputs = [".cache/mise-marks/test__int__ocr-doc.ok", ".cache/test-int/ocr.out.1.md", ".cache/test-int/ocr.out.1.json", ".cache/test-int/ocr.out.1.manifest.json", ".cache/test-int/ocr.out.2.md", ".cache/test-int/ocr.out.2.json", ".cache/test-int/ocr.out.2.manifest.json"]
 
 [tasks."test:int"]
-depends = ["test:int:dbos-durability", "test:int:dbos-runtime", "test:int:pi-rpc", "test:int:pi-rpc-live", "test:int:artifact", "test:int:artifact-boundaries", "test:int:run-functional", "test:int:run-durability", "test:int:actor-durability", "test:int:actor-functional", "test:int:actor-sse", "test:int:run-sse", "test:int:ocr-doc"]
+run = [
+  "mise run test:int:dbos-durability",
+  "mise run test:int:dbos-runtime",
+  "mise run test:int:pi-rpc",
+  "mise run test:int:pi-rpc-live",
+  "mise run test:int:artifact",
+  "mise run test:int:artifact-boundaries",
+  "mise run test:int:run-functional",
+  "mise run test:int:run-durability",
+  "mise run test:int:actor-durability",
+  "mise run test:int:actor-functional",
+  "mise run test:int:actor-sse",
+  "mise run test:int:run-sse",
+  "mise run test:int:ocr-doc"
+]
+
+[tasks."test:int:force"]
+run = [
+  "mise run --force test:int:dbos-durability",
+  "mise run --force test:int:dbos-runtime",
+  "mise run --force test:int:pi-rpc",
+  "mise run --force test:int:pi-rpc-live",
+  "mise run --force test:int:artifact",
+  "mise run --force test:int:artifact-boundaries",
+  "mise run --force test:int:run-functional",
+  "mise run --force test:int:run-durability",
+  "mise run --force test:int:actor-durability",
+  "mise run --force test:int:actor-functional",
+  "mise run --force test:int:actor-sse",
+  "mise run --force test:int:run-sse",
+  "mise run --force test:int:ocr-doc"
+]
 
 [tasks."golden:canonicalize"]
 run = "bash ./mise-tasks/golden/canonicalize"
@@ -238,7 +269,7 @@ depends = ["test:sys:e2e"]
 [tasks."ci:force"]
 run = [
   "mise run --force check",
-  "mise run --force test:int",
+  "mise run test:int:force",
   "mise run --force golden",
   "mise run --force fault",
   "mise run --force test:sys",

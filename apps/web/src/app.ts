@@ -1,228 +1,405 @@
-import type { RunEvent } from "@forkloom/contracts";
-import { createRunId } from "./run-id";
+import type { ActorEvent, ActorState } from "@forkloom/contracts";
 import {
-	type RunViewState,
-	initialRunViewState,
-	reduceRunEvent,
-} from "./state/reducer";
+	type AppDeps,
+	type EventSourceLike,
+	type UploadedAttachment,
+	browserDeps,
+	buildActorEventsUrl,
+	createActor,
+	fetchActor,
+	listActors,
+	postActorMessage,
+	uploadAttachments,
+} from "./actor-client";
+import {
+	deriveThreadPresence,
+	getSelectedThread,
+	initialInboxViewState,
+	listInboxThreads,
+	reduceActorEvent,
+	selectActor,
+	summarizeThread,
+	upsertActorState,
+} from "./state/actor-reducer";
+import {
+	deriveMailboxKind,
+	normalizeActorId,
+	resolveComposeTarget,
+	toActorSpec,
+} from "./thread-compose";
 import "./styles.css";
 
-type Scope = "me" | "team" | "org";
+const ACTOR_EVENT_KINDS = [
+	"mailbox_queued",
+	"session_bound",
+	"pi_event",
+	"mailbox_processed",
+	"mailbox_failed",
+] as const;
 
-type AppDeps = {
-	fetchImpl: typeof fetch;
-	createEventSource(url: string): EventSourceLike;
-	createRunId(): string;
+type PendingStream = {
+	actorId: string;
+	stream: EventSourceLike;
 };
-
-type EventSourceLike = {
-	addEventListener(
-		name: string,
-		listener: (event: MessageEvent<string>) => void,
-	): void;
-	close(): void;
-	onerror: ((event: Event) => void) | null;
-};
-
-type UploadedAttachment = {
-	name: string;
-	sha256: string;
-};
-
-export function buildRunEventsUrl(runId: string, sinceEventId: number): string {
-	const query =
-		sinceEventId > 0
-			? `?since=${encodeURIComponent(String(sinceEventId))}`
-			: "";
-	return `/runs/${runId}/events${query}`;
-}
-
-function browserDeps(): AppDeps {
-	return {
-		fetchImpl: fetch,
-		createEventSource: (url) => new EventSource(url),
-		createRunId,
-	};
-}
-
-function renderStatus(state: RunViewState, submitting: boolean): string {
-	if (submitting) {
-		return "staging inputs";
-	}
-	switch (state.status) {
-		case "running":
-			return "streaming";
-		case "done":
-			return "done";
-		case "failed":
-			return "failed";
-		default:
-			return "idle";
-	}
-}
 
 export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
-	let scope: Scope = "team";
-	let submitting = false;
+	let state = initialInboxViewState;
+	let booting = true;
+	let creatingThread = false;
+	let sending = false;
 	let errorMessage = "";
 	let uploaded: UploadedAttachment[] = [];
-	let state = initialRunViewState;
-	let stream: EventSourceLike | null = null;
+	let activeStream: PendingStream | null = null;
 
 	root.innerHTML = `
 		<div class="shell">
 			<section class="hero">
-				<p class="eyebrow">forkloom / run surface</p>
-				<h1>One truthful screen for durable runs.</h1>
-				<p class="lede">Upload, ask, watch the DB-backed event log, and collect artifacts from the same flow.</p>
+				<p class="eyebrow">forkloom / inbox surface</p>
+				<h1>Inbox on the left. Truth on the right.</h1>
+				<p class="lede">Each thread is one actor mailbox. The thread view is reducer-driven from append-only actor events, not guessed summaries.</p>
 			</section>
-			<section class="panel panel-compose">
-				<form data-form class="composer">
-					<label class="field">
-						<span>Prompt</span>
-						<textarea name="userMsg" rows="6" placeholder="Describe the run you want."></textarea>
-					</label>
-					<div class="split">
-						<label class="field">
-							<span>Attachments</span>
-							<input name="attachments" type="file" multiple />
-						</label>
-						<fieldset class="field scopes">
-							<legend>Scope</legend>
-							<label><input type="radio" name="scope" value="me" /> Me</label>
-							<label><input type="radio" name="scope" value="team" checked /> Team</label>
-							<label><input type="radio" name="scope" value="org" /> Org</label>
-						</fieldset>
+			<section class="workspace">
+				<aside class="panel inbox-panel">
+					<div class="panel-head">
+						<div>
+							<p class="section-label">Inbox</p>
+							<h2>Threads</h2>
+						</div>
+						<span class="status" data-boot-state>booting</span>
 					</div>
-						<div class="upload-list" data-uploads></div>
+					<form class="thread-form" data-thread-form>
+						<label class="field">
+							<span>Open thread</span>
+							<input
+								data-thread-name
+								type="text"
+								name="threadName"
+								placeholder="ops"
+								autocomplete="off"
+							/>
+						</label>
+						<button type="submit" class="secondary">Open</button>
+					</form>
+					<p class="hint">Use <code>@actor</code> in the composer to route across threads without inventing new API nouns.</p>
+					<p class="error" data-error hidden></p>
+					<ul class="thread-list" data-thread-list></ul>
+				</aside>
+				<section class="panel thread-panel">
+					<div class="thread-head">
+						<div>
+							<p class="section-label">Thread</p>
+							<h2 data-thread-name-title>No thread selected</h2>
+							<p class="thread-meta" data-thread-meta>Open a thread or send to <code>@actor</code>.</p>
+						</div>
+						<span class="status" data-thread-status data-state="idle">idle</span>
+					</div>
+					<p class="thread-preview" data-thread-preview>Select a thread to watch actor events and reply history.</p>
+					<p class="error" data-thread-error hidden></p>
+					<div class="artifact-strip" data-thread-artifacts></div>
+					<details class="trace-panel">
+						<summary data-trace-summary>Trace 0</summary>
+						<ol class="trace-list" data-trace></ol>
+					</details>
+					<form class="composer" data-compose-form>
+						<label class="field">
+							<span>Message</span>
+							<textarea
+								name="message"
+								rows="6"
+								placeholder="Reply in the selected thread or start with @actor to route elsewhere."
+							></textarea>
+						</label>
+						<div class="composer-meta">
+							<label class="field">
+								<span>Attachments</span>
+								<input data-file-input name="attachments" type="file" multiple />
+							</label>
+							<div class="upload-list" data-uploads></div>
+						</div>
+						<p class="hint" data-compose-hint>Idle thread sends become prompts. Streaming thread sends become follow-ups unless you interrupt.</p>
 						<div class="actions">
-							<button type="submit" class="primary">Start run</button>
+							<button type="submit" class="primary" data-action="send">Send</button>
+							<button type="submit" class="warning" data-action="interrupt" hidden>
+								Interrupt now
+							</button>
 						</div>
 					</form>
 				</section>
-			<section class="grid">
-				<article class="panel panel-result">
-					<div class="panel-head">
-						<h2>Result</h2>
-						<span class="status" data-status>idle</span>
-					</div>
-					<p class="run-id" data-run-id>No run started.</p>
-					<p class="error" data-error hidden></p>
-					<div class="result-text" data-result>Final text appears here.</div>
-					<div class="chips" data-artifacts></div>
-				</article>
-					<details class="panel trace">
-						<summary>Trace drawer</summary>
-						<ol data-trace class="trace-list"></ol>
-					</details>
 			</section>
 		</div>
 	`;
 
-	const form = root.querySelector("[data-form]");
-	const textarea = root.querySelector<HTMLTextAreaElement>(
-		'textarea[name="userMsg"]',
-	);
-	const fileInput = root.querySelector<HTMLInputElement>(
-		'input[name="attachments"]',
-	);
-	const status = root.querySelector<HTMLElement>("[data-status]");
-	const runIdNode = root.querySelector<HTMLElement>("[data-run-id]");
+	const threadForm = root.querySelector<HTMLFormElement>("[data-thread-form]");
+	const threadNameInput =
+		root.querySelector<HTMLInputElement>("[data-thread-name]");
+	const bootNode = root.querySelector<HTMLElement>("[data-boot-state]");
 	const errorNode = root.querySelector<HTMLElement>("[data-error]");
-	const uploadsNode = root.querySelector<HTMLElement>("[data-uploads]");
-	const resultNode = root.querySelector<HTMLElement>("[data-result]");
-	const artifactsNode = root.querySelector<HTMLElement>("[data-artifacts]");
+	const threadListNode =
+		root.querySelector<HTMLUListElement>("[data-thread-list]");
+	const threadTitleNode = root.querySelector<HTMLElement>(
+		"[data-thread-name-title]",
+	);
+	const threadMetaNode = root.querySelector<HTMLElement>("[data-thread-meta]");
+	const threadStatusNode = root.querySelector<HTMLElement>(
+		"[data-thread-status]",
+	);
+	const threadPreviewNode = root.querySelector<HTMLElement>(
+		"[data-thread-preview]",
+	);
+	const threadErrorNode = root.querySelector<HTMLElement>(
+		"[data-thread-error]",
+	);
+	const artifactNode = root.querySelector<HTMLElement>(
+		"[data-thread-artifacts]",
+	);
+	const traceSummaryNode = root.querySelector<HTMLElement>(
+		"[data-trace-summary]",
+	);
 	const traceNode = root.querySelector<HTMLOListElement>("[data-trace]");
+	const composeForm = root.querySelector<HTMLFormElement>(
+		"[data-compose-form]",
+	);
+	const textarea =
+		composeForm?.querySelector<HTMLTextAreaElement>(
+			'textarea[name="message"]',
+		) ?? null;
+	const fileInput = root.querySelector<HTMLInputElement>("[data-file-input]");
+	const uploadsNode = root.querySelector<HTMLElement>("[data-uploads]");
+	const composeHintNode = root.querySelector<HTMLElement>(
+		"[data-compose-hint]",
+	);
+	const interruptButton = root.querySelector<HTMLButtonElement>(
+		'[data-action="interrupt"]',
+	);
+	const sendButton = root.querySelector<HTMLButtonElement>(
+		'[data-action="send"]',
+	);
 
 	if (
 		!(
-			form &&
+			threadForm &&
+			threadNameInput &&
+			bootNode &&
+			errorNode &&
+			threadListNode &&
+			threadTitleNode &&
+			threadMetaNode &&
+			threadStatusNode &&
+			threadPreviewNode &&
+			threadErrorNode &&
+			artifactNode &&
+			traceSummaryNode &&
+			traceNode &&
+			composeForm &&
 			textarea &&
 			fileInput &&
-			status &&
-			runIdNode &&
-			errorNode &&
 			uploadsNode &&
-			resultNode &&
-			artifactsNode &&
-			traceNode
+			composeHintNode &&
+			interruptButton &&
+			sendButton
 		)
 	) {
 		throw new Error("web mount failed: missing required nodes");
 	}
 
+	const closeActiveStream = () => {
+		activeStream?.stream.close();
+		activeStream = null;
+	};
+
+	const currentTargetThread = () => {
+		try {
+			const target = resolveComposeTarget({
+				text: textarea.value,
+				selectedActorId: state.selectedActorId,
+				threads: listInboxThreads(state),
+			});
+			return state.threads[target.actorId] ?? null;
+		} catch {
+			return getSelectedThread(state);
+		}
+	};
+
 	const update = () => {
-		status.textContent = renderStatus(state, submitting);
-		status.dataset.state = state.status;
-		runIdNode.textContent = state.runId
-			? `run ${state.runId}`
-			: "No run started.";
+		const threads = listInboxThreads(state);
+		const selectedThread = getSelectedThread(state);
+		const targetThread = currentTargetThread();
+		const targetPresence = targetThread
+			? deriveThreadPresence(targetThread)
+			: "idle";
+		const defaultKind = deriveMailboxKind({
+			interrupt: false,
+			thread: targetThread,
+		});
+
+		bootNode.textContent = booting
+			? "booting"
+			: creatingThread
+				? "opening"
+				: "ready";
+		bootNode.dataset.state = booting ? "booting" : "ready";
 		errorNode.hidden = errorMessage.length === 0;
 		errorNode.textContent = errorMessage;
-		resultNode.textContent = state.resultText || "Final text appears here.";
+
+		threadListNode.innerHTML = threads
+			.map((thread) => {
+				const summary = summarizeThread(thread);
+				const selected = thread.actor.actorId === state.selectedActorId;
+				return `
+					<li>
+						<button
+							type="button"
+							class="thread-list-item${selected ? " is-selected" : ""}"
+							data-thread-select="${thread.actor.actorId}"
+							aria-current="${selected ? "page" : "false"}"
+						>
+							<span class="thread-list-row">
+								<strong>${thread.actor.name}</strong>
+								<span class="presence presence-${summary.presence}">${summary.presence}</span>
+							</span>
+							<span class="thread-list-preview">${summary.preview}</span>
+							<span class="thread-list-meta">${thread.actor.actorId}</span>
+						</button>
+					</li>
+				`;
+			})
+			.join("");
+
+		if (!selectedThread) {
+			threadTitleNode.textContent = "No thread selected";
+			threadMetaNode.innerHTML =
+				"Open a thread or route with <code>@actor</code>.";
+			threadStatusNode.textContent = "idle";
+			threadStatusNode.dataset.state = "idle";
+			threadPreviewNode.textContent =
+				"Select a thread to watch actor events and reply history.";
+			threadErrorNode.hidden = true;
+			threadErrorNode.textContent = "";
+			artifactNode.innerHTML = "";
+			traceSummaryNode.textContent = "Trace 0";
+			traceNode.innerHTML = "";
+		} else {
+			const summary = summarizeThread(selectedThread);
+			threadTitleNode.textContent = selectedThread.actor.name;
+			threadMetaNode.innerHTML = `actor <code>${selectedThread.actor.actorId}</code>`;
+			threadStatusNode.textContent = summary.presence;
+			threadStatusNode.dataset.state = summary.presence;
+			threadPreviewNode.textContent = summary.preview;
+			threadErrorNode.hidden = selectedThread.latestError == null;
+			threadErrorNode.textContent = selectedThread.latestError ?? "";
+			artifactNode.innerHTML = selectedThread.artifacts
+				.map((artifact) =>
+					artifact.href
+						? `<a class="chip chip-link" href="${artifact.href}" target="_blank" rel="noreferrer">${artifact.kind}<code>${artifact.label}</code></a>`
+						: `<span class="chip">${artifact.kind}<code>${artifact.label}</code></span>`,
+				)
+				.join("");
+			traceSummaryNode.textContent = `Trace ${selectedThread.trace.length}`;
+			traceNode.innerHTML = selectedThread.trace
+				.map(
+					(entry) =>
+						`<li><strong>${entry.kind}</strong><span>#${entry.seq}</span><code>${entry.detail}</code></li>`,
+				)
+				.join("");
+		}
+
 		uploadsNode.innerHTML = uploaded
 			.map(
 				(artifact) =>
 					`<span class="chip">${artifact.name}<code>${artifact.sha256.slice(0, 10)}</code></span>`,
 			)
 			.join("");
-		artifactsNode.innerHTML = state.artifacts
-			.map(
-				(artifact) =>
-					`<a class="chip chip-link" href="${artifact.href}" target="_blank" rel="noreferrer">${artifact.kind}<code>${artifact.sha256.slice(0, 10)}</code></a>`,
-			)
-			.join("");
-		traceNode.innerHTML = state.trace
-			.map(
-				(event) =>
-					`<li><strong>${event.kind}</strong><span>#${event.seq}</span><code>${JSON.stringify(event.payload)}</code></li>`,
-			)
-			.join("");
+		composeHintNode.innerHTML = state.selectedActorId
+			? `Default send in this thread is <code>${defaultKind}</code>. Prefix with <code>@actor</code> to dispatch elsewhere.`
+			: "Open a thread or prefix with <code>@actor</code>.";
+		sendButton.disabled = sending || booting;
+		sendButton.textContent = sending ? "Sending..." : `Send ${defaultKind}`;
+		interruptButton.hidden = targetPresence !== "streaming";
+		interruptButton.disabled = sending || booting;
 	};
 
-	const applyEvent = (event: RunEvent) => {
-		state = reduceRunEvent(state, event);
-		if (event.kind === "run_failed") {
-			errorMessage =
-				typeof event.payload.error === "string"
-					? event.payload.error
-					: "run failed";
+	const refreshActors = async () => {
+		for (const actor of await listActors(deps.fetchImpl)) {
+			state = upsertActorState(state, actor);
 		}
-		if (event.kind === "run_done" || event.kind === "run_failed") {
-			stream?.close();
-			stream = null;
-		}
-		update();
 	};
 
-	const connect = (runId: string, sinceEventId = state.lastSeq) => {
-		stream?.close();
-		stream = deps.createEventSource(buildRunEventsUrl(runId, sinceEventId));
-		for (const kind of [
-			"run_started",
-			"pi_event",
-			"artifact_written",
-			"run_done",
-			"run_failed",
-		] as const) {
-			stream.addEventListener(kind, (event) => {
-				applyEvent(JSON.parse(event.data) as RunEvent);
+	const refreshActorState = async (actorId: string) => {
+		state = upsertActorState(state, await fetchActor(deps.fetchImpl, actorId));
+	};
+
+	const connectThread = (actorId: string) => {
+		const thread = state.threads[actorId];
+		if (!thread) {
+			return;
+		}
+		if (activeStream?.actorId === actorId) {
+			return;
+		}
+		closeActiveStream();
+		const stream = deps.createEventSource(
+			buildActorEventsUrl(actorId, thread.lastEventSeq),
+		);
+		activeStream = { actorId, stream };
+
+		for (const kind of ACTOR_EVENT_KINDS) {
+			stream.addEventListener(kind, (message) => {
+				const event = JSON.parse(message.data) as ActorEvent;
+				state = reduceActorEvent(state, event);
+				if (
+					event.kind === "mailbox_processed" ||
+					event.kind === "mailbox_failed"
+				) {
+					void refreshActorState(actorId).then(update, () => {});
+				}
+				update();
 			});
 		}
+
 		stream.addEventListener("gap", () => {
-			errorMessage = "stream gap detected; reconnecting";
+			errorMessage = "thread stream gap detected; reconnecting";
 			update();
-			stream?.close();
-			connect(runId, state.lastSeq);
+			closeActiveStream();
+			connectThread(actorId);
 		});
+
 		stream.onerror = () => {
-			if (state.status === "done" || state.status === "failed") {
-				return;
-			}
-			errorMessage = "stream interrupted; browser retry active";
+			errorMessage = "thread stream interrupted; browser retry active";
 			update();
 		};
 	};
+
+	const ensureActor = async (actorId: string, actorName: string) => {
+		const actor = await createActor(
+			deps.fetchImpl,
+			toActorSpec({
+				actorId,
+				actorName,
+				text: actorName,
+				mentioned: false,
+			}),
+		);
+		state = upsertActorState(state, actor);
+		state = selectActor(state, actor.actorId);
+		connectThread(actor.actorId);
+		return actor;
+	};
+
+	threadListNode.addEventListener("click", (event) => {
+		const target = event.target;
+		if (!(target instanceof Element)) {
+			return;
+		}
+		const button = target.closest<HTMLElement>("[data-thread-select]");
+		const actorId = button?.dataset.threadSelect;
+		if (!actorId) {
+			return;
+		}
+		state = selectActor(state, actorId);
+		errorMessage = "";
+		connectThread(actorId);
+		update();
+	});
 
 	fileInput.addEventListener("change", () => {
 		uploaded = Array.from(fileInput.files ?? []).map((file) => ({
@@ -232,77 +409,98 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 		update();
 	});
 
-	form.addEventListener("change", (event) => {
-		const target = event.target;
-		if (
-			target instanceof HTMLInputElement &&
-			target.name === "scope" &&
-			(target.value === "me" ||
-				target.value === "team" ||
-				target.value === "org")
-		) {
-			scope = target.value;
-		}
-	});
+	textarea.addEventListener("input", update);
 
-	form.addEventListener("submit", async (event) => {
+	threadForm.addEventListener("submit", async (event) => {
 		event.preventDefault();
-		submitting = true;
-		errorMessage = "";
-		state = initialRunViewState;
-		update();
+		const name = threadNameInput.value.trim();
+		if (name.length === 0) {
+			errorMessage = "thread name is required";
+			update();
+			return;
+		}
 
 		try {
-			const files = Array.from(fileInput.files ?? []);
-			const attachments: UploadedAttachment[] = [];
-			for (const file of files) {
-				const body = new FormData();
-				body.set("file", file);
-				const response = await deps.fetchImpl("/artifacts", {
-					method: "POST",
-					body,
-				});
-				if (!response.ok) {
-					throw new Error("attachment upload failed");
-				}
-				const payload = (await response.json()) as { sha256: string };
-				attachments.push({ name: file.name, sha256: payload.sha256 });
-			}
-
-			uploaded = attachments;
-			const runId = deps.createRunId();
-			const runResponse = await deps.fetchImpl("/runs", {
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({
-					runId,
-					scope,
-					userMsg: textarea.value,
-					attachments: attachments.map((artifact) => ({
-						sha256: artifact.sha256,
-					})),
-				}),
-			});
-			if (!runResponse.ok) {
-				throw new Error("run start failed");
-			}
-			state = { ...initialRunViewState, runId, status: "running" };
-			connect(runId);
+			creatingThread = true;
+			errorMessage = "";
+			update();
+			await ensureActor(normalizeActorId(name), name);
+			threadNameInput.value = "";
 		} catch (error) {
 			errorMessage =
-				error instanceof Error ? error.message : "unexpected submit error";
-			state = { ...state, status: "failed" };
+				error instanceof Error ? error.message : "thread open failed";
 		} finally {
-			submitting = false;
+			creatingThread = false;
 			update();
 		}
 	});
+
+	composeForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		try {
+			sending = true;
+			errorMessage = "";
+			update();
+
+			const target = resolveComposeTarget({
+				text: textarea.value,
+				selectedActorId: state.selectedActorId,
+				threads: listInboxThreads(state),
+			});
+			const submitter = (event as SubmitEvent).submitter;
+			const interrupt =
+				submitter instanceof HTMLButtonElement &&
+				submitter.dataset.action === "interrupt";
+			const uploadedFiles = await uploadAttachments(
+				deps.fetchImpl,
+				Array.from(fileInput.files ?? []),
+			);
+			uploaded = uploadedFiles;
+
+			await ensureActor(target.actorId, target.actorName);
+			const thread = state.threads[target.actorId] ?? null;
+			const posted = await postActorMessage(deps.fetchImpl, target.actorId, {
+				kind: deriveMailboxKind({ interrupt, thread }),
+				text: target.text,
+				attachments: uploadedFiles.map(({ sha256 }) => ({ sha256 })),
+			});
+			state = reduceActorEvent(state, posted);
+			state = selectActor(state, target.actorId);
+			connectThread(target.actorId);
+			void refreshActorState(target.actorId).then(update, () => {});
+			textarea.value = "";
+			fileInput.value = "";
+			uploaded = [];
+		} catch (error) {
+			errorMessage =
+				error instanceof Error ? error.message : "message send failed";
+		} finally {
+			sending = false;
+			update();
+		}
+	});
+
+	void (async () => {
+		try {
+			await refreshActors();
+			const first = listInboxThreads(state)[0];
+			if (first) {
+				state = selectActor(state, first.actor.actorId);
+				connectThread(first.actor.actorId);
+			}
+		} catch (error) {
+			errorMessage = error instanceof Error ? error.message : "boot failed";
+		} finally {
+			booting = false;
+			update();
+		}
+	})();
 
 	update();
 
 	return {
 		destroy() {
-			stream?.close();
+			closeActiveStream();
 			root.innerHTML = "";
 		},
 	};

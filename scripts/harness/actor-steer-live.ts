@@ -2,7 +2,7 @@ import {
 	MockPiProviderManager,
 	createManagedPiSessionFactory,
 } from "../../apps/api/src/pi";
-import { writeJson } from "./run-live-support";
+import { writeJson } from "./live-support";
 
 async function main(): Promise<void> {
 	const mockProviderManager = new MockPiProviderManager();

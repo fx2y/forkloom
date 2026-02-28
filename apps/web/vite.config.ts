@@ -16,6 +16,7 @@ export default defineConfig({
 	server: {
 		port: 5173,
 		proxy: {
+			"/actors": apiOrigin,
 			"/artifacts": apiOrigin,
 			"/runs": apiOrigin,
 			"/health": apiOrigin,

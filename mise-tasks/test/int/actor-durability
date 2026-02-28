@@ -31,7 +31,7 @@ if [[ "$FIRST_EXIT" -eq 0 ]]; then
 fi
 
 pnpm exec tsx scripts/harness/dbos-live-actor-tick.ts recover "$ACTOR_ID" >/tmp/actor-tick-live.recover.log 2>&1
-pnpm exec vitest run tests/int/actor-durability.test.ts
+pnpm exec vitest run tests/int/actor-crash-resume.test.ts
 
 write_mark "test:int:actor-durability"
 echo "test:int:actor-durability ok"
