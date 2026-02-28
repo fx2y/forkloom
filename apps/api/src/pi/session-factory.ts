@@ -184,12 +184,12 @@ export function createManagedPiSessionFactory(
 		const {
 			strictReal = false,
 			bootstrapTimeoutMs: baseBootstrapTimeoutMs,
-			mockBootstrapTimeoutMs: baseMockBootstrapTimeoutMs = 5_000,
+			mockBootstrapTimeoutMs: baseMockBootstrapTimeoutMs = 10_000,
 			...baseSessionInput
 		} = input;
 		const {
 			bootstrapTimeoutMs = baseBootstrapTimeoutMs ??
-				(strictReal ? 10_000 : 1_500),
+				(strictReal ? 10_000 : 10_000),
 			mockBootstrapTimeoutMs = baseMockBootstrapTimeoutMs,
 			...sessionOverrides
 		} = overrides;

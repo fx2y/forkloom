@@ -48,10 +48,10 @@ export function parseRunCreatePayload(input: unknown): RunSpecModel {
 			record.workdirRef == null
 				? undefined
 				: parseArtifactPointer(record.workdirRef, "workdirRef"),
-			modelPref:
-				typeof record.modelPref === "string" ? record.modelPref : undefined,
-			profile:
-				record.profile == null ? undefined : parseRunProfile(record.profile),
+		modelPref:
+			typeof record.modelPref === "string" ? record.modelPref : undefined,
+		profile:
+			record.profile == null ? undefined : parseRunProfile(record.profile),
 	};
 }
 

@@ -289,8 +289,8 @@ describe("executeRunSandbox", () => {
 			),
 		).rejects.toThrow("retry");
 
-			expect(requeued).toBe(1);
-		});
+		expect(requeued).toBe(1);
+	});
 
 	it("does not dead-letter commands when claim ownership is already lost", async () => {
 		let dead = 0;

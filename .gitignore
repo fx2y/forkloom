@@ -50,3 +50,6 @@ spec-0/*
 !spec-0/05*
 # spec-0/*.md
 !spec-0/00-learnings.sqlite
+
+# Local dumps (non-repo)
+tmp_dumps/

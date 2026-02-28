@@ -34,15 +34,22 @@ services:
       ]
     volumes:
       - ./:/work
-      - ${HOME}/.pi/agent:/root/.pi/agent:ro
+      - ${HOME}/.pi/agent:/root/.pi/agent
 
   api:
     image: node:24-alpine
     working_dir: /work
-    command: ["sh", "-lc", "corepack enable && pnpm exec tsx apps/api/src/server.ts"]
+    command:
+      [
+        "sh",
+        "-lc",
+        "apk add --no-cache docker-cli >/dev/null && corepack enable && pnpm exec tsx apps/api/src/server.ts",
+      ]
     volumes:
       - ./:/work
+      - ./:${PWD}
       - ${HOME}/.pi/agent:/root/.pi/agent:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
       DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agentos
@@ -56,6 +63,10 @@ services:
       PI_PROVIDER: ${PI_PROVIDER:-github-copilot}
       PI_MODEL: ${PI_MODEL:-gpt-4.1}
       PI_RPC_STRICT_REAL: ${PI_RPC_STRICT_REAL:-0}
+      SANDBOX_WORK_ROOT: ${PWD}/.cache/sandbox/work
+      SANDBOX_INPUTS_ROOT: ${PWD}/.cache/sandbox/inputs
+      SANDBOX_PI_HOME_ROOT: ${PWD}/.cache/sandbox/pi-home
+      SANDBOX_RUNTIME_NODE_MODULES_ROOT: ${PWD}/node_modules
       PORT: "8080"
     ports:
       - "8080:8080"

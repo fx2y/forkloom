@@ -44,6 +44,8 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(__dirname, "../migrations");
+const SANDBOX_PI_CLI_PATH =
+	"/runtime/node_modules/@mariozechner/pi-coding-agent/dist/cli.js";
 
 async function bootstrap() {
 	const config = loadConfig();
@@ -167,6 +169,9 @@ async function bootstrap() {
 					model: run.spec.modelPref ?? config.piModel,
 					sessionPath: `${sandbox.spec.piHomePath}/.pi/agent/sessions/${run.runId}.jsonl`,
 					strictReal: config.piStrictReal,
+					piCommand: config.sandboxRuntimeNodeModulesRoot
+						? ["node", SANDBOX_PI_CLI_PATH, "--mode", "rpc"]
+						: undefined,
 				},
 				{ mockProviderManager },
 			)(),

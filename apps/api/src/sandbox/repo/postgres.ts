@@ -174,20 +174,22 @@ function toRunCommandModel(row: RunCommandRow): RunCommandModel {
 }
 
 function toSandboxExecModel(row: SandboxExecRow): SandboxExecModel {
-		return {
-			execId: Number(row.exec_id),
-			runId: row.run_id,
-			commandSeq: Number(row.command_seq),
-			commandKind: row.command_kind,
-			status: row.status,
-			exitCode: row.exit_code,
-			cmdList: Array.isArray(row.cmd_list)
-				? row.cmd_list.filter((entry): entry is string => typeof entry === "string")
-				: [],
-			artifactReads: asArtifactPointerArray(row.artifact_reads),
-			artifactWrites: asArtifactPointerArray(row.artifact_writes),
-			stdoutTail: row.stdout_tail ?? "",
-			stderrTail: row.stderr_tail ?? "",
+	return {
+		execId: Number(row.exec_id),
+		runId: row.run_id,
+		commandSeq: Number(row.command_seq),
+		commandKind: row.command_kind,
+		status: row.status,
+		exitCode: row.exit_code,
+		cmdList: Array.isArray(row.cmd_list)
+			? row.cmd_list.filter(
+					(entry): entry is string => typeof entry === "string",
+				)
+			: [],
+		artifactReads: asArtifactPointerArray(row.artifact_reads),
+		artifactWrites: asArtifactPointerArray(row.artifact_writes),
+		stdoutTail: row.stdout_tail ?? "",
+		stderrTail: row.stderr_tail ?? "",
 		stdoutBytes: Number(row.stdout_bytes),
 		stderrBytes: Number(row.stderr_bytes),
 		timeoutSec: row.timeout_sec,
@@ -482,8 +484,8 @@ export class PgSandboxRepo implements SandboxRepo {
 		const client = await this.pool.connect();
 		try {
 			await client.query("begin");
-				const execResult = await client.query<SandboxExecRow>(
-					`insert into sandbox_exec(
+			const execResult = await client.query<SandboxExecRow>(
+				`insert into sandbox_exec(
 						 run_id,
 						 command_seq,
 						 command_kind,
@@ -530,47 +532,47 @@ export class PgSandboxRepo implements SandboxRepo {
 					 stdout_tail, stderr_tail, stdout_bytes, stderr_bytes, timeout_sec,
 					 max_bytes_out, stdout_ref, stderr_ref, workspace_ref, started_at,
 					 ended_at`,
-					[
-						input.runId,
-						input.commandSeq,
-						input.commandKind,
-						input.result.status,
-						input.result.exitCode,
-						JSON.stringify(input.result.cmdList ?? []),
-						JSON.stringify(input.result.artifactReads ?? []),
-						JSON.stringify(input.result.artifactWrites ?? []),
-						input.result.stdoutTail,
-						input.result.stderrTail,
-						input.result.stdoutBytes,
-						input.result.stderrBytes,
-						input.result.timeoutSec,
-						input.result.maxBytesOut,
-						input.result.stdoutRef?.sha256 ?? null,
-						input.result.stderrRef?.sha256 ?? null,
-						input.workspaceRef?.sha256 ??
-							input.result.workspaceRef?.sha256 ??
-							null,
-						input.result.startedAt,
-						input.result.endedAt,
-					],
-				);
-				const commandResult = await client.query(
-					`update run_command
+				[
+					input.runId,
+					input.commandSeq,
+					input.commandKind,
+					input.result.status,
+					input.result.exitCode,
+					JSON.stringify(input.result.cmdList ?? []),
+					JSON.stringify(input.result.artifactReads ?? []),
+					JSON.stringify(input.result.artifactWrites ?? []),
+					input.result.stdoutTail,
+					input.result.stderrTail,
+					input.result.stdoutBytes,
+					input.result.stderrBytes,
+					input.result.timeoutSec,
+					input.result.maxBytesOut,
+					input.result.stdoutRef?.sha256 ?? null,
+					input.result.stderrRef?.sha256 ?? null,
+					input.workspaceRef?.sha256 ??
+						input.result.workspaceRef?.sha256 ??
+						null,
+					input.result.startedAt,
+					input.result.endedAt,
+				],
+			);
+			const commandResult = await client.query(
+				`update run_command
 					 set state = 'done',
 						 done_at = now(),
 						 error = null
 					 where run_id = $1
 					   and seq = $2
 					   and claimed_by = $3`,
-					[input.runId, input.commandSeq, input.workflowId],
+				[input.runId, input.commandSeq, input.workflowId],
+			);
+			if (commandResult.rowCount !== 1) {
+				throw new Error(
+					`persist exec: command claim lost run=${input.runId} seq=${input.commandSeq}`,
 				);
-				if (commandResult.rowCount !== 1) {
-					throw new Error(
-						`persist exec: command claim lost run=${input.runId} seq=${input.commandSeq}`,
-					);
-				}
-				const sandboxResult = await client.query<SandboxRow>(
-					`update sandbox
+			}
+			const sandboxResult = await client.query<SandboxRow>(
+				`update sandbox
 					 set state = $2,
 						 workspace_ref = coalesce($3, workspace_ref),
 						 last_command_seq = greatest(last_command_seq, $4),
@@ -581,21 +583,21 @@ export class PgSandboxRepo implements SandboxRepo {
 					 returning run_id, sandbox_id, backend, profile, state, approval_state,
 					 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
 					 lease_expires_at, workspace_ref, created_at, updated_at, last_seen_at`,
-					[
-						input.runId,
-						input.sandboxState ?? "ready",
-						input.workspaceRef?.sha256 ??
-							input.result.workspaceRef?.sha256 ??
-							null,
-						input.commandSeq,
-						input.workflowId,
-					],
+				[
+					input.runId,
+					input.sandboxState ?? "ready",
+					input.workspaceRef?.sha256 ??
+						input.result.workspaceRef?.sha256 ??
+						null,
+					input.commandSeq,
+					input.workflowId,
+				],
+			);
+			if (sandboxResult.rowCount !== 1) {
+				throw new Error(
+					`persist exec: sandbox lease lost run=${input.runId} wf=${input.workflowId}`,
 				);
-				if (sandboxResult.rowCount !== 1) {
-					throw new Error(
-						`persist exec: sandbox lease lost run=${input.runId} wf=${input.workflowId}`,
-					);
-				}
+			}
 			const nextPendingSeq = await this.getFirstPendingSeqFrom(
 				client,
 				input.runId,

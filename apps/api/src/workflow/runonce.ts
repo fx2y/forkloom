@@ -259,13 +259,13 @@ export function registerRunOnceWorkflow(
 	activeDeps = deps;
 	if (!registeredWorkflow) {
 		registeredWorkflow = DBOS.registerWorkflow(
-				async (runId: string): Promise<void> => {
-					const currentDeps = activeDeps;
-					if (!currentDeps) {
-						throw new Error("RunOnce deps are not registered");
-					}
-					await executeRunOnce(runId, currentDeps, dbosStepRunner);
-				},
+			async (runId: string): Promise<void> => {
+				const currentDeps = activeDeps;
+				if (!currentDeps) {
+					throw new Error("RunOnce deps are not registered");
+				}
+				await executeRunOnce(runId, currentDeps, dbosStepRunner);
+			},
 			{
 				name: "forkloomRunOnce",
 			},

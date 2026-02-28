@@ -1,19 +1,26 @@
 # forkloom AGENT policy (v1.0.0)
-Doctrine: `mise` only. `fnox` secrets. `.env` banned. `MISE_EXPERIMENTAL=1`.
-Model: `AGENTS.md` + `.codex/rules/*.md`. `check:lesson-guard` enforces rule-sync.
 
-## Architecture
-- Runner: `mise`. No npm/shell orchestration.
-- Secrets: `fnox` profiles. `bootstrap:secrets`.
-- Contracts: Schema is truth. v0 frozen (5-noun), v1 additive.
-- PI: RPC mock default; `PI_RPC_STRICT_REAL=1` + `~/.pi` for live.
-- Artifacts: Immutable CAS. Overwrite=409. Meta=lowercase-namespaced.
+Doctrine: `mise` only. `fnox` secrets. `.env` banned. `MISE_EXPERIMENTAL=1`.
+Model: `AGENTS.md` + `.codex/rules/*.md`. `check:lesson-guard` enforces rule-sync on code change.
+
+## Architecture & Code Quality
+- **Runner:** `mise`. Zero npm/shell orchestration. Explicit DAG `.mise.toml`.
+- **Contracts:** Schema=TRUTH. v0 frozen, v1 additive. Parser/types strictly follow schema.
+- **Compute:** `apps/api/src/sandbox` ONLY. Raw docker execution banned outside this slice.
+- **Durability (DBOS):** Replay safety > convenience. Step outputs MUST be JSON serializable. Process-local handles banned across steps.
+- **Storage:** Reserve-first SQL -> store write -> rollback. Immutable CAS.
+- **UI:** Zero `innerHTML`. Text-node DOM only. Truth strictly derived from durable event/projection streams, no runtime guesses. Infinite SSE, client manages disconnect/reconnect.
 
 ## Entrypoints
-- Init: `mise trust && mise install && mise prep && mise run bootstrap`
-- Loop: `mise watch check test:int golden`
-- Ops: `mise run svc` (up/health/logs/reset)
-- Verify: `ci:force` (sequential: check->test:int->golden->fault->bench)
+- **Init:** `mise trust && mise install && mise prep && mise run bootstrap`
+- **Loop:** `mise watch check test:int golden`
+- **Ops:** `mise run svc` (up/health/logs/reset). `reset` drops `sbx-*` orphan containers.
+- **Verify:** `ci:force` (check -> test:int:force -> golden -> fault -> test:sys -> bench). Wait `/health` after fault.
+
+## Live Loop Guidelines
+- NO hot-reload for `api` container. MUST restart `api` & wait `/health` after TS edits before live proofs.
+- `PI_RPC_STRICT_REAL=1` requires host `~/.pi/agent/` writable auth state.
+- Aggregate `--force` is insufficient; use explicit nested tasks.
 
 Imports:
 <!-- Imported from: .codex/rules/00-global.md -->

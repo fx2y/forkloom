@@ -2,12 +2,10 @@
 paths: ["tests/**", "scripts/harness/**", "fixtures/**", "schema/**", "docker-compose.yml"]
 ---
 # Verify & Debug Playbook
-- Gates: `check:*` (lint/unit/contract) -> `test:int:*` (artifact/dbos/pi) -> `golden:*` -> `fault:*` -> `bench:*`.
-- Proof > Prose: Live artifacts (`.cache/test-int/*.json`) close gates.
-- Stale Code: Restart `api` via `svc:down` + `svc:up` before tests if source changed.
+- Gates: `check:*` -> `test:int:*` -> `golden:*` -> `fault:*` -> `test:sys` -> `bench:*`.
+- Fault: Post-fault smoke MUST block on `/health` 200.
+- DBOS: Replay safety > convenience. Step outputs MUST be JSON serializable. Process-local handles (`PiSessionPort`) BANNED across step boundaries.
+- Live Web: Opt-in `FORKLOOM_LIVE_WEB_E2E=1` ONLY.
 - Failure Playbook:
   - Secrets: Delete `.env*`, `mise run bootstrap:secrets`.
-  - Auth: `PI_RPC_STRICT_REAL=1` needs `~/.pi/agent/*`.
-  - Nested Caches: Use `test:int:force`, not aggregate `--force`.
-  - Queue: Blocked actors don't drain. Transient faults requeue automatically.
-  - Image attach: Works on `prompt` only. `followUp` is text-only.
+  - Queue: `persistExec` strict claim/lease mismatch hard-fails. Stale workers blocked.

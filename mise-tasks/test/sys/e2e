@@ -25,6 +25,7 @@ run_forced_gate golden
 run_forced_gate fault
 
 echo "running product smoke..."
+wait_for_url "api" "http://localhost:8080/health" "/tmp/test-sys.health.json"
 curl -fsS http://localhost:8080/health | jq -e '.deps.pg and .deps.s3 and .deps.pi and .deps.api' >/dev/null
 curl -fsS http://localhost:5173 >/tmp/test-sys.web.html
 rg -q 'forkloom thread surface' /tmp/test-sys.web.html

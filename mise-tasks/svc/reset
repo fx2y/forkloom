@@ -6,7 +6,22 @@ cd_repo_root
 require_cmds docker
 
 echo "svc:reset: cleaning up docker volumes and local caches..."
-docker compose down -v --remove-orphans
+docker compose --profile worker down -v --remove-orphans
+
+# Crash-path run sandboxes can leave detached sbx-* containers/volumes.
+mapfile -t sbx_containers < <(
+  docker ps -a --format '{{.ID}} {{.Names}}' | awk '$2 ~ /^sbx-/ { print $1 }'
+)
+if (( ${#sbx_containers[@]} > 0 )); then
+  docker rm -f "${sbx_containers[@]}" >/dev/null
+fi
+
+mapfile -t sbx_volumes < <(
+  docker volume ls --format '{{.Name}}' | awk '/^sbx-/ { print $1 }'
+)
+if (( ${#sbx_volumes[@]} > 0 )); then
+  docker volume rm "${sbx_volumes[@]}" >/dev/null
+fi
 if [[ -d .data/seaweed ]] && ! rm -rf .data/seaweed 2>/dev/null; then
   docker run --rm -v "$PWD:/work" alpine:3.20 sh -lc 'rm -rf /work/.data/seaweed'
 fi

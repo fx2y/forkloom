@@ -2,9 +2,8 @@
 paths: ["**/*"]
 ---
 # Global Invariants
-- Runner: `mise` ONLY. `MISE_EXPERIMENTAL=1`. Zero npm/shell orchestration.
-- Config: `fnox` ONLY. `.env*` BANNED. Hydrate via `bootstrap:secrets`.
-- Repro: `mise.lock` strictness. `MISE_LOCKED=1`. Refresh via `mise lock --platform`.
-- State: Immutable CAS. Append-only events. Deterministic TS > opaque shell.
-- PI Auth: `PI_RPC_STRICT_REAL=1` requires host `~/.pi` state. Writable mirrored HOME.
-- Gate: `check:lesson-guard` blocks unproven changes. CI mode evaluates range; local evaluates tree+staged.
+- Runner: `mise` ONLY. `MISE_EXPERIMENTAL=1`. Zero npm/make/shell orchestration.
+- Config: `fnox` ONLY. `.env*` BANNED. Hydrated via `bootstrap:secrets`.
+- Repro: `mise.lock` strictness. State: Immutable CAS. TS determinism > opaque shell scripts.
+- PI Auth: `PI_RPC_STRICT_REAL=1` needs host `~/.pi` writable. Blank PI output is valid.
+- Guard: `check:lesson-guard` enforces rules. Rule deltas MANDATORY for operation script edits. CI=range; local=tree+staged.

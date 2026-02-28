@@ -35,6 +35,7 @@ export function createRunPlan(
 		| "sandboxMaxBytesOut"
 		| "sandboxPiHomePath"
 		| "sandboxPiHomeRoot"
+		| "sandboxRuntimeNodeModulesRoot"
 	>,
 ): RunPlan {
 	const token = toSandboxToken(spec.runId);
@@ -49,6 +50,7 @@ export function createRunPlan(
 		piHomePath: config.sandboxPiHomePath,
 		inputMountSource: resolve(config.sandboxInputsRoot, spec.runId),
 		cacheMountSource: resolve(config.sandboxPiHomeRoot, spec.runId),
+		runtimeNodeModulesSource: config.sandboxRuntimeNodeModulesRoot,
 		config: {
 			image: config.sandboxImage,
 			workdir: "/work",

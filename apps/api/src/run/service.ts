@@ -5,6 +5,7 @@ import type {
 	RunFailedPayload,
 	RunState,
 } from "@forkloom/contracts";
+import { HttpError } from "../errors";
 import {
 	type RunCommandKind,
 	type RunCommandModel,
@@ -66,10 +67,9 @@ export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
 		runId: string,
 		opts: { workflowID: string },
 	): Promise<void> {
-		const target =
-			opts.workflowID.startsWith(SANDBOX_WORKFLOW_ID_PREFIX)
-				? this.sandbox
-				: this.classic;
+		const target = opts.workflowID.startsWith(SANDBOX_WORKFLOW_ID_PREFIX)
+			? this.sandbox
+			: this.classic;
 		if (!target) {
 			throw new Error(
 				opts.workflowID.startsWith(SANDBOX_WORKFLOW_ID_PREFIX)
@@ -200,12 +200,12 @@ export class RunService {
 		dedupeKey?: string | undefined;
 	}): Promise<{ command: RunCommandModel; created: boolean }> {
 		const sandboxDeps = this.requireSandboxDeps();
-		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(input.runId);
-		if (!sandbox) {
-			throw new Error(`run sandbox not found: ${input.runId}`);
-		}
+		const sandbox = await this.getSandboxOrThrow(input.runId, sandboxDeps);
 		if (sandbox.approvalState === "pending" && input.kind !== "approve") {
-			throw new Error("run requires approve before interactive commands");
+			throw new HttpError(
+				409,
+				"run requires approve before interactive commands",
+			);
 		}
 		const queued = await sandboxDeps.sandboxRepo.queueCommand({
 			runId: input.runId,
@@ -281,10 +281,7 @@ export class RunService {
 		};
 	}> {
 		const sandboxDeps = this.requireSandboxDeps();
-		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(runId);
-		if (!sandbox) {
-			throw new Error(`run sandbox not found: ${runId}`);
-		}
+		const sandbox = await this.getSandboxOrThrow(runId, sandboxDeps);
 		if (!sandbox.workspaceRef) {
 			return {
 				workspace_manifest: {
@@ -310,9 +307,9 @@ export class RunService {
 		};
 	}> {
 		const sandboxDeps = this.requireSandboxDeps();
-		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(input.runId);
-		if (!sandbox?.workspaceRef) {
-			throw new Error(`workspace snapshot not found: ${input.runId}`);
+		const sandbox = await this.getSandboxOrThrow(input.runId, sandboxDeps);
+		if (!sandbox.workspaceRef) {
+			throw new HttpError(409, `workspace snapshot not found: ${input.runId}`);
 		}
 		const exported = await exportWorkspaceFiles({
 			runId: input.runId,
@@ -414,8 +411,19 @@ export class RunService {
 
 	private requireSandboxDeps(): SandboxDeps {
 		if (!this.deps.sandbox) {
-			throw new Error("sandbox control is not configured");
+			throw new HttpError(503, "sandbox control is not configured");
 		}
 		return this.deps.sandbox;
+	}
+
+	private async getSandboxOrThrow(
+		runId: string,
+		sandboxDeps: SandboxDeps,
+	): Promise<SandboxModel> {
+		const sandbox = await sandboxDeps.sandboxRepo.getSandbox(runId);
+		if (!sandbox) {
+			throw new HttpError(404, `run sandbox not found: ${runId}`);
+		}
+		return sandbox;
 	}
 }

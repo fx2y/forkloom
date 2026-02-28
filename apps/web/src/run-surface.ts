@@ -89,7 +89,8 @@ export function mountRunSurface(
 	let uploaded: UploadedAttachment[] = [];
 	let activeStream: PendingRunStream | null = null;
 
-	root.replaceChildren(parseStaticFragment(`
+	root.replaceChildren(
+		parseStaticFragment(`
 		<section class="run-lab">
 			<div class="panel run-panel">
 				<div class="panel-head">
@@ -156,7 +157,8 @@ export function mountRunSurface(
 				</form>
 			</div>
 		</section>
-	`));
+	`),
+	);
 
 	const createForm = root.querySelector<HTMLFormElement>(
 		"[data-run-create-form]",
@@ -314,14 +316,14 @@ export function mountRunSurface(
 		}
 	};
 
-		const update = () => {
-			const run = state.run;
-			const status = run?.status ?? "idle";
-			const sendKind = defaultCommandKind(run);
-			const canExport =
-				((run?.files as { workspaceRef?: { sha256: string } } | undefined)
-					?.workspaceRef?.sha256?.length ?? 0) > 0;
-			errorNode.hidden = errorMessage.length === 0;
+	const update = () => {
+		const run = state.run;
+		const status = run?.status ?? "idle";
+		const sendKind = defaultCommandKind(run);
+		const canExport =
+			((run?.files as { workspaceRef?: { sha256: string } } | undefined)
+				?.workspaceRef?.sha256?.length ?? 0) > 0;
+		errorNode.hidden = errorMessage.length === 0;
 		errorNode.textContent = errorMessage;
 		statusNode.textContent = status;
 		statusNode.dataset.state = status;
@@ -341,7 +343,7 @@ export function mountRunSurface(
 			sending || !canSendRunText(run) || run?.status !== "running";
 		approveButton.disabled = sending || !canApproveRun(run);
 		abortButton.disabled = sending || !canAbortRun(run);
-			exportButton.disabled = sending || !canExport;
+		exportButton.disabled = sending || !canExport;
 		commandInput.disabled = sending || run == null;
 	};
 

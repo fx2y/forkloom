@@ -226,22 +226,22 @@ describe("PgSandboxRepo", () => {
 		);
 	});
 
-		it("persists exec rows and advances sandbox state in one transaction", async () => {
-			const pool = new StubPool([
-				{},
-				{ rows: [execRow()], rowCount: 1 },
-				{ rowCount: 1 },
-				{
-					rows: [
-						sandboxRow({
-							state: "ready",
-							workspace_ref: "a".repeat(64),
-							inflight_workflow_id: "wf-1",
-						}),
-					],
-					rowCount: 1,
-				},
-				{ rows: [{ seq: null }], rowCount: 1 },
+	it("persists exec rows and advances sandbox state in one transaction", async () => {
+		const pool = new StubPool([
+			{},
+			{ rows: [execRow()], rowCount: 1 },
+			{ rowCount: 1 },
+			{
+				rows: [
+					sandboxRow({
+						state: "ready",
+						workspace_ref: "a".repeat(64),
+						inflight_workflow_id: "wf-1",
+					}),
+				],
+				rowCount: 1,
+			},
+			{ rows: [{ seq: null }], rowCount: 1 },
 			{},
 		]);
 		const repo = new PgSandboxRepo({
@@ -269,17 +269,17 @@ describe("PgSandboxRepo", () => {
 			},
 		});
 
-			expect(persisted.exec.commandSeq).toBe(3);
-			expect(persisted.sandbox.state).toBe("ready");
-			expect(persisted.nextPendingSeq).toBeNull();
-			expect(persisted.exec.cmdList).toEqual(["prompt", "hello"]);
-			expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
-				"begin",
-				expect.stringContaining("insert into sandbox_exec"),
-				expect.stringContaining("update run_command"),
-				expect.stringContaining("inflight_workflow_id"),
-				expect.stringContaining("select min(seq) as seq"),
-				"commit",
-			]);
-		});
+		expect(persisted.exec.commandSeq).toBe(3);
+		expect(persisted.sandbox.state).toBe("ready");
+		expect(persisted.nextPendingSeq).toBeNull();
+		expect(persisted.exec.cmdList).toEqual(["prompt", "hello"]);
+		expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
+			"begin",
+			expect.stringContaining("insert into sandbox_exec"),
+			expect.stringContaining("update run_command"),
+			expect.stringContaining("inflight_workflow_id"),
+			expect.stringContaining("select min(seq) as seq"),
+			"commit",
+		]);
+	});
 });

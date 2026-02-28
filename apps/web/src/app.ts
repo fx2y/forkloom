@@ -5,10 +5,12 @@ import { parseStaticFragment } from "./static-html";
 import "./styles.css";
 
 export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
-	root.replaceChildren(parseStaticFragment(`
+	root.replaceChildren(
+		parseStaticFragment(`
 		<div data-inbox-surface></div>
 		<div data-run-surface></div>
-	`));
+	`),
+	);
 
 	const inboxRoot = root.querySelector<HTMLElement>("[data-inbox-surface]");
 	const runRoot = root.querySelector<HTMLElement>("[data-run-surface]");

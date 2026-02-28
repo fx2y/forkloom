@@ -102,11 +102,41 @@ export function createSandboxSpec(input: {
 	piHomePath: string;
 	inputMountSource: string;
 	cacheMountSource: string;
+	runtimeNodeModulesSource?: string | undefined;
 	config: SandboxConfigInput;
 	extraEnv?: Record<string, string> | undefined;
 	imageDigest?: string | undefined;
 }): SandboxSpecModel {
 	const preset = SANDBOX_PROFILE_PRESETS[input.profile];
+	const mounts: SandboxSpecModel["mounts"] = [
+		{
+			kind: "work",
+			source: input.workVolume,
+			dest: input.config.workdir,
+			mode: "rw",
+		},
+		{
+			kind: "inputs",
+			source: input.inputMountSource,
+			dest: "/inputs",
+			mode: "ro",
+		},
+	];
+	if (input.runtimeNodeModulesSource) {
+		mounts.push({
+			kind: "inputs",
+			source: input.runtimeNodeModulesSource,
+			dest: "/runtime/node_modules",
+			mode: "ro",
+		});
+	}
+	mounts.push({
+		kind: "cache",
+		source: input.cacheMountSource,
+		dest: input.piHomePath,
+		mode: "rw",
+	});
+
 	return {
 		runId: input.runId,
 		sandboxId: input.sandboxId,
@@ -118,26 +148,7 @@ export function createSandboxSpec(input: {
 		workdir: input.config.workdir,
 		piHomeHostDir: input.piHomeHostDir,
 		piHomePath: input.piHomePath,
-		mounts: [
-			{
-				kind: "work",
-				source: input.workVolume,
-				dest: input.config.workdir,
-				mode: "rw",
-			},
-			{
-				kind: "inputs",
-				source: input.inputMountSource,
-				dest: "/inputs",
-				mode: "ro",
-			},
-			{
-				kind: "cache",
-				source: input.cacheMountSource,
-				dest: input.piHomePath,
-				mode: "rw",
-			},
-		],
+		mounts,
 		env: {
 			HOME: input.piHomePath,
 			...(input.extraEnv ?? {}),

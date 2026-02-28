@@ -425,25 +425,25 @@ async function run(): Promise<void> {
 			getCurrentCommand: async () => null,
 			markApproved: async () => sampleSandbox(),
 			markCommandDead: async () => null,
-				persistExec: async () => {
-					await recordEffect("persist_exec");
-					return {
-						exec: {
-							execId: 1,
-							runId,
-							commandSeq: 1,
-							commandKind: "prompt" as const,
-							status: "done" as const,
-							exitCode: 0,
-							cmdList: ["prompt", "ship it"],
-							artifactReads: [{ sha256: "a".repeat(64) }],
-							artifactWrites: [
-								{ sha256: "b".repeat(64) },
-								{ sha256: "c".repeat(64) },
-							],
-							stdoutTail: "",
-							stderrTail: "",
-							stdoutBytes: 0,
+			persistExec: async () => {
+				await recordEffect("persist_exec");
+				return {
+					exec: {
+						execId: 1,
+						runId,
+						commandSeq: 1,
+						commandKind: "prompt" as const,
+						status: "done" as const,
+						exitCode: 0,
+						cmdList: ["prompt", "ship it"],
+						artifactReads: [{ sha256: "a".repeat(64) }],
+						artifactWrites: [
+							{ sha256: "b".repeat(64) },
+							{ sha256: "c".repeat(64) },
+						],
+						stdoutTail: "",
+						stderrTail: "",
+						stdoutBytes: 0,
 						stderrBytes: 0,
 						timeoutSec: 900,
 						maxBytesOut: 1024,
@@ -459,29 +459,29 @@ async function run(): Promise<void> {
 				await recordEffect("release_lease");
 			},
 		},
-			backend: {
-				ensure: async () => {
-					await recordEffect("ensure_sandbox");
-					return sampleSandbox();
-				},
-				exec: async () => {
-					await recordEffect("collect_exec");
-					return {
-						exitCode: 0,
-						status: "done",
-						cmdList: ["sh", "-lc", "tail"],
-						artifactReads: [{ sha256: "a".repeat(64) }],
-						artifactWrites: [],
-						stdoutTail: "result\n",
-						stderrTail: "",
-						stdoutBytes: 7,
-						stderrBytes: 0,
-						timeoutSec: 900,
-						maxBytesOut: 1024,
-						startedAt: "2026-02-28T00:00:06.000Z",
-						endedAt: "2026-02-28T00:00:07.000Z",
-					};
-				},
+		backend: {
+			ensure: async () => {
+				await recordEffect("ensure_sandbox");
+				return sampleSandbox();
+			},
+			exec: async () => {
+				await recordEffect("collect_exec");
+				return {
+					exitCode: 0,
+					status: "done",
+					cmdList: ["sh", "-lc", "tail"],
+					artifactReads: [{ sha256: "a".repeat(64) }],
+					artifactWrites: [],
+					stdoutTail: "result\n",
+					stderrTail: "",
+					stdoutBytes: 7,
+					stderrBytes: 0,
+					timeoutSec: 900,
+					maxBytesOut: 1024,
+					startedAt: "2026-02-28T00:00:06.000Z",
+					endedAt: "2026-02-28T00:00:07.000Z",
+				};
+			},
 			snapshot: async () => {
 				await recordEffect("snapshot");
 				return { sha256: "c".repeat(64) };

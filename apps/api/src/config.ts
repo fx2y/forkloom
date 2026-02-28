@@ -14,6 +14,7 @@ export type AppConfig = {
 	sandboxWorkRoot: string;
 	sandboxInputsRoot: string;
 	sandboxPiHomeRoot: string;
+	sandboxRuntimeNodeModulesRoot?: string | undefined;
 	sandboxPiHomePath: string;
 	sandboxDefaultTimeoutSec: number;
 	sandboxMaxBytesOut: number;
@@ -86,6 +87,8 @@ export function loadConfig(): AppConfig {
 			process.env.SANDBOX_INPUTS_ROOT ?? ".cache/sandbox/inputs",
 		sandboxPiHomeRoot:
 			process.env.SANDBOX_PI_HOME_ROOT ?? ".cache/sandbox/pi-home",
+		sandboxRuntimeNodeModulesRoot:
+			process.env.SANDBOX_RUNTIME_NODE_MODULES_ROOT,
 		sandboxPiHomePath: process.env.SANDBOX_PI_HOME_PATH ?? "/pi-home",
 		sandboxDefaultTimeoutSec: parsePositiveInt(
 			process.env.SANDBOX_TIMEOUT_SEC,

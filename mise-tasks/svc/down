@@ -5,6 +5,6 @@ source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 cd_repo_root
 require_cmds docker
 
-docker compose down --remove-orphans
+docker compose --profile worker down --remove-orphans
 write_mark "svc:down"
 echo "svc:down ok"

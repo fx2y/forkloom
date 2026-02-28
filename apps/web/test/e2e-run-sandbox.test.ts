@@ -1,4 +1,8 @@
+import type { IncomingMessage } from "node:http";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRunId } from "../../../packages/shared/src/run-id";
 import { mountApp } from "../src/app";
 
 type Listener = (event: MessageEvent<string>) => void;
@@ -34,6 +38,133 @@ class FakeEventSource {
 	close(): void {
 		this.closed = true;
 	}
+}
+
+class LiveEventSource {
+	private readonly listeners = new Map<string, Listener[]>();
+	private req: ReturnType<typeof httpRequest> | null = null;
+	private response: IncomingMessage | null = null;
+	private closed = false;
+	public onerror: ((event: Event) => void) | null = null;
+
+	constructor(
+		private readonly apiOrigin: string,
+		private readonly url: string,
+	) {
+		queueMicrotask(() => {
+			this.connect();
+		});
+	}
+
+	addEventListener(name: string, listener: Listener): void {
+		const listeners = this.listeners.get(name) ?? [];
+		listeners.push(listener);
+		this.listeners.set(name, listeners);
+	}
+
+	close(): void {
+		this.closed = true;
+		this.response?.destroy();
+		this.req?.destroy();
+	}
+
+	private emit(name: string, data: string): void {
+		const listeners = this.listeners.get(name) ?? [];
+		for (const listener of listeners) {
+			listener(
+				new MessageEvent("message", {
+					data,
+				}),
+			);
+		}
+	}
+
+	private connect(): void {
+		const target = new URL(this.url, this.apiOrigin);
+		const requestImpl =
+			target.protocol === "https:" ? httpsRequest : httpRequest;
+		this.req = requestImpl(
+			target,
+			{ headers: { accept: "text/event-stream" } },
+			(response) => {
+				this.response = response;
+				if ((response.statusCode ?? 500) >= 400) {
+					if (!this.closed && this.onerror) {
+						this.onerror(new Event("error"));
+					}
+					return;
+				}
+				response.setEncoding("utf8");
+				let buffer = "";
+				let eventName = "message";
+				let payloadLines: string[] = [];
+
+				const flush = () => {
+					if (payloadLines.length === 0) {
+						eventName = "message";
+						return;
+					}
+					this.emit(eventName, payloadLines.join("\n"));
+					eventName = "message";
+					payloadLines = [];
+				};
+
+				response.on("data", (chunk: string) => {
+					buffer += chunk;
+					while (true) {
+						const eol = buffer.indexOf("\n");
+						if (eol < 0) {
+							break;
+						}
+						const rawLine = buffer.slice(0, eol);
+						buffer = buffer.slice(eol + 1);
+						const line = rawLine.endsWith("\r")
+							? rawLine.slice(0, rawLine.length - 1)
+							: rawLine;
+						if (line.length === 0) {
+							flush();
+							continue;
+						}
+						if (line.startsWith(":")) {
+							continue;
+						}
+						if (line.startsWith("event:")) {
+							eventName = line.slice("event:".length).trim();
+							continue;
+						}
+						if (line.startsWith("data:")) {
+							payloadLines.push(line.slice("data:".length).trimStart());
+						}
+					}
+				});
+
+				response.on("end", () => {
+					flush();
+					if (!this.closed && this.onerror) {
+						this.onerror(new Event("error"));
+					}
+				});
+			},
+		);
+		this.req.on("error", () => {
+			if (!this.closed && this.onerror) {
+				this.onerror(new Event("error"));
+			}
+		});
+		this.req.end();
+	}
+}
+
+function createApiFetch(apiOrigin: string): typeof fetch {
+	return async (input, init) => {
+		if (typeof input === "string") {
+			return fetch(new URL(input, apiOrigin), init);
+		}
+		if (input instanceof URL) {
+			return fetch(new URL(input.toString(), apiOrigin), init);
+		}
+		return fetch(new URL(input.url, apiOrigin), init);
+	};
 }
 
 describe("web run sandbox flow", () => {
@@ -202,4 +333,76 @@ describe("web run sandbox flow", () => {
 			"running",
 		);
 	});
+
+	const liveOnly = process.env.FORKLOOM_LIVE_WEB_E2E === "1";
+	(liveOnly ? it : it.skip)(
+		"runs the real /runs lifecycle with live fetch and live SSE (no mock transport)",
+		async () => {
+			const apiOrigin =
+				process.env.FORKLOOM_API_ORIGIN ?? "http://localhost:8080";
+			const health = await fetch(new URL("/health", apiOrigin));
+			if (!health.ok) {
+				throw new Error(`api health failed (${health.status})`);
+			}
+
+			const runId = createRunId();
+			const root = document.createElement("div");
+			document.body.append(root);
+			const app = mountApp(root, {
+				fetchImpl: createApiFetch(apiOrigin),
+				createEventSource: (url) =>
+					new LiveEventSource(apiOrigin, url) as unknown as EventSource,
+			});
+
+			try {
+				const runIdInput = root.querySelector<HTMLInputElement>(
+					"[data-run-id-input]",
+				);
+				const promptInput = root.querySelector<HTMLTextAreaElement>(
+					"[data-run-prompt-input]",
+				);
+				const createForm = root.querySelector<HTMLFormElement>(
+					"[data-run-create-form]",
+				);
+				const abortButton =
+					root.querySelector<HTMLButtonElement>("[data-run-abort]");
+				if (!(runIdInput && promptInput && createForm && abortButton)) {
+					throw new Error("missing run controls");
+				}
+
+				runIdInput.value = runId;
+				promptInput.value = "summarize operator setup in three bullets";
+				createForm.dispatchEvent(new Event("submit", { bubbles: true }));
+
+				await vi.waitFor(
+					() => {
+						expect(
+							root.querySelector("[data-run-preview]")?.textContent,
+						).toContain("WILL-RUN safe / off");
+						expect(abortButton.disabled).toBe(false);
+						expect(
+							root.querySelector("[data-run-trace]")?.textContent,
+						).toContain("run_started");
+					},
+					{ timeout: 60_000 },
+				);
+
+				abortButton.click();
+				await vi.waitFor(
+					() => {
+						expect(["aborted", "failed"]).toContain(
+							root.querySelector("[data-run-status]")?.textContent,
+						);
+						expect(
+							root.querySelector("[data-run-trace]")?.textContent,
+						).toContain("run_aborted");
+					},
+					{ timeout: 60_000 },
+				);
+			} finally {
+				app.destroy();
+			}
+		},
+		90_000,
+	);
 });
