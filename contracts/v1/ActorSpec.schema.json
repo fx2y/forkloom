@@ -1,0 +1,25 @@
+{
+  "$id": "https://forkloom/contracts/v1/ActorSpec.schema.json",
+  "title": "ActorSpec",
+  "type": "object",
+  "required": ["actorId", "name"],
+  "properties": {
+    "actorId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "memRef": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

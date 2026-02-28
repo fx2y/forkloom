@@ -46,6 +46,16 @@ class StubRpcClient {
 				},
 			};
 		}
+		if (request.type === "get_last_assistant_text") {
+			return {
+				type: "response",
+				id,
+				success: true,
+				data: {
+					text: "",
+				},
+			};
+		}
 		return { type: "response", id, success: true, data: {} };
 	}
 
@@ -86,5 +96,25 @@ describe("RpcPiSessionPort streaming behavior", () => {
 		});
 		const promptCall = sent.find((item) => item.type === "prompt");
 		expect(promptCall?.streamingBehavior).toBe("steer");
+	});
+
+	it("configures one-at-a-time queue modes through RPC commands", async () => {
+		const rpc = new StubRpcClient(false);
+		const session = new RpcPiSessionPort(rpc);
+
+		await session.setQueueMode({
+			followUpMode: "one-at-a-time",
+			steeringMode: "one-at-a-time",
+		});
+
+		expect(rpc.sent.map((item) => item.type)).toContain("set_follow_up_mode");
+		expect(rpc.sent.map((item) => item.type)).toContain("set_steering_mode");
+	});
+
+	it("allows blank assistant text responses from the RPC adapter", async () => {
+		const rpc = new StubRpcClient(false);
+		const session = new RpcPiSessionPort(rpc);
+
+		await expect(session.getLastAssistantText()).resolves.toBe("");
 	});
 });

@@ -9,7 +9,8 @@ export {
 	normalizeMailboxText,
 } from "./service";
 export type { ActorServiceDeps } from "./service";
-export { NoopActorBatchProcessor } from "./processor";
+export { NoopActorBatchProcessor, PiActorBatchProcessor } from "./processor";
+export type { CreateActorPiSession } from "./processor";
 export {
 	ACTOR_TICK_BUDGET,
 	ACTOR_TICK_QUEUE,
@@ -23,4 +24,10 @@ export {
 	ACTOR_STATUSES,
 } from "./ports";
 export type * from "./ports";
+export {
+	ACTOR_EVENT_KINDS,
+	appendActorEvent,
+	toActorEventContract,
+	toActorStateContract,
+} from "./event";
 export { PgActorRepo } from "./repo/postgres";

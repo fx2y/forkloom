@@ -1,0 +1,29 @@
+{
+  "$id": "https://forkloom/contracts/v1/ActorState.schema.json",
+  "title": "ActorState",
+  "type": "object",
+  "required": ["actorId", "name", "status", "mailboxCursor", "updatedAt"],
+  "properties": {
+    "actorId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["idle", "streaming", "blocked", "dead"]
+    },
+    "mailboxCursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

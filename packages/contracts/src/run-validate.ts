@@ -1,2 +1,7 @@
-export type { RunContractName } from "./validate";
-export { getRunContractNames, validateRunByName } from "./validate";
+export type { ActorContractName, RunContractName } from "./validate";
+export {
+	getActorContractNames,
+	getRunContractNames,
+	validateActorByName,
+	validateRunByName,
+} from "./validate";

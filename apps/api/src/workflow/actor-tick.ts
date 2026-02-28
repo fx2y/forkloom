@@ -29,12 +29,11 @@ export type ActorTickDeps = {
 	repo: Pick<
 		ActorRepo,
 		| "acquireTickLease"
-		| "appendEvents"
 		| "claimNextMessages"
 		| "getActorState"
 		| "getFirstPendingSeq"
 		| "markMessagesDead"
-		| "markMessagesDone"
+		| "persistProcessedBatch"
 		| "releaseTickLease"
 	>;
 	processor: ActorBatchProcessor;
@@ -146,22 +145,23 @@ export async function executeActorTick(
 			);
 			await maybeAfterStep(deps, "applyBatch", actorId);
 
-			await steps.runStep("persistBatch", () =>
-				deps.repo.appendEvents({
+			const persisted = await steps.runStep("persistBatch", () =>
+				deps.repo.persistProcessedBatch({
 					actorId,
+					workflowId,
+					seqs: claimed.map((message) => message.seq),
+					actorStatus: batchResult.actorStatus,
+					piSessionId: batchResult.piSessionId,
+					piSessionFile: batchResult.piSessionFile,
 					events: batchResult.events,
 				}),
 			);
 			await maybeAfterStep(deps, "persistBatch", actorId);
 
-			const marked = await steps.runStep("markBatch", () =>
-				deps.repo.markMessagesDone({
-					actorId,
-					workflowId,
-					seqs: claimed.map((message) => message.seq),
-					actorStatus: batchResult.actorStatus,
-				}),
-			);
+			const marked = await steps.runStep("markBatch", async () => ({
+				mailboxCursor: persisted.mailboxCursor,
+				remainingPendingSeq: persisted.remainingPendingSeq,
+			}));
 			await maybeAfterStep(deps, "markBatch", actorId);
 			activeBatch = [];
 			remainingPendingSeq = marked.remainingPendingSeq;

@@ -75,6 +75,14 @@ curl -fsS http://localhost:8080/artifacts/$SHA/meta | jq .
 - `POST /artifacts/:sha256/link` append parent/meta only
 - `GET /health` dependency map (`pg/s3/pi/api`)
 
+## Actor API v1
+
+- `POST /actors` create or upsert an actor mailbox executor
+- `GET /actors` list actor states
+- `GET /actors/:actorId` fetch one actor state
+- `POST /actors/:actorId/messages` enqueue a mailbox message
+- `GET /actors/:actorId/events` stream append-only actor events over SSE (`Last-Event-ID` or `?since=<seq>`)
+
 ## Run UI
 
 - `web` proxies `/runs`, `/artifacts`, `/health` to `api`
@@ -105,6 +113,18 @@ curl -fsS http://localhost:8080/runs \
 curl -N http://localhost:8080/runs/$RUN_ID/events
 ```
 
+## Actor API Smoke
+
+```bash
+curl -fsS http://localhost:8080/actors \
+  -H 'content-type: application/json' \
+  -d '{"actorId":"actor-smoke","name":"ops"}' | jq .
+curl -fsS http://localhost:8080/actors/actor-smoke/messages \
+  -H 'content-type: application/json' \
+  -d '{"kind":"prompt","text":"reply with one concise line","attachments":[]}' | jq .
+curl -N http://localhost:8080/actors/actor-smoke/events
+```
+
 ## Data Layout
 
 - Object bytes: `s3://agentos/cas/aa/<sha256>`
@@ -119,6 +139,8 @@ MISE_EXPERIMENTAL=1 mise run bootstrap:doctor
 MISE_EXPERIMENTAL=1 mise run check:contract
 MISE_EXPERIMENTAL=1 mise run check:unit
 MISE_EXPERIMENTAL=1 mise run test:int
+MISE_EXPERIMENTAL=1 mise run test:int:actor-functional
+MISE_EXPERIMENTAL=1 mise run test:int:actor-sse
 MISE_EXPERIMENTAL=1 mise run test:sys
 MISE_EXPERIMENTAL=1 mise run golden
 MISE_EXPERIMENTAL=1 mise run fault

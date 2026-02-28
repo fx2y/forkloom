@@ -2,10 +2,13 @@ import { readFileSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { renderTypes } from "./typegen";
 import {
+	type ActorContractName,
 	type ContractName,
 	type RunContractName,
+	getActorContractNames,
 	getContractNames,
 	getRunContractNames,
+	validateActorByName,
 	validateByName,
 	validateRunByName,
 } from "./validate";
@@ -34,9 +37,19 @@ function contractForV0Example(name: string): ContractName | "" {
 	}
 }
 
-function contractForV1Example(name: string): RunContractName | "" {
+function contractForV1Example(
+	name: string,
+): RunContractName | ActorContractName | "" {
 	const head = name.split(".")[0];
 	switch (head) {
+		case "actor-spec":
+			return "ActorSpec";
+		case "mailbox-post":
+			return "MailboxPost";
+		case "actor-state":
+			return "ActorState";
+		case "actor-event":
+			return "ActorEvent";
 		case "run-spec":
 			return "RunSpec";
 		case "run-state":
@@ -107,8 +120,13 @@ function assertV1Examples(): void {
 	assertExamples({
 		examplesDir: V1_EXAMPLES_DIR,
 		inferContract: contractForV1Example,
-		getNames: getRunContractNames,
-		validate: validateRunByName,
+		getNames: () => [...getRunContractNames(), ...getActorContractNames()],
+		validate: (name, payload) => {
+			if (name === "RunSpec" || name === "RunState" || name === "RunEvent") {
+				return validateRunByName(name, payload);
+			}
+			return validateActorByName(name, payload);
+		},
 	});
 }
 
@@ -176,6 +194,12 @@ function assertNoBannedNounsInV0(): void {
 
 function assertRunNounsScopedToV1(): void {
 	const runNouns: RunContractName[] = ["RunSpec", "RunState", "RunEvent"];
+	const actorNouns: ActorContractName[] = [
+		"ActorSpec",
+		"MailboxPost",
+		"ActorState",
+		"ActorEvent",
+	];
 	const v0Files = readdirSync(V0_SCHEMA_DIR).filter((file) =>
 		file.endsWith(".schema.json"),
 	);
@@ -185,22 +209,20 @@ function assertRunNounsScopedToV1(): void {
 
 	for (const file of v0Files) {
 		const content = readFileSync(resolve(V0_SCHEMA_DIR, file), "utf8");
-		for (const noun of runNouns) {
+		for (const noun of [...runNouns, ...actorNouns]) {
 			if (new RegExp(`"${noun}"`).test(content)) {
-				throw new Error(`run noun leaked into v0 schema ${file}: "${noun}"`);
+				throw new Error(`v1 noun leaked into v0 schema ${file}: "${noun}"`);
 			}
 		}
 	}
 
-	for (const noun of runNouns) {
+	for (const noun of [...runNouns, ...actorNouns]) {
 		const found = v1Files.some((file) => {
 			const content = readFileSync(resolve(V1_SCHEMA_DIR, file), "utf8");
 			return new RegExp(`"${noun}"`).test(content);
 		});
 		if (!found) {
-			throw new Error(
-				`required v1 run noun missing from v1 schemas: "${noun}"`,
-			);
+			throw new Error(`required v1 noun missing from v1 schemas: "${noun}"`);
 		}
 	}
 }

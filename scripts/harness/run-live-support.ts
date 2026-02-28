@@ -50,7 +50,7 @@ const TERMINAL_EVENT_KINDS = new Set<RunEvent["kind"]>([
 	"run_failed",
 ]);
 
-function apiOrigin(): string {
+export function apiOrigin(): string {
 	return process.env.FORKLOOM_API_ORIGIN ?? DEFAULT_API_ORIGIN;
 }
 

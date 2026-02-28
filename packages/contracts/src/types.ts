@@ -17,12 +17,30 @@ export type RunEventKind =
 	| "artifact_written"
 	| "run_done"
 	| "run_failed";
+export type MailboxKind =
+	| "prompt"
+	| "steer"
+	| "followUp"
+	| "system"
+	| "timer"
+	| "agent2agent";
+export type ActorStatus = "idle" | "streaming" | "blocked" | "dead";
+export type ActorEventKind =
+	| "mailbox_queued"
+	| "session_bound"
+	| "pi_event"
+	| "mailbox_processed"
+	| "mailbox_failed";
 
 export type ArtifactRef = {
 	sha256: string;
 };
 
 export type RunArtifactRef = {
+	sha256: string;
+};
+
+export type ActorArtifactRef = {
 	sha256: string;
 };
 
@@ -162,3 +180,34 @@ export type RunEvent =
 	| RunFailedEvent;
 
 export type TerminalRunEvent = RunDoneEvent | RunFailedEvent;
+
+export type ActorSpec = {
+	actorId: string;
+	name: string;
+	workspaceId?: string;
+	memRef?: string;
+};
+
+export type MailboxPost = {
+	kind: MailboxKind;
+	text: string;
+	attachments: ActorArtifactRef[];
+	dedupeKey?: string;
+	metadata?: Record<string, unknown>;
+};
+
+export type ActorState = {
+	actorId: string;
+	name: string;
+	status: ActorStatus;
+	mailboxCursor: number;
+	updatedAt: string;
+};
+
+export type ActorEvent = {
+	actorId: string;
+	seq: number;
+	t: string;
+	kind: ActorEventKind;
+	payload: Record<string, unknown>;
+};

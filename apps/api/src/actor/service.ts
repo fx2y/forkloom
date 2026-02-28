@@ -38,6 +38,14 @@ export class ActorService {
 		return this.deps.repo.getActorState(actorId);
 	}
 
+	listActorEvents(
+		actorId: string,
+		sinceEventId: number,
+		limit: number,
+	): Promise<ActorEventModel[]> {
+		return this.deps.repo.listActorEvents(actorId, sinceEventId, limit);
+	}
+
 	async sendMessage(input: MailboxPostModel): Promise<ActorEventModel> {
 		const posted = await this.deps.repo.postMailboxMessage({
 			...input,

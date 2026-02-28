@@ -1,0 +1,39 @@
+{
+  "$id": "https://forkloom/contracts/v1/MailboxPost.schema.json",
+  "title": "MailboxPost",
+  "type": "object",
+  "required": ["kind", "text", "attachments"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["prompt", "steer", "followUp", "system", "timer", "agent2agent"]
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sha256"],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dedupeKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

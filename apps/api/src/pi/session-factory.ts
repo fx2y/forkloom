@@ -3,6 +3,7 @@ import {
 	type CreatePiSessionInput,
 	type PiImageInput,
 	type PiPromptInput,
+	type PiQueueMode,
 	type PiSessionPort,
 	type PiSessionState,
 	type PiSessionStats,
@@ -47,6 +48,13 @@ class ManagedPiSessionPort implements PiSessionPort {
 		return this.inner.followUp(message);
 	}
 
+	setQueueMode(input: {
+		followUpMode?: PiQueueMode | undefined;
+		steeringMode?: PiQueueMode | undefined;
+	}): Promise<void> {
+		return this.inner.setQueueMode(input);
+	}
+
 	abort(): Promise<void> {
 		return this.inner.abort();
 	}
@@ -61,6 +69,10 @@ class ManagedPiSessionPort implements PiSessionPort {
 
 	getSessionStats(): Promise<PiSessionStats> {
 		return this.inner.getSessionStats();
+	}
+
+	drainPendingEvents(): Record<string, unknown>[] {
+		return this.inner.drainPendingEvents();
 	}
 
 	waitUntilIdle(options?: {

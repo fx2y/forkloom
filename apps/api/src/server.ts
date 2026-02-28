@@ -2,9 +2,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
 import {
+	ActorService,
 	LazyDbosActorWorkflowLauncher,
-	NoopActorBatchProcessor,
 	PgActorRepo,
+	PiActorBatchProcessor,
 } from "./actor";
 import { loadConfig } from "./config";
 import {
@@ -85,6 +86,16 @@ async function bootstrap() {
 	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
 	const runService = new RunService({ runRepo, workflowLauncher });
 	const actorWorkflowLauncher = new LazyDbosActorWorkflowLauncher();
+	const actorService = new ActorService({
+		repo: actorRepo,
+		workflowLauncher: actorWorkflowLauncher,
+	});
+	const actorProcessor = new PiActorBatchProcessor({
+		createPiSession: async () =>
+			createPiSession({
+				model: config.piModel,
+			}),
+	});
 	const runWorkflow = registerRunOnceWorkflow({
 		runRepo,
 		runService,
@@ -96,14 +107,18 @@ async function bootstrap() {
 	});
 	const actorWorkflow = registerActorTickWorkflow({
 		repo: actorRepo,
-		processor: new NoopActorBatchProcessor(),
+		processor: actorProcessor,
 		workflowLauncher: actorWorkflowLauncher,
 	});
 	workflowLauncher.bind(runWorkflow);
 	actorWorkflowLauncher.bind(actorWorkflow);
 	await launchDbos(config.databaseUrl);
 
-	const app = buildApiRouter({ artifactService: service, runService });
+	const app = buildApiRouter({
+		artifactService: service,
+		actorService,
+		runService,
+	});
 	app.get(
 		"/health",
 		buildHealthHandler({
@@ -113,11 +128,12 @@ async function bootstrap() {
 		}),
 	);
 
-	return { app, config, repo, runRepo, actorRepo };
+	return { app, config, repo, runRepo, actorRepo, actorProcessor };
 }
 
 async function main(): Promise<void> {
-	const { app, config, repo, runRepo, actorRepo } = await bootstrap();
+	const { app, config, repo, runRepo, actorRepo, actorProcessor } =
+		await bootstrap();
 
 	const server = app.listen(config.port, () => {
 		const payload = {
@@ -137,6 +153,7 @@ async function main(): Promise<void> {
 		await repo.close();
 		await runRepo.close();
 		await actorRepo.close();
+		await actorProcessor.closeAll();
 		await shutdownDbos();
 	};
 

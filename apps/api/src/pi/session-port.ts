@@ -8,6 +8,7 @@ import {
 } from "./rpc-client";
 
 export type PiStreamingBehavior = "steer" | "followUp";
+export type PiQueueMode = "one-at-a-time" | "all";
 
 export type PiImageInput = {
 	type: "image";
@@ -41,10 +42,15 @@ export interface PiSessionPort {
 	prompt(input: PiPromptInput): Promise<void>;
 	steer(message: string): Promise<void>;
 	followUp(message: string): Promise<void>;
+	setQueueMode(input: {
+		followUpMode?: PiQueueMode | undefined;
+		steeringMode?: PiQueueMode | undefined;
+	}): Promise<void>;
 	abort(): Promise<void>;
 	getState(): Promise<PiSessionState>;
 	getLastAssistantText(): Promise<string>;
 	getSessionStats(): Promise<PiSessionStats>;
+	drainPendingEvents(): PiRpcEvent[];
 	waitUntilIdle(options?: {
 		pollMs?: number | undefined;
 		timeoutMs?: number | undefined;
@@ -139,6 +145,22 @@ export class RpcPiSessionPort implements PiSessionPort {
 		await this.rpcCommand("follow_up", { message });
 	}
 
+	async setQueueMode(input: {
+		followUpMode?: PiQueueMode | undefined;
+		steeringMode?: PiQueueMode | undefined;
+	}): Promise<void> {
+		if (input.followUpMode) {
+			await this.rpcCommand("set_follow_up_mode", {
+				mode: input.followUpMode,
+			});
+		}
+		if (input.steeringMode) {
+			await this.rpcCommand("set_steering_mode", {
+				mode: input.steeringMode,
+			});
+		}
+	}
+
 	async abort(): Promise<void> {
 		await this.rpcCommand("abort");
 	}
@@ -155,11 +177,15 @@ export class RpcPiSessionPort implements PiSessionPort {
 
 	async getLastAssistantText(): Promise<string> {
 		const data = await this.rpcCommand("get_last_assistant_text");
-		return asString(data.text, "get_last_assistant_text.text");
+		return typeof data.text === "string" ? data.text : "";
 	}
 
 	async getSessionStats(): Promise<PiSessionStats> {
 		return this.rpcCommand("get_session_stats");
+	}
+
+	drainPendingEvents(): PiRpcEvent[] {
+		return this.rpc.drainEvents();
 	}
 
 	async waitUntilIdle(options?: {

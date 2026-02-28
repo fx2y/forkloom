@@ -1,22 +1,21 @@
-import type { RunEvent } from "@forkloom/contracts";
 import type { Request, Response } from "express";
-import { isTerminalRunEventKind } from "../run";
 import { BufferedSseStream } from "./sse-buffer";
 
 const POLL_MS = 250;
 export const MAX_BUFFER = 100;
 
-export function encodeRunEventFrame(event: RunEvent): string {
-	return `id: ${event.seq}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`;
-}
-
-export async function streamRunEvents(
+export async function streamBufferedEvents<TEvent extends { seq: number }>(
 	req: Request,
 	res: Response,
 	deps: {
 		sinceEventId: number;
 		limit: number;
-		listEvents(sinceEventId: number, limit: number): Promise<RunEvent[]>;
+		listEvents(sinceEventId: number, limit: number): Promise<TEvent[]>;
+		encodeFrame(event: TEvent): {
+			chunk: string;
+			deliveredSeq: number;
+		};
+		shouldClose?: ((event: TEvent) => boolean) | undefined;
 	},
 ): Promise<void> {
 	res.status(200);
@@ -48,16 +47,11 @@ export async function streamRunEvents(
 			const events = await deps.listEvents(cursor, deps.limit);
 			for (const event of events) {
 				cursor = event.seq;
-				if (
-					!stream.enqueueFrame({
-						chunk: encodeRunEventFrame(event),
-						deliveredSeq: event.seq,
-					})
-				) {
+				if (!stream.enqueueFrame(deps.encodeFrame(event))) {
 					clearInterval(timer);
 					return;
 				}
-				if (isTerminalRunEventKind(event.kind)) {
+				if (deps.shouldClose?.(event) === true) {
 					closed = true;
 					clearInterval(timer);
 					stream.close();

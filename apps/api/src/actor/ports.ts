@@ -98,6 +98,8 @@ export type ActorBatchEffect = {
 
 export type ActorBatchResult = {
 	actorStatus?: ActorStatus | undefined;
+	piSessionId?: string | undefined;
+	piSessionFile?: string | undefined;
 	events: ActorBatchEffect[];
 };
 
@@ -105,6 +107,11 @@ export interface ActorRepo {
 	createActor(spec: ActorSpecModel): Promise<ActorStateModel>;
 	listActors(): Promise<ActorStateModel[]>;
 	getActorState(actorId: string): Promise<ActorStateModel | null>;
+	listActorEvents(
+		actorId: string,
+		sinceEventId: number,
+		limit: number,
+	): Promise<ActorEventModel[]>;
 	postMailboxMessage(input: MailboxPostModel): Promise<ActorMailboxPostResult>;
 	acquireTickLease(input: {
 		actorId: string;
@@ -116,16 +123,20 @@ export interface ActorRepo {
 		workflowId: string;
 		maxMessages: number;
 	}): Promise<ActorMailboxMessageModel[]>;
-	appendEvents(input: {
-		actorId: string;
-		events: ActorBatchEffect[];
-	}): Promise<ActorEventModel[]>;
-	markMessagesDone(input: {
+	persistProcessedBatch(input: {
 		actorId: string;
 		workflowId: string;
 		seqs: number[];
 		actorStatus?: ActorStatus | undefined;
-	}): Promise<{ mailboxCursor: number; remainingPendingSeq: number | null }>;
+		piSessionId?: string | undefined;
+		piSessionFile?: string | undefined;
+		events: ActorBatchEffect[];
+	}): Promise<{
+		actor: ActorStateModel;
+		events: ActorEventModel[];
+		mailboxCursor: number;
+		remainingPendingSeq: number | null;
+	}>;
 	markMessagesDead(input: {
 		actorId: string;
 		workflowId: string;

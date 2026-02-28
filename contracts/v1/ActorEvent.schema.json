@@ -1,0 +1,35 @@
+{
+  "$id": "https://forkloom/contracts/v1/ActorEvent.schema.json",
+  "title": "ActorEvent",
+  "type": "object",
+  "required": ["actorId", "seq", "t", "kind", "payload"],
+  "properties": {
+    "actorId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "t": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "mailbox_queued",
+        "session_bound",
+        "pi_event",
+        "mailbox_processed",
+        "mailbox_failed"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

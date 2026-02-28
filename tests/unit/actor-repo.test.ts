@@ -205,6 +205,18 @@ describe("PgActorRepo", () => {
 	it("marks done rows and returns the next pending seq", async () => {
 		const pool = new StubPool([
 			{},
+			{
+				rows: [
+					{
+						seq: 7,
+						actor_id: "actor-1",
+						kind: "mailbox_processed",
+						payload: { seq: 5 },
+						created_at: ISO,
+					},
+				],
+				rowCount: 1,
+			},
 			{},
 			{ rows: [actorRow({ mailbox_cursor: 5 })], rowCount: 1 },
 			{ rows: [{ seq: 6 }], rowCount: 1 },
@@ -215,17 +227,19 @@ describe("PgActorRepo", () => {
 			pool,
 		});
 
-		const result = await repo.markMessagesDone({
+		const result = await repo.persistProcessedBatch({
 			actorId: "actor-1",
 			workflowId: "tick:actor-1:5",
 			seqs: [5],
 			actorStatus: "idle",
+			events: [{ kind: "mailbox_processed", payload: { seq: 5 } }],
 		});
 
 		expect(result.mailboxCursor).toBe(5);
 		expect(result.remainingPendingSeq).toBe(6);
 		expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
 			"begin",
+			expect.stringContaining("insert into actor_event"),
 			expect.stringContaining("update mailbox_msg"),
 			expect.stringContaining("greatest(mailbox_cursor, $2)"),
 			expect.stringContaining("select min(seq) as seq"),

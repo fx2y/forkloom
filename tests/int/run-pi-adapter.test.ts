@@ -27,6 +27,10 @@ class StubSession implements PiSessionPort {
 		return;
 	}
 
+	async setQueueMode(): Promise<void> {
+		return;
+	}
+
 	async abort(): Promise<void> {
 		return;
 	}
@@ -46,6 +50,10 @@ class StubSession implements PiSessionPort {
 
 	async getSessionStats(): Promise<PiSessionStats> {
 		return { totalTokens: 2, costUsd: 0.001 };
+	}
+
+	drainPendingEvents(): Record<string, unknown>[] {
+		return [];
 	}
 
 	async waitUntilIdle(options?: {

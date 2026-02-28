@@ -1,8 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import multer from "multer";
+import type { ActorService } from "../actor";
 import type { RunService } from "../run/service";
 import type { ArtifactService } from "../service";
+import { attachActorRoutes } from "./actor-routes";
 import {
 	parseLinkPayload,
 	parseUpload,
@@ -10,12 +12,13 @@ import {
 } from "./request-parsers";
 import { asyncHandler, mapError } from "./route-utils";
 import { parseRunCreatePayload, parseRunCursor } from "./run-request-parsers";
-import { streamRunEvents } from "./sse";
+import { streamRunEvents } from "./run-sse";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 export function buildApiRouter(deps: {
 	artifactService: ArtifactService;
+	actorService?: ActorService | undefined;
 	runService?: RunService | undefined;
 }) {
 	const artifactService = deps.artifactService;
@@ -116,6 +119,10 @@ export function buildApiRouter(deps: {
 				});
 			}),
 		);
+	}
+
+	if (deps.actorService) {
+		attachActorRoutes(app, deps.actorService);
 	}
 
 	app.use(

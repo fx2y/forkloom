@@ -1,4 +1,5 @@
 import pg from "pg";
+import { toMailboxFailedEffect } from "../event";
 import type {
 	ActorBatchEffect,
 	ActorEventModel,
@@ -244,6 +245,22 @@ export class PgActorRepo implements ActorRepo {
 		return toActorStateModel(requireRow(result, "get actor"));
 	}
 
+	async listActorEvents(
+		actorId: string,
+		sinceEventId: number,
+		limit: number,
+	): Promise<ActorEventModel[]> {
+		const result = await this.pool.query<EventRow>(
+			`select seq, actor_id, kind, payload, created_at
+			 from actor_event
+			 where actor_id = $1 and seq > $2
+			 order by seq asc
+			 limit $3`,
+			[actorId, sinceEventId, limit],
+		);
+		return result.rows.map(toActorEventModel);
+	}
+
 	async postMailboxMessage(
 		input: MailboxPostModel,
 	): Promise<ActorMailboxPostResult> {
@@ -440,12 +457,33 @@ export class PgActorRepo implements ActorRepo {
 			.sort((left, right) => left.seq - right.seq);
 	}
 
-	async appendEvents(input: {
+	async persistProcessedBatch(input: {
 		actorId: string;
+		workflowId: string;
+		seqs: number[];
+		actorStatus?: ActorStatus | undefined;
+		piSessionId?: string | undefined;
+		piSessionFile?: string | undefined;
 		events: ActorBatchEffect[];
-	}): Promise<ActorEventModel[]> {
-		if (input.events.length === 0) {
-			return [];
+	}): Promise<{
+		actor: ActorStateModel;
+		events: ActorEventModel[];
+		mailboxCursor: number;
+		remainingPendingSeq: number | null;
+	}> {
+		if (input.seqs.length === 0) {
+			const actor = await this.getActorState(input.actorId);
+			if (!actor) {
+				throw new Error(
+					`persist processed batch: missing actor ${input.actorId}`,
+				);
+			}
+			return {
+				actor,
+				events: [],
+				mailboxCursor: actor.mailboxCursor,
+				remainingPendingSeq: await this.getFirstPendingSeq(input.actorId),
+			};
 		}
 		const client = await this.pool.connect();
 		try {
@@ -460,30 +498,56 @@ export class PgActorRepo implements ActorRepo {
 				);
 				rows.push(toActorEventModel(requireRow(result, "append actor event")));
 			}
+			await client.query(
+				`update mailbox_msg
+				 set state = 'done',
+					 done_at = now(),
+					 error = null
+				 where actor_id = $1
+				   and claimed_by = $2
+				   and seq = any($3::bigint[])`,
+				[input.actorId, input.workflowId, input.seqs],
+			);
+			const highestSeq = Math.max(...input.seqs);
+			const actorResult = await client.query<ActorRow>(
+				`update actor
+				 set mailbox_cursor = greatest(mailbox_cursor, $2),
+					 status = $3,
+					 pi_session_id = coalesce($4, pi_session_id),
+					 pi_session_file = coalesce($5, pi_session_file),
+					 updated_at = now()
+				 where actor_id = $1
+				 returning actor_id, name, status, mailbox_cursor, next_mailbox_seq,
+				 inflight_workflow_id, pi_session_id, pi_session_file, mem_ref,
+				 workspace_id, updated_at`,
+				[
+					input.actorId,
+					highestSeq,
+					input.actorStatus ?? "idle",
+					input.piSessionId ?? null,
+					input.piSessionFile ?? null,
+				],
+			);
+			const actor = toActorStateModel(
+				requireRow(actorResult, "persist processed actor batch"),
+			);
+			const remainingPendingSeq = await this.getFirstPendingSeqFrom(
+				client,
+				input.actorId,
+			);
 			await client.query("commit");
-			return rows;
+			return {
+				actor,
+				events: rows,
+				mailboxCursor: actor.mailboxCursor,
+				remainingPendingSeq,
+			};
 		} catch (error) {
 			await client.query("rollback");
 			throw error;
 		} finally {
 			client.release();
 		}
-	}
-
-	async markMessagesDone(input: {
-		actorId: string;
-		workflowId: string;
-		seqs: number[];
-		actorStatus?: ActorStatus | undefined;
-	}): Promise<{ mailboxCursor: number; remainingPendingSeq: number | null }> {
-		return this.finishBatch({
-			actorId: input.actorId,
-			workflowId: input.workflowId,
-			seqs: input.seqs,
-			nextState: "done",
-			error: null,
-			actorStatus: input.actorStatus ?? "idle",
-		});
 	}
 
 	async markMessagesDead(input: {
@@ -540,6 +604,7 @@ export class PgActorRepo implements ActorRepo {
 		nextState: "done" | "dead";
 		error: string | null;
 		actorStatus: ActorStatus;
+		events?: ActorBatchEffect[] | undefined;
 	}): Promise<{ mailboxCursor: number; remainingPendingSeq: number | null }> {
 		if (input.seqs.length === 0) {
 			return {
@@ -550,6 +615,34 @@ export class PgActorRepo implements ActorRepo {
 		const client = await this.pool.connect();
 		try {
 			await client.query("begin");
+			let deadEvents = input.events ?? [];
+			if (input.nextState === "dead") {
+				const claimedRows = await client.query<{
+					seq: string | number;
+					kind: ActorMailboxMessageModel["kind"];
+				}>(
+					`select seq, kind
+					 from mailbox_msg
+					 where actor_id = $1
+					   and claimed_by = $2
+					   and seq = any($3::bigint[])`,
+					[input.actorId, input.workflowId, input.seqs],
+				);
+				deadEvents = claimedRows.rows.map((row) =>
+					toMailboxFailedEffect({
+						seq: Number(row.seq),
+						kind: row.kind,
+						error: input.error ?? "unknown error",
+					}),
+				);
+			}
+			for (const event of deadEvents) {
+				await client.query(
+					`insert into actor_event(actor_id, kind, payload)
+					 values ($1, $2, $3::jsonb)`,
+					[input.actorId, event.kind, JSON.stringify(event.payload)],
+				);
+			}
 			await client.query(
 				`update mailbox_msg
 				 set state = $4,

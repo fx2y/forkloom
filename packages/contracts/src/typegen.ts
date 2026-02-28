@@ -61,6 +61,10 @@ export function renderTypes(): string {
 	const runSpec = readSchema(V1_SCHEMA_DIR, "RunSpec");
 	const runState = readSchema(V1_SCHEMA_DIR, "RunState");
 	const runEvent = readSchema(V1_SCHEMA_DIR, "RunEvent");
+	const actorSpec = readSchema(V1_SCHEMA_DIR, "ActorSpec");
+	const mailboxPost = readSchema(V1_SCHEMA_DIR, "MailboxPost");
+	const actorState = readSchema(V1_SCHEMA_DIR, "ActorState");
+	const actorEvent = readSchema(V1_SCHEMA_DIR, "ActorEvent");
 
 	const delivery = requireLiteralEnum(schemaProp(message, "delivery"), "enum");
 	const scope = requireLiteralEnum(schemaProp(message, "scope"), "enum");
@@ -79,6 +83,18 @@ export function renderTypes(): string {
 	const runScope = requireLiteralEnum(schemaProp(runSpec, "scope"), "enum");
 	const runStatus = requireLiteralEnum(schemaProp(runState, "status"), "enum");
 	const runEventKind = requireLiteralEnum(schemaProp(runEvent, "kind"), "enum");
+	const mailboxKind = requireLiteralEnum(
+		schemaProp(mailboxPost, "kind"),
+		"enum",
+	);
+	const actorStatus = requireLiteralEnum(
+		schemaProp(actorState, "status"),
+		"enum",
+	);
+	const actorEventKind = requireLiteralEnum(
+		schemaProp(actorEvent, "kind"),
+		"enum",
+	);
 
 	return [
 		"/*",
@@ -95,12 +111,19 @@ export function renderTypes(): string {
 		toUnion("RunScope", runScope),
 		toUnion("RunStatus", runStatus),
 		toUnion("RunEventKind", runEventKind),
+		toUnion("MailboxKind", mailboxKind),
+		toUnion("ActorStatus", actorStatus),
+		toUnion("ActorEventKind", actorEventKind),
 		"",
 		"export type ArtifactRef = {",
 		"\tsha256: string;",
 		"};",
 		"",
 		"export type RunArtifactRef = {",
+		"\tsha256: string;",
+		"};",
+		"",
+		"export type ActorArtifactRef = {",
 		"\tsha256: string;",
 		"};",
 		"",
@@ -240,6 +263,37 @@ export function renderTypes(): string {
 		"\t| RunFailedEvent;",
 		"",
 		"export type TerminalRunEvent = RunDoneEvent | RunFailedEvent;",
+		"",
+		"export type ActorSpec = {",
+		"\tactorId: string;",
+		"\tname: string;",
+		"\tworkspaceId?: string;",
+		"\tmemRef?: string;",
+		"};",
+		"",
+		"export type MailboxPost = {",
+		"\tkind: MailboxKind;",
+		"\ttext: string;",
+		"\tattachments: ActorArtifactRef[];",
+		"\tdedupeKey?: string;",
+		"\tmetadata?: Record<string, unknown>;",
+		"};",
+		"",
+		"export type ActorState = {",
+		"\tactorId: string;",
+		"\tname: string;",
+		"\tstatus: ActorStatus;",
+		"\tmailboxCursor: number;",
+		"\tupdatedAt: string;",
+		"};",
+		"",
+		"export type ActorEvent = {",
+		"\tactorId: string;",
+		"\tseq: number;",
+		"\tt: string;",
+		"\tkind: ActorEventKind;",
+		"\tpayload: Record<string, unknown>;",
+		"};",
 		"",
 	].join("\n");
 }

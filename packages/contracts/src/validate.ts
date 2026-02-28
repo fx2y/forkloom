@@ -21,6 +21,18 @@ import skillSchema from "../../../contracts/v0/Skill.schema.json" with {
 import workflowSchema from "../../../contracts/v0/Workflow.schema.json" with {
 	type: "json",
 };
+import actorEventSchema from "../../../contracts/v1/ActorEvent.schema.json" with {
+	type: "json",
+};
+import actorSpecSchema from "../../../contracts/v1/ActorSpec.schema.json" with {
+	type: "json",
+};
+import actorStateSchema from "../../../contracts/v1/ActorState.schema.json" with {
+	type: "json",
+};
+import mailboxPostSchema from "../../../contracts/v1/MailboxPost.schema.json" with {
+	type: "json",
+};
 import runEventSchema from "../../../contracts/v1/RunEvent.schema.json" with {
 	type: "json",
 };
@@ -38,7 +50,13 @@ export type ContractName =
 	| "Skill"
 	| "Extension";
 export type RunContractName = "RunSpec" | "RunState" | "RunEvent";
-export type AnyContractName = ContractName | RunContractName;
+export type ActorContractName =
+	| "ActorSpec"
+	| "MailboxPost"
+	| "ActorState"
+	| "ActorEvent";
+export type V1ContractName = RunContractName | ActorContractName;
+export type AnyContractName = ContractName | V1ContractName;
 
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
 ajv.addSchema(artifactRefSchema);
@@ -54,6 +72,12 @@ const v1RunValidators: Record<RunContractName, ValidateFunction> = {
 	RunSpec: ajv.compile(runSpecSchema),
 	RunState: ajv.compile(runStateSchema),
 	RunEvent: ajv.compile(runEventSchema),
+};
+const v1ActorValidators: Record<ActorContractName, ValidateFunction> = {
+	ActorSpec: ajv.compile(actorSpecSchema),
+	MailboxPost: ajv.compile(mailboxPostSchema),
+	ActorState: ajv.compile(actorStateSchema),
+	ActorEvent: ajv.compile(actorEventSchema),
 };
 const artifactProperties =
 	(artifactSchema as { properties?: Record<string, unknown> }).properties ?? {};
@@ -110,6 +134,20 @@ export function getRunContractNames(): RunContractName[] {
 	return Object.keys(v1RunValidators) as RunContractName[];
 }
 
+export function validateActorByName(
+	name: ActorContractName,
+	input: unknown,
+): {
+	valid: boolean;
+	errors: string[];
+} {
+	return validateWith(v1ActorValidators, name, input);
+}
+
+export function getActorContractNames(): ActorContractName[] {
+	return Object.keys(v1ActorValidators) as ActorContractName[];
+}
+
 export function validateAnyByName(
 	name: AnyContractName,
 	input: unknown,
@@ -120,15 +158,26 @@ export function validateAnyByName(
 	if (name in v0Validators) {
 		return validateWith(v0Validators, name as keyof typeof v0Validators, input);
 	}
+	if (name in v1RunValidators) {
+		return validateWith(
+			v1RunValidators,
+			name as keyof typeof v1RunValidators,
+			input,
+		);
+	}
 	return validateWith(
-		v1RunValidators,
-		name as keyof typeof v1RunValidators,
+		v1ActorValidators,
+		name as keyof typeof v1ActorValidators,
 		input,
 	);
 }
 
 export function getAllContractNames(): AnyContractName[] {
-	return [...getContractNames(), ...getRunContractNames()];
+	return [
+		...getContractNames(),
+		...getRunContractNames(),
+		...getActorContractNames(),
+	];
 }
 
 export function validateArtifactMeta(input: unknown): {

@@ -68,11 +68,13 @@ function createRepo(
 		createActor: async () => actorState(),
 		listActors: async () => [actorState()],
 		getActorState: async () => actorState(),
+		listActorEvents: async () => [],
 		postMailboxMessage: async () => postResult,
 		acquireTickLease: async () => true,
 		claimNextMessages: async () => [],
-		appendEvents: async () => [],
-		markMessagesDone: async () => ({
+		persistProcessedBatch: async () => ({
+			actor: actorState(),
+			events: [],
 			mailboxCursor: 0,
 			remainingPendingSeq: null,
 		}),

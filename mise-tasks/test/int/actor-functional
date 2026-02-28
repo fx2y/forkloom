@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker
+
+mkdir -p .cache/test-int
+docker compose restart api >/dev/null
+wait_for_url "api" "http://127.0.0.1:8080/health" /tmp/svc.api
+pnpm exec tsx scripts/harness/actor-functional-live.ts
+pnpm exec tsx scripts/harness/actor-steer-live.ts
+pnpm exec vitest run tests/int/actor-functional.test.ts tests/int/actor-steer-live.test.ts
+
+write_mark "test:int:actor-functional"
+echo "test:int:actor-functional ok"

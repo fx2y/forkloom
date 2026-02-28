@@ -64,13 +64,15 @@ function createRepo(overrides: Partial<ActorRepo> = {}): ActorRepo {
 		createActor: async () => actorState(),
 		listActors: async () => [actorState()],
 		getActorState: async () => actorState(),
+		listActorEvents: async () => [],
 		postMailboxMessage: async () => {
 			throw new Error("unused");
 		},
 		acquireTickLease: async () => true,
 		claimNextMessages: async () => [],
-		appendEvents: async () => [],
-		markMessagesDone: async () => ({
+		persistProcessedBatch: async () => ({
+			actor: actorState(),
+			events: [],
 			mailboxCursor: 1,
 			remainingPendingSeq: null,
 		}),
@@ -155,7 +157,9 @@ describe("executeActorTick", () => {
 			{
 				repo: createRepo({
 					claimNextMessages: async () => [mailboxMessage()],
-					markMessagesDone: async () => ({
+					persistProcessedBatch: async () => ({
+						actor: actorState({ mailboxCursor: 1 }),
+						events: [],
 						mailboxCursor: 1,
 						remainingPendingSeq: 2,
 					}),

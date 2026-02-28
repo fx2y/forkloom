@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeRunEventFrame } from "../../apps/api/src/http/run-sse";
+import { encodeActorEventFrame } from "../../apps/api/src/http/actor-sse";
 import { BufferedSseStream } from "../../apps/api/src/http/sse-buffer";
 
 class StubWritable {
@@ -35,40 +35,43 @@ class StubWritable {
 	}
 }
 
-describe("run SSE helpers", () => {
-	it("encodes run events as SSE frames", () => {
-		const frame = encodeRunEventFrame({
-			runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
+describe("actor SSE helpers", () => {
+	it("encodes actor events as SSE frames", () => {
+		const frame = encodeActorEventFrame({
+			actorId: "actor-1",
 			seq: 4,
-			t: "2026-02-27T00:00:00.000Z",
-			kind: "pi_event",
-			payload: { chunk: "ok" },
+			t: "2026-02-28T00:00:00.000Z",
+			kind: "mailbox_processed",
+			payload: { seq: 4 },
 		});
 
 		expect(frame).toContain("id: 4");
-		expect(frame).toContain("event: pi_event");
-		expect(frame).toContain('"chunk":"ok"');
+		expect(frame).toContain("event: mailbox_processed");
+		expect(frame).toContain('"seq":4');
 	});
 
-	it("emits a gap control frame and closes on overflow", async () => {
+	it("reuses the generic buffered gap semantics", async () => {
 		const writable = new StubWritable([1]);
 		const stream = new BufferedSseStream(writable, 1, 0);
 
 		expect(
 			stream.enqueueFrame({
-				chunk: 'id: 1\nevent: run_started\ndata: {"seq":1}\n\n',
+				chunk:
+					'id: 1\nevent: mailbox_queued\ndata: {"actorId":"actor-1","seq":1}\n\n',
 				deliveredSeq: 1,
 			}),
 		).toBe(true);
 		expect(
 			stream.enqueueFrame({
-				chunk: 'id: 2\nevent: pi_event\ndata: {"seq":2}\n\n',
+				chunk:
+					'id: 2\nevent: mailbox_processed\ndata: {"actorId":"actor-1","seq":2}\n\n',
 				deliveredSeq: 2,
 			}),
 		).toBe(true);
 		expect(
 			stream.enqueueFrame({
-				chunk: 'id: 3\nevent: run_done\ndata: {"seq":3}\n\n',
+				chunk:
+					'id: 3\nevent: pi_event\ndata: {"actorId":"actor-1","seq":3}\n\n',
 				deliveredSeq: 3,
 			}),
 		).toBe(false);
@@ -77,10 +80,9 @@ describe("run SSE helpers", () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		expect(writable.chunks[0]).toContain("event: run_started");
+		expect(writable.chunks[0]).toContain("event: mailbox_queued");
 		expect(writable.chunks[1]).toContain("event: gap");
 		expect(writable.chunks[1]).toContain('"reconnectFrom":0');
 		expect(writable.ended).toBe(true);
-		expect(stream.lastDeliveredSeq).toBe(1);
 	});
 });
