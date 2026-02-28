@@ -33,6 +33,7 @@ export type PiRpcProcess = {
 export type PiRpcClientDeps = {
 	process: PiRpcProcess;
 	responseTimeoutMs?: number | undefined;
+	closeTimeoutMs?: number | undefined;
 };
 
 export type SpawnPiRpcInput = {
@@ -77,24 +78,21 @@ export function spawnPiRpcProcess(
 	if (input.sessionPath) {
 		args.push("--session", input.sessionPath);
 	}
-	return spawn(
-		piBin,
-		args,
-		{
-			cwd: input.cwd ?? process.cwd(),
-			env: {
-				...process.env,
-				...(input.extraEnv ?? {}),
-				...(input.homeOverride ? { HOME: input.homeOverride } : {}),
-			},
-			stdio: ["pipe", "pipe", "pipe"],
+	return spawn(piBin, args, {
+		cwd: input.cwd ?? process.cwd(),
+		env: {
+			...process.env,
+			...(input.extraEnv ?? {}),
+			...(input.homeOverride ? { HOME: input.homeOverride } : {}),
 		},
-	);
+		stdio: ["pipe", "pipe", "pipe"],
+	});
 }
 
 export class PiRpcClient {
 	private readonly process: PiRpcProcess;
 	private readonly responseTimeoutMs: number;
+	private readonly closeTimeoutMs: number;
 	private readonly responseById: Record<string, PiRpcResponse>;
 	private readonly eventQueue: PiRpcEvent[];
 	private readonly lines: readline.Interface;
@@ -102,6 +100,7 @@ export class PiRpcClient {
 	constructor(deps: PiRpcClientDeps) {
 		this.process = deps.process;
 		this.responseTimeoutMs = deps.responseTimeoutMs ?? 30_000;
+		this.closeTimeoutMs = deps.closeTimeoutMs ?? 1_000;
 		this.responseById = Object.create(null) as Record<string, PiRpcResponse>;
 		this.eventQueue = [];
 		this.lines = readline.createInterface({ input: this.process.stdout });
@@ -150,10 +149,23 @@ export class PiRpcClient {
 	async close(): Promise<void> {
 		this.lines.close();
 		await new Promise<void>((resolveExit) => {
-			this.process.once("exit", () => resolveExit());
+			let settled = false;
+			const finish = () => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				clearTimeout(forceKillTimer);
+				resolveExit();
+			};
+			this.process.once("exit", () => finish());
+			const forceKillTimer = setTimeout(() => {
+				this.process.kill("SIGKILL");
+				finish();
+			}, this.closeTimeoutMs);
 			const killed = this.process.kill("SIGTERM");
 			if (!killed) {
-				resolveExit();
+				finish();
 			}
 		});
 	}

@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
 	PiRpcClient,
 	type PiRpcEvent,
@@ -63,6 +66,8 @@ export type CreatePiSessionInput = SpawnPiRpcInput & {
 	responseTimeoutMs?: number | undefined;
 };
 
+const PI_SESSION_HEADER_VERSION = 3;
+
 function asRecord(value: unknown, label: string): Record<string, unknown> {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) {
 		throw new Error(`${label} must be an object`);
@@ -96,6 +101,32 @@ async function assertSuccess(
 		throw new Error(`${command} failed: ${response.error ?? "unknown error"}`);
 	}
 	return asRecord(response.data ?? {}, `${command}.data`);
+}
+
+async function ensureSessionFileExists(
+	state: Pick<PiSessionState, "sessionFile" | "sessionId">,
+): Promise<void> {
+	if (existsSync(state.sessionFile)) {
+		return;
+	}
+	await mkdir(dirname(state.sessionFile), { recursive: true });
+	try {
+		await writeFile(
+			state.sessionFile,
+			`${JSON.stringify({
+				type: "session",
+				version: PI_SESSION_HEADER_VERSION,
+				id: state.sessionId,
+				timestamp: new Date().toISOString(),
+				cwd: process.cwd(),
+			})}\n`,
+			{ encoding: "utf8", flag: "wx" },
+		);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+			throw error;
+		}
+	}
 }
 
 export class RpcPiSessionPort implements PiSessionPort {
@@ -167,12 +198,14 @@ export class RpcPiSessionPort implements PiSessionPort {
 
 	async getState(): Promise<PiSessionState> {
 		const data = await this.rpcCommand("get_state");
-		return {
+		const state = {
 			sessionFile: asString(data.sessionFile, "get_state.sessionFile"),
 			sessionId: asString(data.sessionId, "get_state.sessionId"),
 			isStreaming: asBoolean(data.isStreaming, false),
 			pending: asNumber(data.pending, 0),
 		};
+		await ensureSessionFileExists(state);
+		return state;
 	}
 
 	async getLastAssistantText(): Promise<string> {

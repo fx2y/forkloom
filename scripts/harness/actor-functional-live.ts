@@ -2,6 +2,7 @@ import {
 	ActorEventStream,
 	createActor,
 	fetchActorState,
+	loadActorProofProvenance,
 	makeActorSpec,
 	postActorMessage,
 	uploadArtifact,
@@ -55,6 +56,10 @@ async function main(): Promise<void> {
 			result.events.find((event) => event.kind === "mailbox_queued") ?? null;
 		const processedEvent =
 			result.events.find((event) => event.kind === "mailbox_processed") ?? null;
+		const provenance = await loadActorProofProvenance({
+			actorId,
+			sessionFile: actorRow?.pi_session_file,
+		});
 
 		await writeJson(".cache/test-int/actor-functional.json", {
 			actorId,
@@ -66,6 +71,7 @@ async function main(): Promise<void> {
 			actorRow,
 			queuedEvent,
 			processedEvent,
+			...provenance,
 		});
 	} finally {
 		stream.close();

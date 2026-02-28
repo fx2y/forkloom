@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	type PiPromptInput,
@@ -116,5 +119,46 @@ describe("RpcPiSessionPort streaming behavior", () => {
 		const session = new RpcPiSessionPort(rpc);
 
 		await expect(session.getLastAssistantText()).resolves.toBe("");
+	});
+
+	it("materializes a minimal session header when the reported session file is missing", async () => {
+		const sessionFile = join(
+			tmpdir(),
+			`forkloom-pi-session-${Date.now()}`,
+			"session.jsonl",
+		);
+		const sessionDir = dirname(sessionFile);
+		rmSync(sessionFile, { force: true });
+		rmSync(sessionDir, { recursive: true, force: true });
+
+		const rpc = new StubRpcClient(false);
+		rpc.waitResponse = async (id: string) => {
+			const request = rpc.sent.find((item) => item.id === id);
+			if (!request) {
+				throw new Error("missing request");
+			}
+			if (request.type === "get_state") {
+				return {
+					type: "response" as const,
+					id,
+					success: true,
+					data: {
+						sessionFile,
+						sessionId: "sess-1",
+						isStreaming: false,
+						pending: 0,
+					},
+				};
+			}
+			return { type: "response" as const, id, success: true, data: {} };
+		};
+		const session = new RpcPiSessionPort(rpc);
+
+		const state = await session.getState();
+
+		expect(state.sessionFile).toBe(sessionFile);
+		expect(existsSync(sessionFile)).toBe(true);
+		expect(readFileSync(sessionFile, "utf8")).toContain('"type":"session"');
+		rmSync(sessionDir, { recursive: true, force: true });
 	});
 });

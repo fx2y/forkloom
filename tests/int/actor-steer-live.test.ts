@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 type ActorSteerProof = {
+	strictReal: boolean;
+	provider: string | null;
+	model: string | null;
+	fallbackUsed: boolean;
+	piEventCount: number;
 	stateAfterPrompt: {
 		status: string;
 	};
@@ -45,6 +50,18 @@ describe("actor steer live proof", () => {
 			readFileSync(proofPath, "utf8"),
 		) as Partial<ActorSteerProof>;
 
+		expect(typeof parsed.strictReal).toBe("boolean");
+		expect(typeof parsed.provider).toBe("string");
+		expect(typeof parsed.model).toBe("string");
+		expect(typeof parsed.fallbackUsed).toBe("boolean");
+		expect(parsed.piEventCount).toBeGreaterThanOrEqual(0);
+		if (parsed.strictReal) {
+			expect(parsed.fallbackUsed).toBe(false);
+			expect(parsed.provider).not.toContain("forkloom-mock");
+			expect(parsed.model).not.toContain("forkloom-mock");
+		} else {
+			expect(parsed.piEventCount).toBeGreaterThan(0);
+		}
 		expect(parsed.stateAfterPrompt?.status).toBe("idle");
 		expect(parsed.finalState?.status).toBe("idle");
 		expect(parsed.rowAfterPrompt?.status).toBe("idle");

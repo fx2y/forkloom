@@ -231,7 +231,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 		parent.append(code);
 	};
 
-	const setThreadMeta = (value: { prefix: string; code?: string; suffix?: string }) => {
+	const setThreadMeta = (value: {
+		prefix: string;
+		code?: string;
+		suffix?: string;
+	}) => {
 		clearNode(threadMetaNode);
 		threadMetaNode.append(value.prefix);
 		if (value.code) {

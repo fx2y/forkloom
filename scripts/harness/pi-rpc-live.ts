@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import readline from "node:readline";
+import { prepareWritablePiHome } from "../../apps/api/src/pi/session-factory";
 
 type RpcResponse = {
 	type: string;
@@ -143,7 +144,7 @@ function writePiModels(homeDir: string, port: number): void {
 
 async function runPiRpc(
 	config: ProviderRunConfig,
-): Promise<{ sessionFile: string; lines: number }> {
+): Promise<{ sessionFile: string; sessionFileExists: boolean; lines: number }> {
 	const responses = new Map<string, RpcResponse>();
 	let stateSessionFile = "";
 
@@ -247,10 +248,14 @@ async function runPiRpc(
 		throw new Error("pi state did not return sessionFile");
 	}
 
-	const rawSession = readFileSync(stateSessionFile, "utf8");
+	const sessionFileExists = existsSync(stateSessionFile);
+	const rawSession = sessionFileExists
+		? readFileSync(stateSessionFile, "utf8")
+		: "";
 	return {
 		sessionFile: stateSessionFile,
-		lines: rawSession.trim().split(/\r?\n/).length,
+		sessionFileExists,
+		lines: rawSession.trim() ? rawSession.trim().split(/\r?\n/).length : 0,
 	};
 }
 
@@ -259,12 +264,18 @@ async function run(): Promise<void> {
 	const defaultModel = process.env.PI_MODEL ?? "gpt-4.1";
 	const strictReal = process.env.PI_RPC_STRICT_REAL === "1";
 
-	let result: { sessionFile: string; lines: number; mode: "real" | "mock" };
+	let result: {
+		sessionFile: string;
+		sessionFileExists: boolean;
+		lines: number;
+		mode: "real" | "mock";
+	};
 
 	try {
 		const real = await runPiRpc({
 			provider: defaultProvider,
 			model: defaultModel,
+			homeOverride: await prepareWritablePiHome(),
 			mode: "real",
 		});
 		result = { ...real, mode: "real" };

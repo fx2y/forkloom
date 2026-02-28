@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 type ActorFunctionalProof = {
 	actorId: string;
 	attachmentSha256: string;
+	strictReal: boolean;
+	provider: string | null;
+	model: string | null;
+	fallbackUsed: boolean;
+	piEventCount: number;
 	eventKinds: string[];
 	eventSeqs: number[];
 	actorState: {
@@ -43,9 +48,23 @@ describe("actor functional live proof", () => {
 		) as Partial<ActorFunctionalProof>;
 
 		expect(typeof parsed.actorId).toBe("string");
+		expect(typeof parsed.strictReal).toBe("boolean");
+		expect(typeof parsed.provider).toBe("string");
+		expect(typeof parsed.model).toBe("string");
+		expect(typeof parsed.fallbackUsed).toBe("boolean");
+		expect(parsed.piEventCount).toBeGreaterThanOrEqual(0);
+		if (parsed.strictReal) {
+			expect(parsed.fallbackUsed).toBe(false);
+			expect(parsed.provider).not.toContain("forkloom-mock");
+			expect(parsed.model).not.toContain("forkloom-mock");
+		} else {
+			expect(parsed.piEventCount).toBeGreaterThan(0);
+		}
 		expect(parsed.eventKinds).toContain("mailbox_queued");
 		expect(parsed.eventKinds).toContain("mailbox_processed");
-		expect(parsed.eventKinds).toContain("pi_event");
+		if (!parsed.strictReal) {
+			expect(parsed.eventKinds).toContain("pi_event");
+		}
 		expect(parsed.actorState?.status).toBe("idle");
 		expect(parsed.actorState?.mailboxCursor).toBeGreaterThanOrEqual(1);
 		expect(parsed.actorRow?.status).toBe("idle");

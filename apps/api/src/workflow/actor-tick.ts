@@ -135,11 +135,15 @@ export async function executeActorTick(
 
 			const actor = assertActor(
 				actorId,
-				await steps.runStep("loadActor", () => deps.repo.getActorState(actorId)),
+				await steps.runStep("loadActor", () =>
+					deps.repo.getActorState(actorId),
+				),
 			);
 			await maybeAfterStep(deps, "loadActor", actorId);
 
-			await steps.runStep("ensureSession", () => deps.processor.ensureSession(actor));
+			await steps.runStep("ensureSession", () =>
+				deps.processor.ensureSession(actor),
+			);
 			await maybeAfterStep(deps, "ensureSession", actorId);
 
 			const batchResult = await steps.runStep("applyBatch", () =>

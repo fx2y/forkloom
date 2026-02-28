@@ -62,8 +62,8 @@ function mailboxMessage(
 	};
 }
 
-	function createRepo(overrides: Partial<ActorRepo> = {}): ActorRepo {
-		return {
+function createRepo(overrides: Partial<ActorRepo> = {}): ActorRepo {
+	return {
 		createActor: async () => actorState(),
 		listActors: async () => [actorState()],
 		getActorState: async () => actorState(),
@@ -73,19 +73,19 @@ function mailboxMessage(
 		},
 		acquireTickLease: async () => true,
 		claimNextMessages: async () => [],
-			persistProcessedBatch: async () => ({
-				actor: actorState(),
-				events: [],
-				mailboxCursor: 1,
-				remainingPendingSeq: null,
-			}),
-			markMessagesDead: async () => ({ remainingPendingSeq: null }),
-			requeueMessages: async () => ({ remainingPendingSeq: null }),
-			getFirstPendingSeq: async () => null,
-			releaseTickLease: async () => undefined,
-			...overrides,
-		};
-	}
+		persistProcessedBatch: async () => ({
+			actor: actorState(),
+			events: [],
+			mailboxCursor: 1,
+			remainingPendingSeq: null,
+		}),
+		markMessagesDead: async () => ({ remainingPendingSeq: null }),
+		requeueMessages: async () => ({ remainingPendingSeq: null }),
+		getFirstPendingSeq: async () => null,
+		releaseTickLease: async () => undefined,
+		...overrides,
+	};
+}
 
 function stepRunner(stepNames: StepName[]) {
 	return {

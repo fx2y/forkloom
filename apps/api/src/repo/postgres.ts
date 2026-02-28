@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pg from "pg";
 import type { ArtifactMeta, ArtifactModel, ArtifactRepo } from "../ports";
+import { createPoolCloseOnce } from "./pool-close";
 
 export type PgDeps = {
 	databaseUrl: string;
@@ -39,13 +40,15 @@ function toModel(row: ArtifactRow): ArtifactModel {
 
 export class PgArtifactRepo implements ArtifactRepo {
 	private readonly pool: pg.Pool;
+	private readonly closePool: () => Promise<void>;
 
 	constructor(private readonly deps: PgDeps) {
 		this.pool = new pg.Pool({ connectionString: deps.databaseUrl });
+		this.closePool = createPoolCloseOnce(this.pool);
 	}
 
 	async close(): Promise<void> {
-		await this.pool.end();
+		await this.closePool();
 	}
 
 	async runMigrations(): Promise<void> {

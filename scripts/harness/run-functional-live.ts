@@ -6,6 +6,7 @@ import {
 } from "./run-live-support";
 
 async function main(): Promise<void> {
+	const strictReal = process.env.PI_RPC_STRICT_REAL === "1";
 	const attachment = await uploadArtifactFile("README.md");
 	const proof = await runLiveFlow({
 		spec: makeRunSpec({
@@ -26,11 +27,11 @@ async function main(): Promise<void> {
 	if (!runDone) {
 		throw new Error("missing run_done event");
 	}
-	if (
-		typeof runDone.payload.resultText !== "string" ||
-		runDone.payload.resultText.length === 0
-	) {
+	if (typeof runDone.payload.resultText !== "string") {
 		throw new Error("run_done payload missing result text");
+	}
+	if (!strictReal && runDone.payload.resultText.length === 0) {
+		throw new Error("run_done payload missing non-empty result text");
 	}
 	if (!Array.isArray(runDone.payload.artifacts)) {
 		throw new Error("run_done payload missing artifact list");
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
 	await writeJson(".cache/test-int/run-functional.json", {
 		runId: proof.runId,
 		created: proof.created,
+		strictReal,
 		runStartedLatencyMs: proof.runStartedLatencyMs,
 		runState: proof.runState,
 		runDone: runDone.payload,

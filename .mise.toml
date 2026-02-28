@@ -58,12 +58,10 @@ outputs = [".cache/mise-marks/svc__health.ok", "/tmp/svc.pg", "/tmp/svc.s3", "/t
 [tasks."svc:down"]
 run = "bash ./mise-tasks/svc/down"
 sources = ["docker-compose.yml", "mise-tasks/svc/down"]
-outputs = [".cache/mise-marks/svc__down.ok"]
 
 [tasks."svc:reset"]
 run = "bash ./mise-tasks/svc/reset"
 sources = ["docker-compose.yml", "mise-tasks/svc/reset"]
-outputs = [".cache/mise-marks/svc__reset.ok"]
 
 [tasks."svc:logs"]
 run = "bash ./mise-tasks/svc/logs"

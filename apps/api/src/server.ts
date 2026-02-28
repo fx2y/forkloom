@@ -3,10 +3,10 @@ import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
 import {
 	ActorService,
-	buildActorPromptInput,
 	LazyDbosActorWorkflowLauncher,
 	PgActorRepo,
 	PiActorBatchProcessor,
+	buildActorPromptInput,
 } from "./actor";
 import { loadConfig } from "./config";
 import {
@@ -128,7 +128,10 @@ async function bootstrap() {
 		buildHealthHandler({
 			repo,
 			store,
-			pingPi: () => probePiSession(createPiSession),
+			pingPi: () =>
+				probePiSession((overrides) =>
+					createPiSession({ ...overrides, bootstrapTimeoutMs: 2_000 }),
+				),
 		}),
 	);
 

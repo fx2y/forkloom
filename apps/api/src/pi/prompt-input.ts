@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
-import type { PiImageInput } from "./session-port";
 import type { ArtifactModel } from "../ports";
+import type { PiImageInput } from "./session-port";
 
 export type PromptAttachmentPointer = {
 	sha256: string;

@@ -72,18 +72,18 @@ function createRepo(
 		postMailboxMessage: async () => postResult,
 		acquireTickLease: async () => true,
 		claimNextMessages: async () => [],
-			persistProcessedBatch: async () => ({
-				actor: actorState(),
-				events: [],
-				mailboxCursor: 0,
-				remainingPendingSeq: null,
-			}),
-			markMessagesDead: async () => ({ remainingPendingSeq: null }),
-			requeueMessages: async () => ({ remainingPendingSeq: null }),
-			getFirstPendingSeq: async () => null,
-			releaseTickLease: async () => undefined,
-		};
-	}
+		persistProcessedBatch: async () => ({
+			actor: actorState(),
+			events: [],
+			mailboxCursor: 0,
+			remainingPendingSeq: null,
+		}),
+		markMessagesDead: async () => ({ remainingPendingSeq: null }),
+		requeueMessages: async () => ({ remainingPendingSeq: null }),
+		getFirstPendingSeq: async () => null,
+		releaseTickLease: async () => undefined,
+	};
+}
 
 describe("normalizeMailboxText", () => {
 	it("trims message text and rejects slash commands", () => {

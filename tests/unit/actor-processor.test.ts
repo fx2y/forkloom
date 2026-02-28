@@ -166,7 +166,12 @@ describe("PiActorBatchProcessor", () => {
 			}),
 			messages: [
 				mailboxMessage({ kind: "steer", text: "stop" }),
-				mailboxMessage({ msgId: 2, seq: 2, kind: "followUp", text: "continue" }),
+				mailboxMessage({
+					msgId: 2,
+					seq: 2,
+					kind: "followUp",
+					text: "continue",
+				}),
 			],
 			workflowId: "tick:actor-1:1",
 		});

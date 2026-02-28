@@ -81,8 +81,9 @@ async function writeProof(): Promise<void> {
 		mailbox_cursor: string;
 		inflight_workflow_id: string | null;
 		status: string;
+		pi_session_file: string | null;
 	}>(
-		`select mailbox_cursor, inflight_workflow_id, status
+		`select mailbox_cursor, inflight_workflow_id, status, pi_session_file
 		 from actor
 		 where actor_id = $1`,
 		[actorId],
@@ -99,10 +100,12 @@ async function writeProof(): Promise<void> {
 		 order by seq asc`,
 		[actorId],
 	);
-	const eventResult = await pool.query<{ count: string }>(
-		`select count(*)::text as count
+	const eventResult = await pool.query<{ kind: string; count: string }>(
+		`select kind, count(*)::text as count
 		 from actor_event
-		 where actor_id = $1 and kind in ('session_bound', 'mailbox_processed')`,
+		 where actor_id = $1
+		 group by kind
+		 order by kind asc`,
 		[actorId],
 	);
 	const lockResult = await pool.query<{ count: string }>(
@@ -112,20 +115,42 @@ async function writeProof(): Promise<void> {
 		[actorId],
 	);
 
+	const eventCounts = Object.fromEntries(
+		eventResult.rows.map((row) => [row.kind, Number(row.count)]),
+	);
+	const actorRow = actorResult.rows[0] ?? null;
+	const strictReal = process.env.PI_RPC_STRICT_REAL === "1";
+	const fallbackUsed = Boolean(
+		actorRow?.pi_session_file?.startsWith("/tmp/forkloom-pi-home-"),
+	);
+	if (strictReal && fallbackUsed) {
+		throw new Error(
+			`strict-real durability proof fell back to mock session for actor ${actorId}`,
+		);
+	}
+
 	const outPath = resolve(".cache/test-int/actor-durability.json");
 	mkdirSync(dirname(outPath), { recursive: true });
 	writeFileSync(
 		outPath,
 		`${JSON.stringify(
-				{
-					workflowID,
-					actorId,
-					crashMarker: readFileSync(crashMarker, "utf8").trim(),
-					actor: actorResult.rows[0] ?? null,
-					messages: mailboxResult.rows,
-					persistedActorEventCount: Number(eventResult.rows[0]?.count ?? "0"),
-					lockCount: Number(lockResult.rows[0]?.count ?? "0"),
-				},
+			{
+				workflowID,
+				actorId,
+				crashMarker: readFileSync(crashMarker, "utf8").trim(),
+				actor: actorRow,
+				messages: mailboxResult.rows,
+				strictReal,
+				fallbackUsed,
+				persistedEventCounts: eventCounts,
+				persistedEventKinds: Object.keys(eventCounts),
+				persistedActorEventCount: Object.values(eventCounts).reduce(
+					(total, count) => total + count,
+					0,
+				),
+				persistedPiEventCount: eventCounts.pi_event ?? 0,
+				lockCount: Number(lockResult.rows[0]?.count ?? "0"),
+			},
 			null,
 			2,
 		)}\n`,

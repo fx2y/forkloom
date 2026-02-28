@@ -2,6 +2,7 @@ import {
 	ActorEventStream,
 	createActor,
 	fetchActorState,
+	loadActorProofProvenance,
 	makeActorSpec,
 	postActorMessage,
 	restartApi,
@@ -70,7 +71,8 @@ async function main(): Promise<void> {
 	const promptEvent =
 		promptResult.events.find(
 			(event) =>
-				event.kind === "mailbox_processed" && event.payload.seq === promptMailboxSeq,
+				event.kind === "mailbox_processed" &&
+				event.payload.seq === promptMailboxSeq,
 		) ?? null;
 	const stateAfterPrompt = await fetchActorState(actorId);
 	const rowAfterPrompt = await loadActorRow(actorId);
@@ -122,8 +124,13 @@ async function main(): Promise<void> {
 	const steerEvent =
 		steerResult.events.find(
 			(event) =>
-				event.kind === "mailbox_processed" && event.payload.seq === steerMailboxSeq,
+				event.kind === "mailbox_processed" &&
+				event.payload.seq === steerMailboxSeq,
 		) ?? null;
+	const provenance = await loadActorProofProvenance({
+		actorId,
+		sessionFile: rowAfterSteer?.pi_session_file,
+	});
 
 	await writeJson(".cache/test-int/actor-steer-live.json", {
 		actorId,
@@ -140,6 +147,7 @@ async function main(): Promise<void> {
 		promptEventCount: promptResult.events.length,
 		followUpEventCount: followUpResult.events.length,
 		steerEventCount: steerResult.events.length,
+		...provenance,
 	});
 }
 

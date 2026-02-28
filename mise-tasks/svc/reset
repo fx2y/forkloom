@@ -11,5 +11,10 @@ if [[ -d .data/seaweed ]] && ! rm -rf .data/seaweed 2>/dev/null; then
   docker run --rm -v "$PWD:/work" alpine:3.20 sh -lc 'rm -rf /work/.data/seaweed'
 fi
 rm -rf .cache/dbos .tmp/svc.* /tmp/svc.*
+rm -f \
+  .cache/mise-marks/svc__down.ok \
+  .cache/mise-marks/svc__health.ok \
+  .cache/mise-marks/svc__up.ok \
+  .cache/mise-marks/svc__worker.ok
 write_mark "svc:reset"
 echo "svc:reset ok"

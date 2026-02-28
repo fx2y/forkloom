@@ -1,8 +1,8 @@
 import type { PiPromptInput } from "../pi";
 import {
+	type PromptArtifactLoader,
 	appendContextLine,
 	loadPromptImages as loadPromptImagesFromAttachments,
-	type PromptArtifactLoader,
 } from "../pi/prompt-input";
 import type { RunSpecModel } from "../run/ports";
 
@@ -32,7 +32,10 @@ export async function buildRunPromptInput(
 	spec: RunSpecModel,
 	loader: PromptArtifactLoader,
 ): Promise<PiPromptInput> {
-	const images = await loadPromptImagesFromAttachments(spec.attachments, loader);
+	const images = await loadPromptImagesFromAttachments(
+		spec.attachments,
+		loader,
+	);
 	return {
 		message: buildRunPromptMessage(spec),
 		images: images.length > 0 ? images : undefined,

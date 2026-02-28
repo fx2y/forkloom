@@ -1,8 +1,8 @@
 import type { PiPromptInput } from "../pi";
 import {
+	type PromptArtifactLoader,
 	appendContextLine,
 	loadPromptImages,
-	type PromptArtifactLoader,
 } from "../pi/prompt-input";
 import type { ActorMailboxMessageModel, ActorStateModel } from "./ports";
 

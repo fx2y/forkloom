@@ -1,3 +1,6 @@
+import { copyFile, mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MockPiProviderManager } from "./mock-provider";
 import {
 	type CreatePiSessionInput,
@@ -16,7 +19,10 @@ export type ManagedPiSessionOverrides = Partial<
 		CreatePiSessionInput,
 		"cwd" | "extraEnv" | "homeOverride" | "model" | "sessionPath"
 	>
->;
+> & {
+	bootstrapTimeoutMs?: number | undefined;
+	mockBootstrapTimeoutMs?: number | undefined;
+};
 
 type ManagedPiSessionInput = CreatePiSessionInput & {
 	strictReal?: boolean | undefined;
@@ -29,7 +35,45 @@ type SessionFactoryDeps = {
 		| ((input: CreatePiSessionInput) => PiSessionPort)
 		| undefined;
 	mockProviderManager?: MockPiProviderManager | undefined;
+	prepareRealHome?: (() => Promise<string>) | undefined;
 };
+
+function toSessionScopeDir(cwd = process.cwd()): string {
+	return `--${cwd.replace(/[\\/]+/g, "-").replace(/^-+|-+$/g, "")}--`;
+}
+
+async function copyPiStateFile(
+	sourceAgentDir: string,
+	targetAgentDir: string,
+	fileName: string,
+): Promise<void> {
+	try {
+		await copyFile(
+			join(sourceAgentDir, fileName),
+			join(targetAgentDir, fileName),
+		);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw error;
+		}
+	}
+}
+
+export async function prepareWritablePiHome(
+	sourceHome = process.env.HOME ?? "",
+): Promise<string> {
+	const sourceAgentDir = join(sourceHome, ".pi", "agent");
+	const realHomeDir = await mkdtemp(join(tmpdir(), "forkloom-pi-real-home-"));
+	const targetAgentDir = join(realHomeDir, ".pi", "agent");
+	await mkdir(join(targetAgentDir, "sessions"), { recursive: true });
+	await mkdir(join(targetAgentDir, "sessions", toSessionScopeDir()), {
+		recursive: true,
+	});
+	await copyPiStateFile(sourceAgentDir, targetAgentDir, "auth.json");
+	await copyPiStateFile(sourceAgentDir, targetAgentDir, "settings.json");
+	await copyPiStateFile(sourceAgentDir, targetAgentDir, "models.json");
+	return realHomeDir;
+}
 
 class ManagedPiSessionPort implements PiSessionPort {
 	private closed = false;
@@ -132,24 +176,35 @@ export function createManagedPiSessionFactory(
 	const createSessionPort = deps.createSessionPort ?? createPiSessionPort;
 	const mockProviderManager =
 		deps.mockProviderManager ?? new MockPiProviderManager();
+	const prepareRealHome = deps.prepareRealHome ?? prepareWritablePiHome;
 
 	return async (
 		overrides: ManagedPiSessionOverrides = {},
 	): Promise<PiSessionPort> => {
 		const {
 			strictReal = false,
-			bootstrapTimeoutMs = 1_500,
-			mockBootstrapTimeoutMs = 5_000,
+			bootstrapTimeoutMs: baseBootstrapTimeoutMs,
+			mockBootstrapTimeoutMs: baseMockBootstrapTimeoutMs = 5_000,
 			...baseSessionInput
 		} = input;
+		const {
+			bootstrapTimeoutMs = baseBootstrapTimeoutMs ??
+				(strictReal ? 10_000 : 1_500),
+			mockBootstrapTimeoutMs = baseMockBootstrapTimeoutMs,
+			...sessionOverrides
+		} = overrides;
 		const sessionInput = {
 			...baseSessionInput,
-			...overrides,
+			...sessionOverrides,
+		};
+		const realSessionInput = {
+			...sessionInput,
+			homeOverride: sessionInput.homeOverride ?? (await prepareRealHome()),
 		};
 		let realSession: PiSessionPort | null = null;
 
 		try {
-			realSession = createSessionPort(sessionInput);
+			realSession = createSessionPort(realSessionInput);
 			await awaitWithTimeout(
 				realSession.getState(),
 				bootstrapTimeoutMs,
@@ -194,7 +249,6 @@ export async function probePiSession(
 	let session: PiSessionPort | null = null;
 	try {
 		session = await createSession();
-		await session.getState();
 		return true;
 	} catch {
 		return false;

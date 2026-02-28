@@ -9,7 +9,7 @@
 - Artifact identity is immutable `sha256`; bytes stored once in CAS layout `cas/aa/<sha256>`
 - Orchestration is `mise` only; secrets are `fnox` only; `.env*` is forbidden
 - Durability proof requires SQL unique guard plus DBOS live crash/recover test
-- PI protocol gate runs a real `pi --mode rpc` process; the API falls back to a local mock provider unless `PI_RPC_STRICT_REAL=1`
+- PI protocol gate runs a real `pi --mode rpc` process; the API falls back to a local mock provider unless the caller exports `PI_RPC_STRICT_REAL=1`
 - Compose mounts host `~/.pi/agent` into `api`/`pi`/`worker`, so persisted `pi auth` state is visible inside containers
 
 ## Ports
@@ -51,7 +51,7 @@ PI_RPC_STRICT_REAL=1 MISE_EXPERIMENTAL=1 mise run svc
 curl -fsS localhost:8080/health | jq .
 ```
 
-Strict-real prerequisite: host `~/.pi/agent/auth.json` and `~/.pi/agent/settings.json` must exist; `bootstrap:doctor` now fails fast on that path when `PI_RPC_STRICT_REAL=1`.
+Strict-real prerequisite: host `~/.pi/agent/auth.json` and `~/.pi/agent/settings.json` must exist; `bootstrap:doctor` now fails fast on that path when `PI_RPC_STRICT_REAL=1`. `PI_PROVIDER`/`PI_MODEL` come from `fnox`; strict-real itself is a caller override and must not be silently reset by `mise`.
 
 ## Quick Artifact Demo
 

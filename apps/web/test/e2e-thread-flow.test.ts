@@ -342,22 +342,20 @@ describe("web thread flow", () => {
 	});
 
 	it("renders hostile actor text as text nodes instead of executable HTML", async () => {
-		const fetchImpl = vi
-			.fn<typeof fetch>()
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify([
-						{
-							actorId: "ops",
-							name: '<img src=x onerror="window.__xss=1">',
-							status: "idle",
-							mailboxCursor: 0,
-							updatedAt: "2026-02-28T00:00:00.000Z",
-						},
-					]),
-					{ status: 200, headers: { "content-type": "application/json" } },
-				),
-			);
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+			new Response(
+				JSON.stringify([
+					{
+						actorId: "ops",
+						name: '<img src=x onerror="window.__xss=1">',
+						status: "idle",
+						mailboxCursor: 0,
+						updatedAt: "2026-02-28T00:00:00.000Z",
+					},
+				]),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		);
 
 		const root = document.createElement("div");
 		document.body.append(root);
@@ -368,7 +366,9 @@ describe("web thread flow", () => {
 		});
 
 		await vi.waitFor(() => {
-			expect(root.textContent).toContain('<img src=x onerror="window.__xss=1">');
+			expect(root.textContent).toContain(
+				'<img src=x onerror="window.__xss=1">',
+			);
 		});
 
 		const source = FakeEventSource.instances[0];
@@ -383,12 +383,12 @@ describe("web thread flow", () => {
 			payload: {
 				seq: 1,
 				kind: "prompt",
-				lastAssistantText: '<script>window.__xss=2</script>',
+				lastAssistantText: "<script>window.__xss=2</script>",
 			},
 		});
 
 		await vi.waitFor(() => {
-			expect(root.textContent).toContain('<script>window.__xss=2</script>');
+			expect(root.textContent).toContain("<script>window.__xss=2</script>");
 		});
 		expect(root.querySelector("img")).toBeNull();
 		expect(root.querySelector("script")).toBeNull();

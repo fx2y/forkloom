@@ -1,4 +1,5 @@
 import pg from "pg";
+import { createPoolCloseOnce } from "../../repo/pool-close";
 import { ActorNotFoundError } from "../errors";
 import { toMailboxFailedEffect } from "../event";
 import type {
@@ -177,14 +178,16 @@ function toActorEventModel(row: EventRow): ActorEventModel {
 
 export class PgActorRepo implements ActorRepo {
 	private readonly pool: PoolLike;
+	private readonly closePool: () => Promise<void>;
 
 	constructor(deps: PgActorRepoDeps) {
 		this.pool =
 			deps.pool ?? new pg.Pool({ connectionString: deps.databaseUrl });
+		this.closePool = createPoolCloseOnce(this.pool);
 	}
 
 	async close(): Promise<void> {
-		await this.pool.end();
+		await this.closePool();
 	}
 
 	async createActor(spec: ActorSpecModel): Promise<ActorStateModel> {
@@ -275,10 +278,10 @@ export class PgActorRepo implements ActorRepo {
 				 where actor_id = $1
 				 for update`,
 				[input.actorId],
-				);
-				if (!actor.rowCount) {
-					throw new ActorNotFoundError(input.actorId);
-				}
+			);
+			if (!actor.rowCount) {
+				throw new ActorNotFoundError(input.actorId);
+			}
 
 			let insertedMailbox = false;
 			let mailboxResult = input.dedupeKey
@@ -331,12 +334,12 @@ export class PgActorRepo implements ActorRepo {
 			const message = toMailboxMessageModel(
 				requireRow(mailboxResult, "insert mailbox message"),
 			);
-				const eventPayload = JSON.stringify({
-					msgId: message.msgId,
-					seq: message.seq,
-					kind: message.kind,
-					attachments: message.attachments,
-				});
+			const eventPayload = JSON.stringify({
+				msgId: message.msgId,
+				seq: message.seq,
+				kind: message.kind,
+				attachments: message.attachments,
+			});
 			const eventResult = insertedMailbox
 				? await client.query<EventRow>(
 						`insert into actor_event(actor_id, kind, payload)
@@ -563,7 +566,7 @@ export class PgActorRepo implements ActorRepo {
 		seqs: number[];
 		error: string;
 		actorStatus?: ActorStatus | undefined;
-		}): Promise<{ remainingPendingSeq: number | null }> {
+	}): Promise<{ remainingPendingSeq: number | null }> {
 		const finished = await this.finishBatch({
 			actorId: input.actorId,
 			workflowId: input.workflowId,

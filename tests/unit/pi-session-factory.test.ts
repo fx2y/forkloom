@@ -67,6 +67,23 @@ class StubSession implements PiSessionPort {
 	}
 }
 
+class DelayedSession extends StubSession {
+	constructor(
+		private readonly delayMs: number,
+		stateResult: PiSessionState | Error,
+		onClose?: (() => void) | undefined,
+	) {
+		super(stateResult, onClose);
+	}
+
+	async getState(): Promise<PiSessionState> {
+		await new Promise((resolve) => {
+			setTimeout(resolve, this.delayMs);
+		});
+		return super.getState();
+	}
+}
+
 const READY_STATE: PiSessionState = {
 	sessionFile: "/tmp/session.jsonl",
 	sessionId: "session-1",
@@ -86,6 +103,9 @@ describe("createManagedPiSessionFactory", () => {
 		const real = new StubSession(new Error("missing auth"));
 		const mock = new StubSession(READY_STATE);
 		const release = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+		const prepareRealHome = vi
+			.fn<() => Promise<string>>()
+			.mockResolvedValue("/tmp/forkloom-pi-real-home");
 		const createSessionPort = vi
 			.fn<(input: CreatePiSessionInput) => PiSessionPort>()
 			.mockImplementationOnce(() => real)
@@ -100,13 +120,18 @@ describe("createManagedPiSessionFactory", () => {
 		const createSession = createManagedPiSessionFactory(baseInput(), {
 			createSessionPort,
 			mockProviderManager: { acquire } as never,
+			prepareRealHome,
 		});
 
 		const session = await createSession();
 
 		expect(real.closed).toBe(true);
+		expect(prepareRealHome).toHaveBeenCalledTimes(1);
 		expect(acquire).toHaveBeenCalledTimes(1);
-		expect(createSessionPort).toHaveBeenNthCalledWith(1, baseInput());
+		expect(createSessionPort).toHaveBeenNthCalledWith(1, {
+			...baseInput(),
+			homeOverride: "/tmp/forkloom-pi-real-home",
+		});
 		expect(createSessionPort).toHaveBeenNthCalledWith(2, {
 			...baseInput(),
 			provider: "forkloom-mock",
@@ -120,6 +145,9 @@ describe("createManagedPiSessionFactory", () => {
 	});
 
 	it("throws the real session error when strictReal is enabled", async () => {
+		const prepareRealHome = vi
+			.fn<() => Promise<string>>()
+			.mockResolvedValue("/tmp/forkloom-pi-real-home");
 		const createSessionPort = vi
 			.fn<(input: CreatePiSessionInput) => PiSessionPort>()
 			.mockReturnValue(new StubSession(new Error("missing auth")));
@@ -133,6 +161,7 @@ describe("createManagedPiSessionFactory", () => {
 			{
 				createSessionPort,
 				mockProviderManager: { acquire } as never,
+				prepareRealHome,
 			},
 		);
 
@@ -140,7 +169,34 @@ describe("createManagedPiSessionFactory", () => {
 		expect(acquire).not.toHaveBeenCalled();
 	});
 
+	it("allows slower real bootstrap when strictReal is enabled", async () => {
+		const prepareRealHome = vi
+			.fn<() => Promise<string>>()
+			.mockResolvedValue("/tmp/forkloom-pi-real-home");
+		const createSessionPort = vi
+			.fn<(input: CreatePiSessionInput) => PiSessionPort>()
+			.mockReturnValue(new DelayedSession(2_000, READY_STATE));
+
+		const createSession = createManagedPiSessionFactory(
+			{
+				...baseInput(),
+				strictReal: true,
+			},
+			{
+				createSessionPort,
+				prepareRealHome,
+			},
+		);
+
+		const session = await createSession();
+		await expect(session.getState()).resolves.toEqual(READY_STATE);
+		await session.close();
+	});
+
 	it("reports false when probing an unavailable session factory", async () => {
+		const prepareRealHome = vi
+			.fn<() => Promise<string>>()
+			.mockResolvedValue("/tmp/forkloom-pi-real-home");
 		const createSessionPort = vi
 			.fn<(input: CreatePiSessionInput) => PiSessionPort>()
 			.mockReturnValue(new StubSession(new Error("missing auth")));
@@ -151,9 +207,25 @@ describe("createManagedPiSessionFactory", () => {
 			},
 			{
 				createSessionPort,
+				prepareRealHome,
 			},
 		);
 
 		await expect(probePiSession(createSession)).resolves.toBe(false);
+	});
+
+	it("reports true when the managed session factory returns a ready session", async () => {
+		const prepareRealHome = vi
+			.fn<() => Promise<string>>()
+			.mockResolvedValue("/tmp/forkloom-pi-real-home");
+		const createSessionPort = vi
+			.fn<(input: CreatePiSessionInput) => PiSessionPort>()
+			.mockReturnValue(new StubSession(READY_STATE));
+		const createSession = createManagedPiSessionFactory(baseInput(), {
+			createSessionPort,
+			prepareRealHome,
+		});
+
+		await expect(probePiSession(createSession)).resolves.toBe(true);
 	});
 });

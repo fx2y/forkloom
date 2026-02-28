@@ -1,4 +1,5 @@
 import pg from "pg";
+import { createPoolCloseOnce } from "../../repo/pool-close";
 import type {
 	AppendRunEventInput,
 	CreateRunInput,
@@ -124,14 +125,16 @@ function clampLimit(limit: number): number {
 
 export class PgRunRepo implements RunRepo {
 	private readonly pool: PoolLike;
+	private readonly closePool: () => Promise<void>;
 
 	constructor(deps: PgRunRepoDeps) {
 		this.pool =
 			deps.pool ?? new pg.Pool({ connectionString: deps.databaseUrl });
+		this.closePool = createPoolCloseOnce(this.pool);
 	}
 
 	async close(): Promise<void> {
-		await this.pool.end();
+		await this.closePool();
 	}
 
 	async createRun(

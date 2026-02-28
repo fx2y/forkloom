@@ -6,3 +6,5 @@ cd_repo_root
 require_cmds docker
 
 docker compose --profile worker up -d worker
+write_mark "svc:worker"
+echo "svc:worker ok"

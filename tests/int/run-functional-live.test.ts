@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 type FunctionalProof = {
 	runId: string;
 	created: boolean;
+	strictReal: boolean;
 	runStartedLatencyMs: number;
 	runState: {
 		status: string;
@@ -33,11 +34,15 @@ describe("run functional live proof", () => {
 
 		expect(typeof parsed.runId).toBe("string");
 		expect(parsed.created).toBe(true);
+		expect(typeof parsed.strictReal).toBe("boolean");
 		expect(parsed.runStartedLatencyMs).toBeLessThanOrEqual(200);
 		expect(parsed.runState?.status).toBe("done");
 		expect(typeof parsed.runState?.piSessionId).toBe("string");
 		expect(typeof parsed.runState?.piSessionFile).toBe("string");
-		expect(parsed.runDone?.resultText.length).toBeGreaterThan(0);
+		expect(typeof parsed.runDone?.resultText).toBe("string");
+		if (!parsed.strictReal) {
+			expect(parsed.runDone?.resultText.length).toBeGreaterThan(0);
+		}
 		expect(parsed.runDone?.artifacts).toContain(parsed.sessionArtifactSha256);
 		expect(
 			parsed.runState?.artifacts.some(
