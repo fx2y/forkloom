@@ -172,6 +172,11 @@ depends = ["svc:health"]
 sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "README.md", "mise-tasks/test/int/run-sse"]
 outputs = [".cache/mise-marks/test__int__run-sse.ok", ".cache/test-int/run-sse.json"]
 
+[tasks."test:int:run-sandbox-functional"]
+run = "bash ./mise-tasks/test/int/run-sandbox-functional"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-sandbox-functional"]
+outputs = [".cache/mise-marks/test__int__run-sandbox-functional.ok", ".cache/test-int/run-sandbox-functional.json"]
+
 [tasks."test:int:ocr-doc"]
 run = "bash ./mise-tasks/test/int/ocr-doc"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]

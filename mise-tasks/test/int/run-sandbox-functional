@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker
+
+mkdir -p .cache/test-int
+pnpm exec tsx scripts/harness/run-sandbox-functional.ts
+pnpm exec vitest run tests/int/sandbox-functional-live.test.ts
+
+write_mark "test:int:run-sandbox-functional"
+echo "test:int:run-sandbox-functional ok"

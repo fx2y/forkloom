@@ -10,6 +10,13 @@ export type AppConfig = {
 	piProvider: string;
 	piModel: string;
 	piStrictReal: boolean;
+	sandboxImage: string;
+	sandboxWorkRoot: string;
+	sandboxInputsRoot: string;
+	sandboxPiHomeRoot: string;
+	sandboxPiHomePath: string;
+	sandboxDefaultTimeoutSec: number;
+	sandboxMaxBytesOut: number;
 };
 
 function must(name: string): string {
@@ -44,6 +51,21 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
 	throw new Error(`invalid boolean: ${value}`);
 }
 
+function parsePositiveInt(
+	value: string | undefined,
+	fallback: number,
+	label: string,
+): number {
+	if (!value) {
+		return fallback;
+	}
+	const parsed = Number(value);
+	if (!Number.isInteger(parsed) || parsed < 1) {
+		throw new Error(`invalid ${label}: ${value}`);
+	}
+	return parsed;
+}
+
 export function loadConfig(): AppConfig {
 	return {
 		port: parsePort(process.env.PORT, 8080),
@@ -58,5 +80,22 @@ export function loadConfig(): AppConfig {
 		piProvider: process.env.PI_PROVIDER ?? "github-copilot",
 		piModel: process.env.PI_MODEL ?? "gpt-4.1",
 		piStrictReal: parseBoolean(process.env.PI_RPC_STRICT_REAL, false),
+		sandboxImage: process.env.SANDBOX_IMAGE ?? "node:24-alpine",
+		sandboxWorkRoot: process.env.SANDBOX_WORK_ROOT ?? ".cache/sandbox/work",
+		sandboxInputsRoot:
+			process.env.SANDBOX_INPUTS_ROOT ?? ".cache/sandbox/inputs",
+		sandboxPiHomeRoot:
+			process.env.SANDBOX_PI_HOME_ROOT ?? ".cache/sandbox/pi-home",
+		sandboxPiHomePath: process.env.SANDBOX_PI_HOME_PATH ?? "/pi-home",
+		sandboxDefaultTimeoutSec: parsePositiveInt(
+			process.env.SANDBOX_TIMEOUT_SEC,
+			900,
+			"sandbox timeout",
+		),
+		sandboxMaxBytesOut: parsePositiveInt(
+			process.env.SANDBOX_MAX_BYTES_OUT,
+			256_000,
+			"sandbox max bytes out",
+		),
 	};
 }
