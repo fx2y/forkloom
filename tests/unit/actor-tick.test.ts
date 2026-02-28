@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { NoopActorBatchProcessor } from "../../apps/api/src/actor";
+import {
+	ActorTransientError,
+	NoopActorBatchProcessor,
+} from "../../apps/api/src/actor";
 import type {
 	ActorMailboxMessageModel,
 	ActorRepo,
@@ -59,8 +62,8 @@ function mailboxMessage(
 	};
 }
 
-function createRepo(overrides: Partial<ActorRepo> = {}): ActorRepo {
-	return {
+	function createRepo(overrides: Partial<ActorRepo> = {}): ActorRepo {
+		return {
 		createActor: async () => actorState(),
 		listActors: async () => [actorState()],
 		getActorState: async () => actorState(),
@@ -70,18 +73,19 @@ function createRepo(overrides: Partial<ActorRepo> = {}): ActorRepo {
 		},
 		acquireTickLease: async () => true,
 		claimNextMessages: async () => [],
-		persistProcessedBatch: async () => ({
-			actor: actorState(),
-			events: [],
-			mailboxCursor: 1,
-			remainingPendingSeq: null,
-		}),
-		markMessagesDead: async () => ({ remainingPendingSeq: null }),
-		getFirstPendingSeq: async () => null,
-		releaseTickLease: async () => undefined,
-		...overrides,
-	};
-}
+			persistProcessedBatch: async () => ({
+				actor: actorState(),
+				events: [],
+				mailboxCursor: 1,
+				remainingPendingSeq: null,
+			}),
+			markMessagesDead: async () => ({ remainingPendingSeq: null }),
+			requeueMessages: async () => ({ remainingPendingSeq: null }),
+			getFirstPendingSeq: async () => null,
+			releaseTickLease: async () => undefined,
+			...overrides,
+		};
+	}
 
 function stepRunner(stepNames: StepName[]) {
 	return {
@@ -177,5 +181,46 @@ describe("executeActorTick", () => {
 		);
 
 		expect(queued).toEqual([{ actorId: "actor-1", firstPendingSeq: 2 }]);
+	});
+
+	it("requeues transient batches instead of dead-lettering them", async () => {
+		let requeued = 0;
+		let dead = 0;
+		const queued: Array<{ actorId: string; firstPendingSeq: number }> = [];
+		await expect(
+			executeActorTick(
+				"actor-1",
+				{
+					repo: createRepo({
+						claimNextMessages: async () => [mailboxMessage()],
+						requeueMessages: async () => {
+							requeued += 1;
+							return { remainingPendingSeq: 1 };
+						},
+						markMessagesDead: async () => {
+							dead += 1;
+							return { remainingPendingSeq: null };
+						},
+					}),
+					processor: {
+						ensureSession: async () => undefined,
+						applyBatch: async () => {
+							throw new ActorTransientError("timeout waiting pi response");
+						},
+					},
+					workflowLauncher: {
+						enqueueActorTick: async (input) => {
+							queued.push(input);
+						},
+					},
+					workflowId: "tick:actor-1:1",
+				},
+				stepRunner([]),
+			),
+		).rejects.toThrow("timeout waiting pi response");
+
+		expect(requeued).toBe(1);
+		expect(dead).toBe(0);
+		expect(queued).toEqual([{ actorId: "actor-1", firstPendingSeq: 1 }]);
 	});
 });

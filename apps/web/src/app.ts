@@ -12,6 +12,7 @@ import {
 	uploadAttachments,
 } from "./actor-client";
 import {
+	type ActorThreadView,
 	deriveThreadPresence,
 	getSelectedThread,
 	initialInboxViewState,
@@ -220,6 +221,102 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 		}
 	};
 
+	const clearNode = (node: Element) => {
+		node.replaceChildren();
+	};
+
+	const appendCode = (parent: Element, value: string) => {
+		const code = document.createElement("code");
+		code.textContent = value;
+		parent.append(code);
+	};
+
+	const setThreadMeta = (value: { prefix: string; code?: string; suffix?: string }) => {
+		clearNode(threadMetaNode);
+		threadMetaNode.append(value.prefix);
+		if (value.code) {
+			appendCode(threadMetaNode, value.code);
+		}
+		if (value.suffix) {
+			threadMetaNode.append(value.suffix);
+		}
+	};
+
+	const renderThreadList = (threads: ActorThreadView[]) => {
+		clearNode(threadListNode);
+		for (const thread of threads) {
+			const summary = summarizeThread(thread);
+			const selected = thread.actor.actorId === state.selectedActorId;
+			const item = document.createElement("li");
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = `thread-list-item${selected ? " is-selected" : ""}`;
+			button.dataset.threadSelect = thread.actor.actorId;
+			button.setAttribute("aria-current", selected ? "page" : "false");
+			const row = document.createElement("span");
+			row.className = "thread-list-row";
+			const name = document.createElement("strong");
+			name.textContent = thread.actor.name;
+			const presence = document.createElement("span");
+			presence.className = `presence presence-${summary.presence}`;
+			presence.textContent = summary.presence;
+			row.append(name, presence);
+			const preview = document.createElement("span");
+			preview.className = "thread-list-preview";
+			preview.textContent = summary.preview;
+			const meta = document.createElement("span");
+			meta.className = "thread-list-meta";
+			meta.textContent = thread.actor.actorId;
+			button.append(row, preview, meta);
+			item.append(button);
+			threadListNode.append(item);
+		}
+	};
+
+	const renderArtifacts = (artifacts: ActorThreadView["artifacts"]) => {
+		clearNode(artifactNode);
+		for (const artifact of artifacts) {
+			const chip = artifact.href
+				? document.createElement("a")
+				: document.createElement("span");
+			chip.className = artifact.href ? "chip chip-link" : "chip";
+			if (chip instanceof HTMLAnchorElement && artifact.href) {
+				chip.href = artifact.href;
+				chip.target = "_blank";
+				chip.rel = "noreferrer";
+			}
+			chip.append(`${artifact.kind}`);
+			appendCode(chip, artifact.label);
+			artifactNode.append(chip);
+		}
+	};
+
+	const renderTrace = (trace: ActorThreadView["trace"]) => {
+		clearNode(traceNode);
+		for (const entry of trace) {
+			const item = document.createElement("li");
+			const kind = document.createElement("strong");
+			kind.textContent = entry.kind;
+			const seq = document.createElement("span");
+			seq.textContent = `#${entry.seq}`;
+			const detail = document.createElement("code");
+			detail.textContent = entry.detail;
+			item.append(kind, seq, detail);
+			traceNode.append(item);
+		}
+	};
+
+	const renderUploads = () => {
+		clearNode(uploadsNode);
+		for (const artifact of uploaded) {
+			const chip = document.createElement("span");
+			chip.className = "chip";
+			chip.append(artifact.name);
+			appendCode(chip, artifact.sha256.slice(0, 10));
+			uploadsNode.append(chip);
+		}
+	};
+
 	const update = () => {
 		const threads = listInboxThreads(state);
 		const selectedThread = getSelectedThread(state);
@@ -240,78 +337,55 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 		bootNode.dataset.state = booting ? "booting" : "ready";
 		errorNode.hidden = errorMessage.length === 0;
 		errorNode.textContent = errorMessage;
-
-		threadListNode.innerHTML = threads
-			.map((thread) => {
-				const summary = summarizeThread(thread);
-				const selected = thread.actor.actorId === state.selectedActorId;
-				return `
-					<li>
-						<button
-							type="button"
-							class="thread-list-item${selected ? " is-selected" : ""}"
-							data-thread-select="${thread.actor.actorId}"
-							aria-current="${selected ? "page" : "false"}"
-						>
-							<span class="thread-list-row">
-								<strong>${thread.actor.name}</strong>
-								<span class="presence presence-${summary.presence}">${summary.presence}</span>
-							</span>
-							<span class="thread-list-preview">${summary.preview}</span>
-							<span class="thread-list-meta">${thread.actor.actorId}</span>
-						</button>
-					</li>
-				`;
-			})
-			.join("");
+		renderThreadList(threads);
 
 		if (!selectedThread) {
 			threadTitleNode.textContent = "No thread selected";
-			threadMetaNode.innerHTML =
-				"Open a thread or route with <code>@actor</code>.";
+			setThreadMeta({
+				prefix: "Open a thread or route with ",
+				code: "@actor",
+				suffix: ".",
+			});
 			threadStatusNode.textContent = "idle";
 			threadStatusNode.dataset.state = "idle";
 			threadPreviewNode.textContent =
 				"Select a thread to watch actor events and reply history.";
 			threadErrorNode.hidden = true;
 			threadErrorNode.textContent = "";
-			artifactNode.innerHTML = "";
+			clearNode(artifactNode);
 			traceSummaryNode.textContent = "Trace 0";
-			traceNode.innerHTML = "";
+			clearNode(traceNode);
 		} else {
 			const summary = summarizeThread(selectedThread);
 			threadTitleNode.textContent = selectedThread.actor.name;
-			threadMetaNode.innerHTML = `actor <code>${selectedThread.actor.actorId}</code>`;
+			setThreadMeta({
+				prefix: "actor ",
+				code: selectedThread.actor.actorId,
+			});
 			threadStatusNode.textContent = summary.presence;
 			threadStatusNode.dataset.state = summary.presence;
 			threadPreviewNode.textContent = summary.preview;
 			threadErrorNode.hidden = selectedThread.latestError == null;
 			threadErrorNode.textContent = selectedThread.latestError ?? "";
-			artifactNode.innerHTML = selectedThread.artifacts
-				.map((artifact) =>
-					artifact.href
-						? `<a class="chip chip-link" href="${artifact.href}" target="_blank" rel="noreferrer">${artifact.kind}<code>${artifact.label}</code></a>`
-						: `<span class="chip">${artifact.kind}<code>${artifact.label}</code></span>`,
-				)
-				.join("");
+			renderArtifacts(selectedThread.artifacts);
 			traceSummaryNode.textContent = `Trace ${selectedThread.trace.length}`;
-			traceNode.innerHTML = selectedThread.trace
-				.map(
-					(entry) =>
-						`<li><strong>${entry.kind}</strong><span>#${entry.seq}</span><code>${entry.detail}</code></li>`,
-				)
-				.join("");
+			renderTrace(selectedThread.trace);
 		}
 
-		uploadsNode.innerHTML = uploaded
-			.map(
-				(artifact) =>
-					`<span class="chip">${artifact.name}<code>${artifact.sha256.slice(0, 10)}</code></span>`,
-			)
-			.join("");
-		composeHintNode.innerHTML = state.selectedActorId
-			? `Default send in this thread is <code>${defaultKind}</code>. Prefix with <code>@actor</code> to dispatch elsewhere.`
-			: "Open a thread or prefix with <code>@actor</code>.";
+		renderUploads();
+		if (state.selectedActorId) {
+			clearNode(composeHintNode);
+			composeHintNode.append("Default send in this thread is ");
+			appendCode(composeHintNode, defaultKind);
+			composeHintNode.append(". Prefix with ");
+			appendCode(composeHintNode, "@actor");
+			composeHintNode.append(" to dispatch elsewhere.");
+		} else {
+			clearNode(composeHintNode);
+			composeHintNode.append("Open a thread or prefix with ");
+			appendCode(composeHintNode, "@actor");
+			composeHintNode.append(".");
+		}
 		sendButton.disabled = sending || booting;
 		sendButton.textContent = sending ? "Sending..." : `Send ${defaultKind}`;
 		interruptButton.hidden = targetPresence !== "streaming";
@@ -370,6 +444,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
 	};
 
 	const ensureActor = async (actorId: string, actorName: string) => {
+		const existing = state.threads[actorId]?.actor;
+		if (existing) {
+			state = selectActor(state, existing.actorId);
+			connectThread(existing.actorId);
+			return existing;
+		}
 		const actor = await createActor(
 			deps.fetchImpl,
 			toActorSpec({

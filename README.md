@@ -41,7 +41,7 @@ Open `http://127.0.0.1:5173` for the inbox/thread actor UI.
 Optional worker seam:
 
 ```bash
-docker compose --profile worker up -d worker
+MISE_EXPERIMENTAL=1 mise run svc:worker
 ```
 
 Strict real PI (fail if local `pi` auth/model state is unusable):

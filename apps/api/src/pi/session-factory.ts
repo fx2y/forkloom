@@ -12,7 +12,10 @@ import {
 } from "./session-port";
 
 export type ManagedPiSessionOverrides = Partial<
-	Pick<CreatePiSessionInput, "cwd" | "extraEnv" | "homeOverride" | "model">
+	Pick<
+		CreatePiSessionInput,
+		"cwd" | "extraEnv" | "homeOverride" | "model" | "sessionPath"
+	>
 >;
 
 type ManagedPiSessionInput = CreatePiSessionInput & {

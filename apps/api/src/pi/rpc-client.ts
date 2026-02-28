@@ -40,6 +40,7 @@ export type SpawnPiRpcInput = {
 	model: string;
 	cwd?: string | undefined;
 	homeOverride?: string | undefined;
+	sessionPath?: string | undefined;
 	extraEnv?: NodeJS.ProcessEnv | undefined;
 };
 
@@ -65,9 +66,20 @@ export function spawnPiRpcProcess(
 	input: SpawnPiRpcInput,
 ): ChildProcessWithoutNullStreams {
 	const piBin = resolve("node_modules", ".bin", "pi");
+	const args = [
+		"--mode",
+		"rpc",
+		"--provider",
+		input.provider,
+		"--model",
+		input.model,
+	];
+	if (input.sessionPath) {
+		args.push("--session", input.sessionPath);
+	}
 	return spawn(
 		piBin,
-		["--mode", "rpc", "--provider", input.provider, "--model", input.model],
+		args,
 		{
 			cwd: input.cwd ?? process.cwd(),
 			env: {

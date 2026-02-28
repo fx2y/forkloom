@@ -11,9 +11,13 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import pg from "pg";
 import {
 	LazyDbosActorWorkflowLauncher,
-	NoopActorBatchProcessor,
 	PgActorRepo,
+	PiActorBatchProcessor,
 } from "../../apps/api/src/actor";
+import {
+	MockPiProviderManager,
+	createManagedPiSessionFactory,
+} from "../../apps/api/src/pi";
 import { PgArtifactRepo } from "../../apps/api/src/repo/postgres";
 import { registerActorTickWorkflow } from "../../apps/api/src/workflow";
 
@@ -40,6 +44,17 @@ mkdirSync(dirname(crashMarker), { recursive: true });
 const workflowID = `tick:${actorId}:1`;
 const pool = new pg.Pool({ connectionString: systemDatabaseUrl });
 const actorRepo = new PgActorRepo({ databaseUrl: systemDatabaseUrl });
+const createPiSession = createManagedPiSessionFactory(
+	{
+		provider: process.env.PI_PROVIDER ?? "github-copilot",
+		model: process.env.PI_MODEL ?? "gpt-4.1",
+		strictReal: process.env.PI_RPC_STRICT_REAL === "1",
+	},
+	{ mockProviderManager: new MockPiProviderManager() },
+);
+const processor = new PiActorBatchProcessor({
+	createPiSession: async () => createPiSession(),
+});
 const migrationRepo = new PgArtifactRepo({
 	databaseUrl: systemDatabaseUrl,
 	migrationsDir: resolve("apps/api/migrations"),
@@ -87,7 +102,7 @@ async function writeProof(): Promise<void> {
 	const eventResult = await pool.query<{ count: string }>(
 		`select count(*)::text as count
 		 from actor_event
-		 where actor_id = $1 and kind = 'mailbox_processed'`,
+		 where actor_id = $1 and kind in ('session_bound', 'mailbox_processed')`,
 		[actorId],
 	);
 	const lockResult = await pool.query<{ count: string }>(
@@ -102,15 +117,15 @@ async function writeProof(): Promise<void> {
 	writeFileSync(
 		outPath,
 		`${JSON.stringify(
-			{
-				workflowID,
-				actorId,
-				crashMarker: readFileSync(crashMarker, "utf8").trim(),
-				actor: actorResult.rows[0] ?? null,
-				messages: mailboxResult.rows,
-				processedEventCount: Number(eventResult.rows[0]?.count ?? "0"),
-				lockCount: Number(lockResult.rows[0]?.count ?? "0"),
-			},
+				{
+					workflowID,
+					actorId,
+					crashMarker: readFileSync(crashMarker, "utf8").trim(),
+					actor: actorResult.rows[0] ?? null,
+					messages: mailboxResult.rows,
+					persistedActorEventCount: Number(eventResult.rows[0]?.count ?? "0"),
+					lockCount: Number(lockResult.rows[0]?.count ?? "0"),
+				},
 			null,
 			2,
 		)}\n`,
@@ -130,12 +145,12 @@ async function run(): Promise<void> {
 	const launcher = new LazyDbosActorWorkflowLauncher();
 	const workflow = registerActorTickWorkflow({
 		repo: actorRepo,
-		processor: new NoopActorBatchProcessor(),
+		processor,
 		workflowLauncher: launcher,
 		onAfterStep: async (name) => {
 			if (
 				mode === "first" &&
-				name === "persistBatch" &&
+				name === "applyBatch" &&
 				!existsSync(crashMarker)
 			) {
 				writeFileSync(crashMarker, "crashed\n", "utf8");
@@ -161,6 +176,7 @@ run()
 	.then(async () => {
 		await DBOS.shutdown({ deregister: true });
 		await actorRepo.close();
+		await processor.closeAll();
 		await migrationRepo.close();
 		await pool.end();
 	})
@@ -172,6 +188,7 @@ run()
 			// ignore shutdown errors in failure path
 		}
 		await actorRepo.close();
+		await processor.closeAll();
 		await migrationRepo.close();
 		await pool.end();
 		process.exit(1);

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
 import {
 	ActorService,
+	buildActorPromptInput,
 	LazyDbosActorWorkflowLauncher,
 	PgActorRepo,
 	PiActorBatchProcessor,
@@ -91,10 +92,13 @@ async function bootstrap() {
 		workflowLauncher: actorWorkflowLauncher,
 	});
 	const actorProcessor = new PiActorBatchProcessor({
-		createPiSession: async () =>
+		createPiSession: async (actor) =>
 			createPiSession({
 				model: config.piModel,
+				sessionPath: actor.piSessionFile ?? undefined,
 			}),
+		buildPromptInput: (actor, message) =>
+			buildActorPromptInput(actor, message, workflowArtifactService),
 	});
 	const runWorkflow = registerRunOnceWorkflow({
 		runRepo,
@@ -148,13 +152,22 @@ async function main(): Promise<void> {
 		console.log(JSON.stringify(payload));
 	});
 
+	let closing: Promise<void> | null = null;
 	const close = async () => {
-		server.close();
-		await repo.close();
-		await runRepo.close();
-		await actorRepo.close();
-		await actorProcessor.closeAll();
-		await shutdownDbos();
+		if (closing) {
+			return closing;
+		}
+		closing = (async () => {
+			await new Promise<void>((resolveClose) => {
+				server.close(() => resolveClose());
+			});
+			await repo.close();
+			await runRepo.close();
+			await actorRepo.close();
+			await actorProcessor.closeAll();
+			await shutdownDbos();
+		})();
+		return closing;
 	};
 
 	process.on("SIGTERM", () => {

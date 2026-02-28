@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { BufferedSseStream } from "./sse-buffer";
+import { BufferedSseStream, encodeControlFrame } from "./sse-buffer";
 
 const POLL_MS = 250;
 export const MAX_BUFFER = 100;
@@ -36,6 +36,21 @@ export async function streamBufferedEvents<TEvent extends { seq: number }>(
 		stream.close();
 	};
 
+	const closeWithPollError = () => {
+		if (closed) {
+			return;
+		}
+		closed = true;
+		clearInterval(timer);
+		stream.enqueueFrame({
+			chunk: encodeControlFrame("gap", {
+				reason: "poll_error",
+				reconnectFrom: stream.lastDeliveredSeq,
+			}),
+		});
+		stream.close();
+	};
+
 	req.on("close", stop);
 
 	const poll = async () => {
@@ -58,6 +73,8 @@ export async function streamBufferedEvents<TEvent extends { seq: number }>(
 					return;
 				}
 			}
+		} catch {
+			closeWithPollError();
 		} finally {
 			polling = false;
 		}

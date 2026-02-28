@@ -68,6 +68,11 @@ outputs = [".cache/mise-marks/svc__reset.ok"]
 [tasks."svc:logs"]
 run = "bash ./mise-tasks/svc/logs"
 
+[tasks."svc:worker"]
+run = "bash ./mise-tasks/svc/worker"
+sources = ["docker-compose.yml", "mise-tasks/svc/worker"]
+outputs = [".cache/mise-marks/svc__worker.ok"]
+
 [tasks.svc]
 depends = ["svc:health"]
 

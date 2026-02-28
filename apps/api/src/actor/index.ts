@@ -11,6 +11,7 @@ export {
 export type { ActorServiceDeps } from "./service";
 export { NoopActorBatchProcessor, PiActorBatchProcessor } from "./processor";
 export type { CreateActorPiSession } from "./processor";
+export { buildActorPromptInput, buildActorPromptMessage } from "./prompt";
 export {
 	ACTOR_TICK_BUDGET,
 	ACTOR_TICK_QUEUE,
@@ -30,4 +31,12 @@ export {
 	toActorEventContract,
 	toActorStateContract,
 } from "./event";
+export {
+	ActorNotFoundError,
+	ActorTransientError,
+	isActorNotFoundError,
+	isActorTransientError,
+	isRetryablePiError,
+	toActorTransientError,
+} from "./errors";
 export { PgActorRepo } from "./repo/postgres";

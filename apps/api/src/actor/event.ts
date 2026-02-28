@@ -65,6 +65,7 @@ export function toMailboxProcessedEffect(input: {
 		sessionId: input.sessionId,
 		sessionFile: input.sessionFile,
 		lastAssistantText: input.lastAssistantText,
+		attachments: input.message.attachments,
 	});
 }
 

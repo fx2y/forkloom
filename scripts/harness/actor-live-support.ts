@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type {
 	ActorEvent,
 	ActorSpec,
@@ -11,6 +13,8 @@ import {
 	readJson,
 	writeJson,
 } from "./live-support";
+
+const execFileAsync = promisify(execFile);
 
 export function makeActorSpec(actorId: string, name = "ops"): ActorSpec {
 	return {
@@ -43,6 +47,45 @@ export async function postActorMessage(
 		body: JSON.stringify(payload),
 	});
 	return readJson<ActorEvent>(response, `post actor message ${actorId}`);
+}
+
+export async function uploadArtifact(input: {
+	body: string;
+	filename: string;
+	mime?: string | undefined;
+}) {
+	const form = new FormData();
+	form.set(
+		"file",
+		new Blob([input.body], { type: input.mime ?? "text/plain" }),
+		input.filename,
+	);
+	const response = await fetch(`${apiOrigin()}/artifacts`, {
+		method: "POST",
+		body: form,
+	});
+	return readJson<{ sha256: string }>(response, `upload ${input.filename}`);
+}
+
+export async function waitForApiReady(timeoutMs = 30_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		try {
+			const response = await fetch(`${apiOrigin()}/health`);
+			if (response.ok) {
+				return;
+			}
+		} catch {
+			// keep polling until the deadline
+		}
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	throw new Error("api did not become healthy after restart");
+}
+
+export async function restartApi(): Promise<void> {
+	await execFileAsync("docker", ["compose", "restart", "api"]);
+	await waitForApiReady();
 }
 
 export class ActorEventStream {

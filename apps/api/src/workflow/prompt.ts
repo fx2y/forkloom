@@ -1,34 +1,10 @@
-import { Buffer } from "node:buffer";
-import type { PiImageInput, PiPromptInput } from "../pi";
-import type { ArtifactModel } from "../ports";
+import type { PiPromptInput } from "../pi";
+import {
+	appendContextLine,
+	loadPromptImages as loadPromptImagesFromAttachments,
+	type PromptArtifactLoader,
+} from "../pi/prompt-input";
 import type { RunSpecModel } from "../run/ports";
-
-type PromptArtifactLoader = {
-	getArtifactMeta(sha256: string): Promise<ArtifactModel>;
-	getArtifactBytes(sha256: string): Promise<{
-		body: NodeJS.ReadableStream;
-		contentType: string | null;
-	}>;
-};
-
-function appendContextLine(
-	lines: string[],
-	label: string,
-	value: string,
-): void {
-	if (value.length === 0) {
-		return;
-	}
-	lines.push(`- ${label}: ${value}`);
-}
-
-async function readAll(stream: NodeJS.ReadableStream): Promise<Buffer> {
-	const chunks: Buffer[] = [];
-	for await (const chunk of stream) {
-		chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-	}
-	return Buffer.concat(chunks);
-}
 
 export function buildRunPromptMessage(spec: RunSpecModel): string {
 	const contextLines: string[] = [];
@@ -45,32 +21,18 @@ export function buildRunPromptMessage(spec: RunSpecModel): string {
 	return `${spec.userMsg}\n\nRun context:\n${contextLines.join("\n")}`;
 }
 
-export async function loadPromptImages(
+export function loadPromptImages(
 	spec: RunSpecModel,
 	loader: PromptArtifactLoader,
-): Promise<PiImageInput[]> {
-	const images: PiImageInput[] = [];
-	for (const attachment of spec.attachments) {
-		const meta = await loader.getArtifactMeta(attachment.sha256);
-		if (!meta.mime.startsWith("image/")) {
-			continue;
-		}
-		const object = await loader.getArtifactBytes(attachment.sha256);
-		const bytes = await readAll(object.body);
-		images.push({
-			type: "image",
-			data: bytes.toString("base64"),
-			mimeType: object.contentType ?? meta.mime,
-		});
-	}
-	return images;
+) {
+	return loadPromptImagesFromAttachments(spec.attachments, loader);
 }
 
 export async function buildRunPromptInput(
 	spec: RunSpecModel,
 	loader: PromptArtifactLoader,
 ): Promise<PiPromptInput> {
-	const images = await loadPromptImages(spec, loader);
+	const images = await loadPromptImagesFromAttachments(spec.attachments, loader);
 	return {
 		message: buildRunPromptMessage(spec),
 		images: images.length > 0 ? images : undefined,

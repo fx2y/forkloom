@@ -4,6 +4,7 @@ import {
 	fetchActorState,
 	makeActorSpec,
 	postActorMessage,
+	uploadArtifact,
 	writeJson,
 } from "./actor-live-support";
 import { queryRows } from "./live-support";
@@ -15,18 +16,26 @@ function createActorId(): string {
 async function main(): Promise<void> {
 	const actorId = createActorId();
 	await createActor(makeActorSpec(actorId, "functional"));
+	const attachment = await uploadArtifact({
+		body: "actor attachment proof\n",
+		filename: "actor-functional.txt",
+	});
 
 	const stream = new ActorEventStream(actorId);
 	try {
 		const posted = await postActorMessage(actorId, {
 			kind: "prompt",
 			text: "reply with one concise line",
-			attachments: [],
+			attachments: [{ sha256: attachment.sha256 }],
 		});
+		const postedMailboxSeq =
+			typeof posted.payload.seq === "number" ? posted.payload.seq : null;
 		const result = await stream.readUntil((current) =>
 			current.events.some(
 				(event) =>
-					event.kind === "mailbox_processed" || event.kind === "mailbox_failed",
+					(event.kind === "mailbox_processed" ||
+						event.kind === "mailbox_failed") &&
+					event.payload.seq === postedMailboxSeq,
 			),
 		);
 		const actorState = await fetchActorState(actorId);
@@ -42,17 +51,21 @@ async function main(): Promise<void> {
 			[actorId],
 		);
 		const actorRow = actorRows[0] ?? null;
+		const queuedEvent =
+			result.events.find((event) => event.kind === "mailbox_queued") ?? null;
+		const processedEvent =
+			result.events.find((event) => event.kind === "mailbox_processed") ?? null;
 
 		await writeJson(".cache/test-int/actor-functional.json", {
 			actorId,
+			attachmentSha256: attachment.sha256,
 			posted,
 			eventKinds: result.events.map((event) => event.kind),
 			eventSeqs: result.events.map((event) => event.seq),
 			actorState,
 			actorRow,
-			processedEvent:
-				result.events.find((event) => event.kind === "mailbox_processed") ??
-				null,
+			queuedEvent,
+			processedEvent,
 		});
 	} finally {
 		stream.close();

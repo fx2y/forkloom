@@ -1,4 +1,5 @@
 import pg from "pg";
+import { ActorNotFoundError } from "../errors";
 import { toMailboxFailedEffect } from "../event";
 import type {
 	ActorBatchEffect,
@@ -196,14 +197,13 @@ export class PgActorRepo implements ActorRepo {
 				 mem_ref,
 				 pi_session_id
 			 )
-			 values ($1, $2, $3, $4, $5, $6)
-			 on conflict (actor_id) do update
-			 set name = excluded.name,
-				 status = excluded.status,
-				 workspace_id = coalesce(excluded.workspace_id, actor.workspace_id),
-				 mem_ref = coalesce(excluded.mem_ref, actor.mem_ref),
-				 pi_session_id = coalesce(excluded.pi_session_id, actor.pi_session_id),
-				 updated_at = now()
+				 values ($1, $2, $3, $4, $5, $6)
+				 on conflict (actor_id) do update
+				 set name = excluded.name,
+					 workspace_id = coalesce(excluded.workspace_id, actor.workspace_id),
+					 mem_ref = coalesce(excluded.mem_ref, actor.mem_ref),
+					 pi_session_id = coalesce(excluded.pi_session_id, actor.pi_session_id),
+					 updated_at = now()
 			 returning actor_id, name, status, mailbox_cursor, next_mailbox_seq,
 			 inflight_workflow_id, pi_session_id, pi_session_file, mem_ref,
 			 workspace_id, updated_at`,
@@ -275,10 +275,10 @@ export class PgActorRepo implements ActorRepo {
 				 where actor_id = $1
 				 for update`,
 				[input.actorId],
-			);
-			if (!actor.rowCount) {
-				throw new Error(`post mailbox message: missing actor ${input.actorId}`);
-			}
+				);
+				if (!actor.rowCount) {
+					throw new ActorNotFoundError(input.actorId);
+				}
 
 			let insertedMailbox = false;
 			let mailboxResult = input.dedupeKey
@@ -331,11 +331,12 @@ export class PgActorRepo implements ActorRepo {
 			const message = toMailboxMessageModel(
 				requireRow(mailboxResult, "insert mailbox message"),
 			);
-			const eventPayload = JSON.stringify({
-				msgId: message.msgId,
-				seq: message.seq,
-				kind: message.kind,
-			});
+				const eventPayload = JSON.stringify({
+					msgId: message.msgId,
+					seq: message.seq,
+					kind: message.kind,
+					attachments: message.attachments,
+				});
 			const eventResult = insertedMailbox
 				? await client.query<EventRow>(
 						`insert into actor_event(actor_id, kind, payload)
@@ -429,9 +430,15 @@ export class PgActorRepo implements ActorRepo {
 				 select msg_id
 				 from mailbox_msg
 				 where actor_id = $1
-				   and (
-					 state = 'queued'
-					 or (
+				   and exists (
+					 select 1
+					 from actor
+					 where actor.actor_id = mailbox_msg.actor_id
+					   and actor.status not in ('blocked', 'dead')
+				   )
+					   and (
+						 state = 'queued'
+						 or (
 						state = 'claimed'
 						and claimed_at <
 							now() - (claim_lease_ms * interval '1 millisecond')
@@ -556,7 +563,7 @@ export class PgActorRepo implements ActorRepo {
 		seqs: number[];
 		error: string;
 		actorStatus?: ActorStatus | undefined;
-	}): Promise<{ remainingPendingSeq: number | null }> {
+		}): Promise<{ remainingPendingSeq: number | null }> {
 		const finished = await this.finishBatch({
 			actorId: input.actorId,
 			workflowId: input.workflowId,
@@ -566,6 +573,40 @@ export class PgActorRepo implements ActorRepo {
 			actorStatus: input.actorStatus ?? "blocked",
 		});
 		return { remainingPendingSeq: finished.remainingPendingSeq };
+	}
+
+	async requeueMessages(input: {
+		actorId: string;
+		workflowId: string;
+		seqs: number[];
+	}): Promise<{ remainingPendingSeq: number | null }> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			await client.query(
+				`update mailbox_msg
+				 set state = 'queued',
+					 claimed_by = null,
+					 claimed_at = null,
+					 done_at = null,
+					 error = null
+				 where actor_id = $1
+				   and claimed_by = $2
+				   and seq = any($3::bigint[])`,
+				[input.actorId, input.workflowId, input.seqs],
+			);
+			const remainingPendingSeq = await this.getFirstPendingSeqFrom(
+				client,
+				input.actorId,
+			);
+			await client.query("commit");
+			return { remainingPendingSeq };
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
+		}
 	}
 
 	async getFirstPendingSeq(actorId: string): Promise<number | null> {

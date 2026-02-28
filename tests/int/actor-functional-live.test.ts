@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 type ActorFunctionalProof = {
 	actorId: string;
+	attachmentSha256: string;
 	eventKinds: string[];
 	eventSeqs: number[];
 	actorState: {
@@ -15,9 +16,15 @@ type ActorFunctionalProof = {
 		pi_session_id: string | null;
 		pi_session_file: string | null;
 	} | null;
+	queuedEvent: {
+		payload: {
+			attachments?: Array<{ sha256: string }>;
+		};
+	} | null;
 	processedEvent: {
 		payload: {
 			lastAssistantText?: string;
+			attachments?: Array<{ sha256: string }>;
 		};
 	} | null;
 };
@@ -45,6 +52,12 @@ describe("actor functional live proof", () => {
 		expect(parsed.actorRow?.mailbox_cursor).toBe("1");
 		expect(typeof parsed.actorRow?.pi_session_id).toBe("string");
 		expect(typeof parsed.actorRow?.pi_session_file).toBe("string");
+		expect(parsed.queuedEvent?.payload.attachments).toEqual([
+			{ sha256: parsed.attachmentSha256 ?? "" },
+		]);
+		expect(parsed.processedEvent?.payload.attachments).toEqual([
+			{ sha256: parsed.attachmentSha256 ?? "" },
+		]);
 		expect(
 			parsed.processedEvent?.payload.lastAssistantText?.length,
 		).toBeGreaterThanOrEqual(0);

@@ -144,6 +144,11 @@ export interface ActorRepo {
 		error: string;
 		actorStatus?: ActorStatus | undefined;
 	}): Promise<{ remainingPendingSeq: number | null }>;
+	requeueMessages(input: {
+		actorId: string;
+		workflowId: string;
+		seqs: number[];
+	}): Promise<{ remainingPendingSeq: number | null }>;
 	getFirstPendingSeq(actorId: string): Promise<number | null>;
 	releaseTickLease(actorId: string, workflowId: string): Promise<void>;
 }

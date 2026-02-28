@@ -53,6 +53,7 @@ function mailboxMessage(
 class StubSession implements PiSessionPort {
 	public readonly calls: string[] = [];
 	public readonly queueModes: Array<Record<string, unknown>> = [];
+	public closed = false;
 
 	async prompt(): Promise<void> {
 		this.calls.push("prompt");
@@ -110,7 +111,7 @@ class StubSession implements PiSessionPort {
 	}
 
 	async close(): Promise<void> {
-		return;
+		this.closed = true;
 	}
 }
 
@@ -142,26 +143,36 @@ describe("PiActorBatchProcessor", () => {
 			"pi_event",
 			"mailbox_processed",
 		]);
+		expect(result.events.at(-1)?.payload.attachments).toEqual([]);
+		expect(session.closed).toBe(true);
 	});
 
-	it("maps streaming steer mailboxes through steer instead of prompt", async () => {
+	it("honors explicit steer and followUp commands on a reopened idle session", async () => {
 		const session = new StubSession();
 		session.getState = async () => ({
 			sessionFile: "/tmp/actor.session.jsonl",
-			sessionId: "sess-1",
-			isStreaming: true,
-			pending: 1,
+			sessionId: "sess-new",
+			isStreaming: false,
+			pending: 0,
 		});
 		const processor = new PiActorBatchProcessor({
 			createPiSession: vi.fn(async () => session),
 		});
 
-		await processor.applyBatch({
-			actor: actorState({ status: "streaming" }),
-			messages: [mailboxMessage({ kind: "steer", text: "stop" })],
+		const result = await processor.applyBatch({
+			actor: actorState({
+				piSessionId: "sess-stable",
+				piSessionFile: "/tmp/actor.session.jsonl",
+			}),
+			messages: [
+				mailboxMessage({ kind: "steer", text: "stop" }),
+				mailboxMessage({ msgId: 2, seq: 2, kind: "followUp", text: "continue" }),
+			],
 			workflowId: "tick:actor-1:1",
 		});
 
 		expect(session.calls).toContain("steer");
+		expect(session.calls).toContain("followUp");
+		expect(result.piSessionId).toBe("sess-stable");
 	});
 });

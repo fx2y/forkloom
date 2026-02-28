@@ -202,6 +202,25 @@ describe("PgActorRepo", () => {
 		);
 	});
 
+	it("preserves actor status on createActor upsert", async () => {
+		const pool = new StubPool([{ rows: [actorRow({ status: "blocked" })] }]);
+		const repo = new PgActorRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const result = await repo.createActor({
+			actorId: "actor-1",
+			name: "worker",
+			status: "idle",
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(pool.calls[0]?.sql.toLowerCase()).not.toContain(
+			"status = excluded.status",
+		);
+	});
+
 	it("marks done rows and returns the next pending seq", async () => {
 		const pool = new StubPool([
 			{},

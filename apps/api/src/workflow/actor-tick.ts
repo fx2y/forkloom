@@ -1,4 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { isActorTransientError } from "../actor/errors";
 import type {
 	ActorBatchProcessor,
 	ActorMailboxMessageModel,
@@ -34,6 +35,7 @@ export type ActorTickDeps = {
 		| "getFirstPendingSeq"
 		| "markMessagesDead"
 		| "persistProcessedBatch"
+		| "requeueMessages"
 		| "releaseTickLease"
 	>;
 	processor: ActorBatchProcessor;
@@ -79,6 +81,10 @@ function assertActor(
 		throw new Error(`actor not found: ${actorId}`);
 	}
 	return actor;
+}
+
+function shouldEnqueueNextTick(actor: ActorStateModel | null): boolean {
+	return actor?.status !== "blocked" && actor?.status !== "dead";
 }
 
 async function maybeAfterStep(
@@ -129,15 +135,11 @@ export async function executeActorTick(
 
 			const actor = assertActor(
 				actorId,
-				await steps.runStep("loadActor", () =>
-					deps.repo.getActorState(actorId),
-				),
+				await steps.runStep("loadActor", () => deps.repo.getActorState(actorId)),
 			);
 			await maybeAfterStep(deps, "loadActor", actorId);
 
-			await steps.runStep("ensureSession", () =>
-				deps.processor.ensureSession(actor),
-			);
+			await steps.runStep("ensureSession", () => deps.processor.ensureSession(actor));
 			await maybeAfterStep(deps, "ensureSession", actorId);
 
 			const batchResult = await steps.runStep("applyBatch", () =>
@@ -173,14 +175,24 @@ export async function executeActorTick(
 		}
 	} catch (error) {
 		if (lockAcquired && activeBatch.length > 0) {
-			await steps.runStep("markFailed", () =>
-				deps.repo.markMessagesDead({
-					actorId,
-					workflowId,
-					seqs: activeBatch.map((message) => message.seq),
-					error: normalizeErrorMessage(error),
-				}),
-			);
+			const failedSeqs = activeBatch.map((message) => message.seq);
+			const next = isActorTransientError(error)
+				? await steps.runStep("markFailed", () =>
+						deps.repo.requeueMessages({
+							actorId,
+							workflowId,
+							seqs: failedSeqs,
+						}),
+					)
+				: await steps.runStep("markFailed", () =>
+						deps.repo.markMessagesDead({
+							actorId,
+							workflowId,
+							seqs: failedSeqs,
+							error: normalizeErrorMessage(error),
+						}),
+					);
+			remainingPendingSeq = next.remainingPendingSeq;
 			activeBatch = [];
 		}
 		throw error;
@@ -189,8 +201,9 @@ export async function executeActorTick(
 			await steps.runStep("releaseLock", async () => {
 				const nextPendingSeq =
 					remainingPendingSeq ?? (await deps.repo.getFirstPendingSeq(actorId));
+				const actor = await deps.repo.getActorState(actorId);
 				await deps.repo.releaseTickLease(actorId, workflowId);
-				if (nextPendingSeq != null) {
+				if (nextPendingSeq != null && shouldEnqueueNextTick(actor)) {
 					await deps.workflowLauncher.enqueueActorTick({
 						actorId,
 						firstPendingSeq: nextPendingSeq,

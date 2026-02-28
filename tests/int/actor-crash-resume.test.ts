@@ -16,12 +16,12 @@ type ActorDurabilityProof = {
 		claimed_by: string | null;
 		done_at: string | null;
 	}>;
-	processedEventCount: number;
+	persistedActorEventCount: number;
 	lockCount: number;
 };
 
 describe("actor tick DBOS live proof", () => {
-	it("asserts crash-resume reuses persistBatch and clears the actor lock", () => {
+		it("asserts crash-resume persists real PI actor events and clears the actor lock", () => {
 		const proofPath = ".cache/test-int/actor-durability.json";
 		if (!existsSync(proofPath)) {
 			throw new Error(
@@ -45,7 +45,7 @@ describe("actor tick DBOS live proof", () => {
 				claimed_by: parsed.workflowID,
 			}),
 		]);
-		expect(parsed.processedEventCount).toBe(1);
-		expect(parsed.lockCount).toBe(0);
+			expect(parsed.persistedActorEventCount).toBeGreaterThanOrEqual(2);
+			expect(parsed.lockCount).toBe(0);
+		});
 	});
-});

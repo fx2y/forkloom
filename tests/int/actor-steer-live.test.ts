@@ -3,23 +3,37 @@ import { describe, expect, it } from "vitest";
 
 type ActorSteerProof = {
 	stateAfterPrompt: {
-		sessionId: string;
-		sessionFile: string;
-		isStreaming: boolean;
-		pending: number;
+		status: string;
 	};
 	finalState: {
-		sessionId: string;
-		sessionFile: string;
-		isStreaming: boolean;
-		pending: number;
+		status: string;
 	};
-	eventCount: number;
-	lastAssistantText: string;
+	rowAfterPrompt: {
+		status: string;
+		pi_session_id: string;
+		pi_session_file: string;
+	} | null;
+	rowAfterSteer: {
+		status: string;
+		pi_session_id: string;
+		pi_session_file: string;
+	} | null;
+	followUpPosted: {
+		payload: {
+			kind: string;
+		};
+	};
+	steerPosted: {
+		payload: {
+			kind: string;
+		};
+	};
+	followUpEventCount: number;
+	steerEventCount: number;
 };
 
 describe("actor steer live proof", () => {
-	it("asserts live PI session accepts steer/followUp flow and returns to idle", () => {
+	it("asserts /actors steer and followUp resume the same session after api restart", () => {
 		const proofPath = ".cache/test-int/actor-steer-live.json";
 		if (!existsSync(proofPath)) {
 			throw new Error(
@@ -31,12 +45,19 @@ describe("actor steer live proof", () => {
 			readFileSync(proofPath, "utf8"),
 		) as Partial<ActorSteerProof>;
 
-		expect(typeof parsed.stateAfterPrompt?.sessionId).toBe("string");
-		expect(typeof parsed.stateAfterPrompt?.sessionFile).toBe("string");
-		expect(typeof parsed.finalState?.sessionId).toBe("string");
-		expect(parsed.finalState?.isStreaming).toBe(false);
-		expect(parsed.finalState?.pending).toBe(0);
-		expect(parsed.eventCount).toBeGreaterThanOrEqual(0);
-		expect(typeof parsed.lastAssistantText).toBe("string");
+		expect(parsed.stateAfterPrompt?.status).toBe("idle");
+		expect(parsed.finalState?.status).toBe("idle");
+		expect(parsed.rowAfterPrompt?.status).toBe("idle");
+		expect(parsed.rowAfterSteer?.status).toBe("idle");
+		expect(parsed.rowAfterPrompt?.pi_session_id).toBe(
+			parsed.rowAfterSteer?.pi_session_id,
+		);
+		expect(parsed.rowAfterPrompt?.pi_session_file).toBe(
+			parsed.rowAfterSteer?.pi_session_file,
+		);
+		expect(parsed.followUpPosted?.payload.kind).toBe("followUp");
+		expect(parsed.steerPosted?.payload.kind).toBe("steer");
+		expect(parsed.followUpEventCount).toBeGreaterThan(0);
+		expect(parsed.steerEventCount).toBeGreaterThan(0);
 	});
 });
