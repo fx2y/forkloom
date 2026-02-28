@@ -43,7 +43,6 @@ describe("run public surface freeze", () => {
 			"followUp",
 			"steer",
 			"abort",
-			"exportFiles",
 		]);
 		expect(RUN_PUBLIC_STATUSES_FROZEN_NEXT).toEqual([
 			"awaiting_approval",

@@ -1,13 +1,14 @@
 import { type AppDeps, browserDeps } from "./actor-client";
 import { mountInboxSurface } from "./inbox-surface";
 import { mountRunSurface } from "./run-surface";
+import { parseStaticFragment } from "./static-html";
 import "./styles.css";
 
 export function mountApp(root: HTMLElement, deps: AppDeps = browserDeps()) {
-	root.innerHTML = `
+	root.replaceChildren(parseStaticFragment(`
 		<div data-inbox-surface></div>
 		<div data-run-surface></div>
-	`;
+	`));
 
 	const inboxRoot = root.querySelector<HTMLElement>("[data-inbox-surface]");
 	const runRoot = root.querySelector<HTMLElement>("[data-run-surface]");

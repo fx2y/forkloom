@@ -24,14 +24,7 @@ function parseRunProfile(input: unknown): RunProfile {
 }
 
 export function parseRunCreatePayload(input: unknown): RunSpecModel {
-	const raw = input as Record<string, unknown>;
-	const contractShape =
-		raw && typeof raw === "object" && !Array.isArray(raw)
-			? Object.fromEntries(
-					Object.entries(raw).filter(([key]) => key !== "profile"),
-				)
-			: input;
-	const result = validateRunByName("RunSpec", contractShape);
+	const result = validateRunByName("RunSpec", input);
 	if (!result.valid) {
 		throw new HttpError(
 			400,
@@ -39,7 +32,7 @@ export function parseRunCreatePayload(input: unknown): RunSpecModel {
 		);
 	}
 
-	const record = contractShape as Record<string, unknown>;
+	const record = input as Record<string, unknown>;
 	const runId = String(record.runId);
 	const userMsg = String(record.userMsg).trim();
 	if (userMsg.length === 0) {
@@ -55,9 +48,10 @@ export function parseRunCreatePayload(input: unknown): RunSpecModel {
 			record.workdirRef == null
 				? undefined
 				: parseArtifactPointer(record.workdirRef, "workdirRef"),
-		modelPref:
-			typeof record.modelPref === "string" ? record.modelPref : undefined,
-		profile: raw?.profile == null ? undefined : parseRunProfile(raw.profile),
+			modelPref:
+				typeof record.modelPref === "string" ? record.modelPref : undefined,
+			profile:
+				record.profile == null ? undefined : parseRunProfile(record.profile),
 	};
 }
 

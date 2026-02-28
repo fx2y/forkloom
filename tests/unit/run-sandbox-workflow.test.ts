@@ -289,6 +289,125 @@ describe("executeRunSandbox", () => {
 			),
 		).rejects.toThrow("retry");
 
-		expect(requeued).toBe(1);
+			expect(requeued).toBe(1);
+		});
+
+	it("does not dead-letter commands when claim ownership is already lost", async () => {
+		let dead = 0;
+		let failed = 0;
+		await expect(
+			executeRunSandbox(
+				RUN_ID,
+				{
+					runRepo: {
+						getRun: async () => ({
+							runId: RUN_ID,
+							status: "queued",
+							spec: {
+								runId: RUN_ID,
+								scope: "team",
+								userMsg: "hi",
+								attachments: [],
+								profile: "safe",
+							},
+							createdAt: ISO,
+							updatedAt: ISO,
+							dbosWorkflowId: null,
+							piSessionId: null,
+							piSessionFile: null,
+							resultText: null,
+							resultStats: null,
+							error: null,
+						}),
+					},
+					runService: {
+						appendArtifactWritten: async () => {
+							throw new Error("not used");
+						},
+						appendPiEvent: async () => {
+							throw new Error("not used");
+						},
+						appendRunEvent: async () => ({
+							eventId: 1,
+							runId: RUN_ID,
+							kind: "run_approved",
+							payload: {},
+							createdAt: ISO,
+						}),
+						beginRun: async () => {
+							throw new Error("not used");
+						},
+						failRun: async () => {
+							failed += 1;
+							return null;
+						},
+						linkArtifact: async () => undefined,
+					},
+					artifactService: {
+						getArtifactBytes: async () => {
+							throw new Error("not used");
+						},
+						getArtifactMeta: async () => {
+							throw new Error("not used");
+						},
+						putArtifact: async () => {
+							throw new Error("not used");
+						},
+					},
+					sandboxRepo: {
+						acquireLease: async () => true,
+						claimNextCommand: async () => ({
+							runId: RUN_ID,
+							seq: 2,
+							kind: "approve",
+							payload: {},
+							dedupeKey: null,
+							state: "claimed",
+							claimedBy: "wf",
+							claimedAt: ISO,
+							leaseExpiresAt: ISO,
+							doneAt: null,
+							error: null,
+							createdAt: ISO,
+						}),
+						getSandbox: async () => makeSandbox(),
+						getCurrentCommand: async () => null,
+						markApproved: async () => makeSandbox(),
+						markCommandDead: async () => {
+							dead += 1;
+							return null;
+						},
+						persistExec: async () => {
+							throw new Error(
+								`persist exec: command claim lost run=${RUN_ID} seq=2`,
+							);
+						},
+						requeueCommand: async () => null,
+						releaseLease: async () => undefined,
+					},
+					backend: {
+						ensure: async () => makeSandbox(),
+						exec: async () => {
+							throw new Error("not used");
+						},
+						snapshot: async () => {
+							throw new Error("not used");
+						},
+						destroy: async () => null,
+					},
+					workflowLauncher: {
+						startRunOnce: async () => undefined,
+					},
+					createPiSession: async () => {
+						throw new Error("not used");
+					},
+					workflowId: "wf",
+				},
+				stepRunner,
+			),
+		).rejects.toThrow("persist exec: command claim lost");
+
+		expect(dead).toBe(0);
+		expect(failed).toBe(0);
 	});
 });

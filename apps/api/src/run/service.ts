@@ -33,6 +33,7 @@ export interface RunWorkflowLauncher {
 }
 
 export type RegisteredRunWorkflow = (runId: string) => Promise<void>;
+const SANDBOX_WORKFLOW_ID_PREFIX = "run:";
 
 export class DbosRunWorkflowLauncher implements RunWorkflowLauncher {
 	constructor(private readonly workflow: RegisteredRunWorkflow) {}
@@ -47,23 +48,36 @@ export class DbosRunWorkflowLauncher implements RunWorkflowLauncher {
 
 /**
  * Late-bound launcher that breaks the RunService↔workflow circular dep.
- * Call bind() after the target workflow is registered.
+ * Bind classic + sandbox workflows after both are registered.
  */
 export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
-	private inner: RunWorkflowLauncher | null = null;
+	private classic: RunWorkflowLauncher | null = null;
+	private sandbox: RunWorkflowLauncher | null = null;
 
-	bind(workflow: RegisteredRunWorkflow): void {
-		this.inner = new DbosRunWorkflowLauncher(workflow);
+	bindClassic(workflow: RegisteredRunWorkflow): void {
+		this.classic = new DbosRunWorkflowLauncher(workflow);
+	}
+
+	bindSandbox(workflow: RegisteredRunWorkflow): void {
+		this.sandbox = new DbosRunWorkflowLauncher(workflow);
 	}
 
 	async startRunOnce(
 		runId: string,
 		opts: { workflowID: string },
 	): Promise<void> {
-		if (!this.inner) {
-			throw new Error("Run workflow is not registered");
+		const target =
+			opts.workflowID.startsWith(SANDBOX_WORKFLOW_ID_PREFIX)
+				? this.sandbox
+				: this.classic;
+		if (!target) {
+			throw new Error(
+				opts.workflowID.startsWith(SANDBOX_WORKFLOW_ID_PREFIX)
+					? "Run sandbox workflow is not registered"
+					: "Run workflow is not registered",
+			);
 		}
-		return this.inner.startRunOnce(runId, opts);
+		return target.startRunOnce(runId, opts);
 	}
 }
 

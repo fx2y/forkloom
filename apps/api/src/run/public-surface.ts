@@ -19,7 +19,6 @@ export const RUN_PUBLIC_COMMAND_KINDS = [
 	"followUp",
 	"steer",
 	"abort",
-	"exportFiles",
 ] as const;
 
 export const RUN_PUBLIC_STATUSES_FROZEN_NEXT = [

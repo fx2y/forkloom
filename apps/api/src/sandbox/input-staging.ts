@@ -39,12 +39,16 @@ export async function materializeSandboxInputs(input: {
 	runId: string;
 	attachments: Array<{ sha256: string }>;
 	inputRoot: string;
+	appendRunId?: boolean | undefined;
 	artifactService: ArtifactReader;
 }): Promise<{
 	stageDir: string;
 	staged: StagedSandboxInput[];
 }> {
-	const stageDir = resolve(input.inputRoot, input.runId);
+	const stageDir =
+		input.appendRunId === false
+			? resolve(input.inputRoot)
+			: resolve(input.inputRoot, input.runId);
 	await rm(stageDir, { recursive: true, force: true });
 	await mkdir(stageDir, { recursive: true });
 

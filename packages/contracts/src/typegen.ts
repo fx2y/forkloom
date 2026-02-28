@@ -81,6 +81,7 @@ export function renderTypes(): string {
 	}
 	const capability = requireLiteralEnum(capabilityItems, "enum");
 	const runScope = requireLiteralEnum(schemaProp(runSpec, "scope"), "enum");
+	const runProfile = requireLiteralEnum(schemaProp(runSpec, "profile"), "enum");
 	const runStatus = requireLiteralEnum(schemaProp(runState, "status"), "enum");
 	const runEventKind = requireLiteralEnum(schemaProp(runEvent, "kind"), "enum");
 	const mailboxKind = requireLiteralEnum(
@@ -107,9 +108,10 @@ export function renderTypes(): string {
 		toUnion("Role", role),
 		toUnion("ArtifactType", artifactType),
 		toUnion("WorkflowStatus", workflowStatus),
-		toUnion("ExtensionCapability", capability),
-		toUnion("RunScope", runScope),
-		toUnion("RunStatus", runStatus),
+			toUnion("ExtensionCapability", capability),
+			toUnion("RunScope", runScope),
+			toUnion("RunProfile", runProfile),
+			toUnion("RunStatus", runStatus),
 		toUnion("RunEventKind", runEventKind),
 		toUnion("MailboxKind", mailboxKind),
 		toUnion("ActorStatus", actorStatus),
@@ -178,10 +180,11 @@ export function renderTypes(): string {
 		"\trunId: string;",
 		"\tscope: RunScope;",
 		"\tuserMsg: string;",
-		"\tattachments: RunArtifactRef[];",
-		"\tworkdirRef?: RunArtifactRef;",
-		"\tmodelPref?: string;",
-		"};",
+			"\tattachments: RunArtifactRef[];",
+			"\tworkdirRef?: RunArtifactRef;",
+			"\tmodelPref?: string;",
+			"\tprofile?: RunProfile;",
+			"};",
 		"",
 		"export type RunState = {",
 		"\trunId: string;",

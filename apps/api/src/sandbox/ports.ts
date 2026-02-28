@@ -130,6 +130,9 @@ export type ExecSpec = {
 export type ExecResult = {
 	exitCode: number;
 	status: SandboxExecStatus;
+	cmdList?: string[] | undefined;
+	artifactReads?: SandboxArtifactPointer[] | undefined;
+	artifactWrites?: SandboxArtifactPointer[] | undefined;
 	stdoutTail: string;
 	stderrTail: string;
 	stdoutBytes: number;
@@ -150,6 +153,9 @@ export type SandboxExecModel = {
 	commandKind: RunCommandKind;
 	status: SandboxExecStatus;
 	exitCode: number | null;
+	cmdList: string[];
+	artifactReads: SandboxArtifactPointer[];
+	artifactWrites: SandboxArtifactPointer[];
 	stdoutTail: string;
 	stderrTail: string;
 	stdoutBytes: number;

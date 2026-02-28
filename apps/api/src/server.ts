@@ -36,7 +36,11 @@ import {
 } from "./sandbox";
 import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
-import { registerActorTickWorkflow, registerRunOnceWorkflow } from "./workflow";
+import {
+	registerActorTickWorkflow,
+	registerRunOnceWorkflow,
+	registerRunSandboxWorkflow,
+} from "./workflow";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(__dirname, "../migrations");
@@ -140,39 +144,40 @@ async function bootstrap() {
 		runRepo,
 		runService,
 		artifactService: workflowArtifactService,
-		sandbox: {
-			runRepo,
-			runService,
-			artifactService: workflowArtifactService,
-			sandboxRepo,
-			backend: workflowSandboxBackend,
-			workflowLauncher,
-			createPiSession: async (run, sandbox) =>
-				createSandboxPiSessionFactory(
-					{
-						containerName: sandbox.containerName,
-						cwd: sandbox.spec.workdir,
-						homeHostDir: sandbox.spec.piHomeHostDir,
-						homePath: sandbox.spec.piHomePath,
-						provider: config.piProvider,
-						model: run.spec.modelPref ?? config.piModel,
-						sessionPath: `${sandbox.spec.piHomePath}/.pi/agent/sessions/${run.runId}.jsonl`,
-						strictReal: config.piStrictReal,
-					},
-					{ mockProviderManager },
-				)(),
-		},
 		createPiSession: async (run) =>
 			createPiSession({
 				model: run.spec.modelPref ?? config.piModel,
 			}),
+	});
+	const runSandboxWorkflow = registerRunSandboxWorkflow({
+		runRepo,
+		runService,
+		artifactService: workflowArtifactService,
+		sandboxRepo,
+		backend: workflowSandboxBackend,
+		workflowLauncher,
+		createPiSession: async (run, sandbox) =>
+			createSandboxPiSessionFactory(
+				{
+					containerName: sandbox.containerName,
+					cwd: sandbox.spec.workdir,
+					homeHostDir: sandbox.spec.piHomeHostDir,
+					homePath: sandbox.spec.piHomePath,
+					provider: config.piProvider,
+					model: run.spec.modelPref ?? config.piModel,
+					sessionPath: `${sandbox.spec.piHomePath}/.pi/agent/sessions/${run.runId}.jsonl`,
+					strictReal: config.piStrictReal,
+				},
+				{ mockProviderManager },
+			)(),
 	});
 	const actorWorkflow = registerActorTickWorkflow({
 		repo: actorRepo,
 		processor: actorProcessor,
 		workflowLauncher: actorWorkflowLauncher,
 	});
-	workflowLauncher.bind(runWorkflow);
+	workflowLauncher.bindClassic(runWorkflow);
+	workflowLauncher.bindSandbox(runSandboxWorkflow);
 	actorWorkflowLauncher.bind(actorWorkflow);
 	await launchDbos(config.databaseUrl);
 

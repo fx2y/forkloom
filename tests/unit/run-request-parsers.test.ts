@@ -39,7 +39,7 @@ describe("run-request-parsers", () => {
 		expect(payload.workdirRef?.sha256).toBe("b".repeat(64));
 	});
 
-	it("accepts an additive sandbox profile outside the frozen contract body", () => {
+	it("accepts profile as part of the v1 run contract", () => {
 		const payload = parseRunCreatePayload({
 			runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
 			scope: "team",

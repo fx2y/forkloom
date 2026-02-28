@@ -28,6 +28,7 @@ import {
 	resolveComposeTarget,
 	toActorSpec,
 } from "./thread-compose";
+import { parseStaticFragment } from "./static-html";
 
 const ACTOR_EVENT_KINDS = [
 	"mailbox_queued",
@@ -54,7 +55,7 @@ export function mountInboxSurface(
 	let uploaded: UploadedAttachment[] = [];
 	let activeStream: PendingStream | null = null;
 
-	root.innerHTML = `
+	root.replaceChildren(parseStaticFragment(`
 		<div class="shell">
 			<section class="hero">
 				<p class="eyebrow">forkloom / inbox surface</p>
@@ -130,7 +131,7 @@ export function mountInboxSurface(
 				</section>
 			</section>
 		</div>
-	`;
+	`));
 
 	const threadForm = root.querySelector<HTMLFormElement>("[data-thread-form]");
 	const threadNameInput =
@@ -584,10 +585,10 @@ export function mountInboxSurface(
 
 	update();
 
-	return {
-		destroy() {
-			closeActiveStream();
-			root.innerHTML = "";
-		},
-	};
-}
+		return {
+			destroy() {
+				closeActiveStream();
+				root.replaceChildren();
+			},
+		};
+	}

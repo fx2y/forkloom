@@ -10,6 +10,7 @@ export type ArtifactType = "raw" | "md" | "json" | "trace" | "other";
 export type WorkflowStatus = "queued" | "running" | "done" | "err";
 export type ExtensionCapability = "tool" | "cmd" | "ui" | "gate";
 export type RunScope = "me" | "team" | "org";
+export type RunProfile = "safe" | "std" | "priv";
 export type RunStatus =
 	| "queued"
 	| "awaiting_approval"
@@ -110,6 +111,7 @@ export type RunSpec = {
 	attachments: RunArtifactRef[];
 	workdirRef?: RunArtifactRef;
 	modelPref?: string;
+	profile?: RunProfile;
 };
 
 export type RunState = {

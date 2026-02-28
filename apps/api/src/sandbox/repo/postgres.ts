@@ -73,6 +73,9 @@ type SandboxExecRow = {
 	command_kind: SandboxExecModel["commandKind"];
 	status: SandboxExecModel["status"];
 	exit_code: number | null;
+	cmd_list: unknown;
+	artifact_reads: unknown;
+	artifact_writes: unknown;
 	stdout_tail: string | null;
 	stderr_tail: string | null;
 	stdout_bytes: string | number;
@@ -119,6 +122,19 @@ function asArtifactPointer(sha256: string | null) {
 	return typeof sha256 === "string" ? { sha256 } : undefined;
 }
 
+function asArtifactPointerArray(value: unknown): Array<{ sha256: string }> {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value.flatMap((entry) =>
+		entry &&
+		typeof entry === "object" &&
+		typeof (entry as { sha256?: unknown }).sha256 === "string"
+			? [{ sha256: (entry as { sha256: string }).sha256 }]
+			: [],
+	);
+}
+
 function toSandboxModel(row: SandboxRow): SandboxModel {
 	return {
 		runId: row.run_id,
@@ -158,15 +174,20 @@ function toRunCommandModel(row: RunCommandRow): RunCommandModel {
 }
 
 function toSandboxExecModel(row: SandboxExecRow): SandboxExecModel {
-	return {
-		execId: Number(row.exec_id),
-		runId: row.run_id,
-		commandSeq: Number(row.command_seq),
-		commandKind: row.command_kind,
-		status: row.status,
-		exitCode: row.exit_code,
-		stdoutTail: row.stdout_tail ?? "",
-		stderrTail: row.stderr_tail ?? "",
+		return {
+			execId: Number(row.exec_id),
+			runId: row.run_id,
+			commandSeq: Number(row.command_seq),
+			commandKind: row.command_kind,
+			status: row.status,
+			exitCode: row.exit_code,
+			cmdList: Array.isArray(row.cmd_list)
+				? row.cmd_list.filter((entry): entry is string => typeof entry === "string")
+				: [],
+			artifactReads: asArtifactPointerArray(row.artifact_reads),
+			artifactWrites: asArtifactPointerArray(row.artifact_writes),
+			stdoutTail: row.stdout_tail ?? "",
+			stderrTail: row.stderr_tail ?? "",
 		stdoutBytes: Number(row.stdout_bytes),
 		stderrBytes: Number(row.stderr_bytes),
 		timeoutSec: row.timeout_sec,
@@ -461,16 +482,19 @@ export class PgSandboxRepo implements SandboxRepo {
 		const client = await this.pool.connect();
 		try {
 			await client.query("begin");
-			const execResult = await client.query<SandboxExecRow>(
-				`insert into sandbox_exec(
-					 run_id,
-					 command_seq,
-					 command_kind,
-					 status,
-					 exit_code,
-					 stdout_tail,
-					 stderr_tail,
-					 stdout_bytes,
+				const execResult = await client.query<SandboxExecRow>(
+					`insert into sandbox_exec(
+						 run_id,
+						 command_seq,
+						 command_kind,
+						 status,
+						 exit_code,
+						 cmd_list,
+						 artifact_reads,
+						 artifact_writes,
+						 stdout_tail,
+						 stderr_tail,
+						 stdout_bytes,
 					 stderr_bytes,
 					 timeout_sec,
 					 max_bytes_out,
@@ -480,79 +504,98 @@ export class PgSandboxRepo implements SandboxRepo {
 					 started_at,
 					 ended_at
 				 )
-				 values (
-					 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-					 $15::timestamptz, $16::timestamptz
-				 )
-				 on conflict (run_id, command_seq) do update
-				 set status = excluded.status,
-					 exit_code = excluded.exit_code,
-					 stdout_tail = excluded.stdout_tail,
-					 stderr_tail = excluded.stderr_tail,
-					 stdout_bytes = excluded.stdout_bytes,
-					 stderr_bytes = excluded.stderr_bytes,
-					 timeout_sec = excluded.timeout_sec,
-					 max_bytes_out = excluded.max_bytes_out,
-					 stdout_ref = coalesce(excluded.stdout_ref, sandbox_exec.stdout_ref),
-					 stderr_ref = coalesce(excluded.stderr_ref, sandbox_exec.stderr_ref),
-					 workspace_ref = coalesce(excluded.workspace_ref, sandbox_exec.workspace_ref),
-					 started_at = sandbox_exec.started_at,
-					 ended_at = coalesce(excluded.ended_at, sandbox_exec.ended_at)
-				 returning exec_id, run_id, command_seq, command_kind, status,
-				 exit_code, stdout_tail, stderr_tail, stdout_bytes, stderr_bytes,
-				 timeout_sec, max_bytes_out, stdout_ref, stderr_ref, workspace_ref,
-				 started_at, ended_at`,
-				[
-					input.runId,
-					input.commandSeq,
-					input.commandKind,
-					input.result.status,
-					input.result.exitCode,
-					input.result.stdoutTail,
-					input.result.stderrTail,
-					input.result.stdoutBytes,
-					input.result.stderrBytes,
-					input.result.timeoutSec,
-					input.result.maxBytesOut,
-					input.result.stdoutRef?.sha256 ?? null,
-					input.result.stderrRef?.sha256 ?? null,
-					input.workspaceRef?.sha256 ??
-						input.result.workspaceRef?.sha256 ??
-						null,
-					input.result.startedAt,
-					input.result.endedAt,
-				],
-			);
-			await client.query(
-				`update run_command
-				 set state = 'done',
-					 done_at = now(),
-					 error = null
-				 where run_id = $1
-				   and seq = $2
-				   and claimed_by = $3`,
-				[input.runId, input.commandSeq, input.workflowId],
-			);
-			const sandboxResult = await client.query<SandboxRow>(
-				`update sandbox
-				 set state = $2,
-					 workspace_ref = coalesce($3, workspace_ref),
-					 last_command_seq = greatest(last_command_seq, $4),
-					 last_seen_at = now(),
-					 updated_at = now()
-				 where run_id = $1
-				 returning run_id, sandbox_id, backend, profile, state, approval_state,
-				 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
-				 lease_expires_at, workspace_ref, created_at, updated_at, last_seen_at`,
-				[
-					input.runId,
-					input.sandboxState ?? "ready",
-					input.workspaceRef?.sha256 ??
-						input.result.workspaceRef?.sha256 ??
-						null,
-					input.commandSeq,
-				],
-			);
+					 values (
+						 $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10,
+						 $11, $12, $13, $14, $15, $16, $17, $18::timestamptz, $19::timestamptz
+					 )
+					 on conflict (run_id, command_seq) do update
+					 set status = excluded.status,
+						 exit_code = excluded.exit_code,
+						 cmd_list = excluded.cmd_list,
+						 artifact_reads = excluded.artifact_reads,
+						 artifact_writes = excluded.artifact_writes,
+						 stdout_tail = excluded.stdout_tail,
+						 stderr_tail = excluded.stderr_tail,
+						 stdout_bytes = excluded.stdout_bytes,
+						 stderr_bytes = excluded.stderr_bytes,
+						 timeout_sec = excluded.timeout_sec,
+						 max_bytes_out = excluded.max_bytes_out,
+						 stdout_ref = coalesce(excluded.stdout_ref, sandbox_exec.stdout_ref),
+						 stderr_ref = coalesce(excluded.stderr_ref, sandbox_exec.stderr_ref),
+						 workspace_ref = coalesce(excluded.workspace_ref, sandbox_exec.workspace_ref),
+						 started_at = sandbox_exec.started_at,
+						 ended_at = coalesce(excluded.ended_at, sandbox_exec.ended_at)
+					 returning exec_id, run_id, command_seq, command_kind, status,
+					 exit_code, cmd_list, artifact_reads, artifact_writes,
+					 stdout_tail, stderr_tail, stdout_bytes, stderr_bytes, timeout_sec,
+					 max_bytes_out, stdout_ref, stderr_ref, workspace_ref, started_at,
+					 ended_at`,
+					[
+						input.runId,
+						input.commandSeq,
+						input.commandKind,
+						input.result.status,
+						input.result.exitCode,
+						JSON.stringify(input.result.cmdList ?? []),
+						JSON.stringify(input.result.artifactReads ?? []),
+						JSON.stringify(input.result.artifactWrites ?? []),
+						input.result.stdoutTail,
+						input.result.stderrTail,
+						input.result.stdoutBytes,
+						input.result.stderrBytes,
+						input.result.timeoutSec,
+						input.result.maxBytesOut,
+						input.result.stdoutRef?.sha256 ?? null,
+						input.result.stderrRef?.sha256 ?? null,
+						input.workspaceRef?.sha256 ??
+							input.result.workspaceRef?.sha256 ??
+							null,
+						input.result.startedAt,
+						input.result.endedAt,
+					],
+				);
+				const commandResult = await client.query(
+					`update run_command
+					 set state = 'done',
+						 done_at = now(),
+						 error = null
+					 where run_id = $1
+					   and seq = $2
+					   and claimed_by = $3`,
+					[input.runId, input.commandSeq, input.workflowId],
+				);
+				if (commandResult.rowCount !== 1) {
+					throw new Error(
+						`persist exec: command claim lost run=${input.runId} seq=${input.commandSeq}`,
+					);
+				}
+				const sandboxResult = await client.query<SandboxRow>(
+					`update sandbox
+					 set state = $2,
+						 workspace_ref = coalesce($3, workspace_ref),
+						 last_command_seq = greatest(last_command_seq, $4),
+						 last_seen_at = now(),
+						 updated_at = now()
+					 where run_id = $1
+					   and inflight_workflow_id = $5
+					 returning run_id, sandbox_id, backend, profile, state, approval_state,
+					 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
+					 lease_expires_at, workspace_ref, created_at, updated_at, last_seen_at`,
+					[
+						input.runId,
+						input.sandboxState ?? "ready",
+						input.workspaceRef?.sha256 ??
+							input.result.workspaceRef?.sha256 ??
+							null,
+						input.commandSeq,
+						input.workflowId,
+					],
+				);
+				if (sandboxResult.rowCount !== 1) {
+					throw new Error(
+						`persist exec: sandbox lease lost run=${input.runId} wf=${input.workflowId}`,
+					);
+				}
 			const nextPendingSeq = await this.getFirstPendingSeqFrom(
 				client,
 				input.runId,
@@ -695,9 +738,9 @@ export class PgSandboxRepo implements SandboxRepo {
 	async listExecs(runId: string): Promise<SandboxExecModel[]> {
 		const result = await this.pool.query<SandboxExecRow>(
 			`select exec_id, run_id, command_seq, command_kind, status, exit_code,
-			 stdout_tail, stderr_tail, stdout_bytes, stderr_bytes, timeout_sec,
-			 max_bytes_out, stdout_ref, stderr_ref, workspace_ref, started_at,
-			 ended_at
+			 cmd_list, artifact_reads, artifact_writes, stdout_tail, stderr_tail,
+			 stdout_bytes, stderr_bytes, timeout_sec, max_bytes_out, stdout_ref,
+			 stderr_ref, workspace_ref, started_at, ended_at
 			 from sandbox_exec
 			 where run_id = $1
 			 order by started_at asc, exec_id asc`,
