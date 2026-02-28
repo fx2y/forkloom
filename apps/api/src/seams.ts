@@ -1,4 +1,10 @@
-export type ApiSeamName = "actor" | "run" | "pi" | "workflow" | "http";
+export type ApiSeamName =
+	| "actor"
+	| "run"
+	| "sandbox"
+	| "pi"
+	| "workflow"
+	| "http";
 
 type ApiSeam = {
 	owner: string;
@@ -20,6 +26,12 @@ export const API_SEAMS: Record<ApiSeamName, ApiSeam> = {
 		root: "apps/api/src/run",
 		intent: "run contracts and run event vocabulary",
 		canImportFrom: ["apps/api/src/pi", "apps/api/src/workflow"],
+	},
+	sandbox: {
+		owner: "sandbox runtime",
+		root: "apps/api/src/sandbox",
+		intent: "container/workspace/exec policy and backend boundary",
+		canImportFrom: ["apps/api/src/pi"],
 	},
 	pi: {
 		owner: "pi adapter",
@@ -44,6 +56,7 @@ export const API_SEAMS: Record<ApiSeamName, ApiSeam> = {
 export type ApiReuseCutName =
 	| "sseBuffer"
 	| "eventReplayCursor"
+	| "piRpcClient"
 	| "actorLiveHarness";
 
 type ApiReuseCut = {
@@ -64,9 +77,22 @@ export const API_REUSE_CUTS: Record<ApiReuseCutName, ApiReuseCut> = {
 		status: "shared-now",
 		intent: "share cursor parse + limit clamp without coupling parser modules",
 	},
+	piRpcClient: {
+		root: "apps/api/src/pi/rpc-client.ts",
+		status: "shared-now",
+		intent:
+			"reuse the JSONL rpc pump from sandbox callers instead of forking protocol code",
+	},
 	actorLiveHarness: {
 		root: "scripts/harness/run-live-support.ts",
 		status: "defer-until-second-caller",
 		intent: "clone the run live harness only when actor live proofs exist",
 	},
 };
+
+export const API_OWNERSHIP_LAW = {
+	run: "run owns preview/state/commands/files on the public wire",
+	sandbox: "sandbox owns container/workspace/exec/image lifecycle off-wire",
+	actorReuseOnly:
+		"actor contributes lease/queue law reuse-only; actor nouns stay off the run wire",
+} as const;

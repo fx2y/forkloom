@@ -114,6 +114,8 @@ curl -fsS http://localhost:8080/runs \
 curl -N http://localhost:8080/runs/$RUN_ID/events
 ```
 
+Spec-05 CY1 freeze: run remains the only public owner for preview/files/commands, so future sandbox control stays under `/runs*`; no `/sandbox*` HTTP surface is reserved today.
+
 ## Actor API Smoke
 
 ```bash

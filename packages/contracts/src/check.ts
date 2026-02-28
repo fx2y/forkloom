@@ -227,11 +227,39 @@ function assertRunNounsScopedToV1(): void {
 	}
 }
 
+function assertNoSandboxNounsInPublicContracts(): void {
+	const sandboxPrefix = "Sandbox";
+	const sandboxNouns = ["Spec", "State", "Event", "Command"].map(
+		(suffix) => `${sandboxPrefix}${suffix}`,
+	);
+	const schemaFiles = readdirSync(V1_SCHEMA_DIR).filter((file) =>
+		file.endsWith(".schema.json"),
+	);
+	const srcDir = resolve("packages/contracts/src");
+	const srcFiles = readdirSync(srcDir).filter((file) => file.endsWith(".ts"));
+	const allFiles = [
+		...schemaFiles.map((file) => resolve(V1_SCHEMA_DIR, file)),
+		...srcFiles.map((file) => resolve(srcDir, file)),
+	];
+
+	for (const fullPath of allFiles) {
+		const content = readFileSync(fullPath, "utf8");
+		for (const noun of sandboxNouns) {
+			if (new RegExp(`"${noun}"`).test(content)) {
+				throw new Error(
+					`banned sandbox noun detected in ${basename(fullPath)}: "${noun}"`,
+				);
+			}
+		}
+	}
+}
+
 function main(): void {
 	assertSchemasStrict(V0_SCHEMA_DIR);
 	assertSchemasStrict(V1_SCHEMA_DIR);
 	assertNoBannedNounsInV0();
 	assertRunNounsScopedToV1();
+	assertNoSandboxNounsInPublicContracts();
 	assertV0Examples();
 	assertV1Examples();
 	assertTypesInSync();

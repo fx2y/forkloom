@@ -42,6 +42,12 @@ Verification bypasses UI to test contract/durability seams directly.
 *   **Harness:** `scripts/harness/run-sse-live.ts` (SSE stability) and `dbos-live-runonce.ts` (crash-resume).
 *   **Gate:** `test:int:run-sse` + `test:int:runonce-live` must pass for promotion.
 
+### D6: Spec-05 Sandbox Freeze (CY1)
+Sandbox work stays behind `apps/api/src/sandbox`; the public owner remains `run`.
+*   **Public Edge:** preview/files/commands stay under `/runs*`; `/sandbox*` is intentionally absent.
+*   **Reuse Law:** actor lease/queue semantics are reusable, but actor nouns do not cross onto run contracts.
+*   **Protocol Reuse:** sandbox callers must reuse `pi/rpc-client` rather than fork a second JSONL transport.
+
 ---
 
 ## Technical Walkthrough
