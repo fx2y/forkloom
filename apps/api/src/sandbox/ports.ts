@@ -23,7 +23,12 @@ export const RUN_COMMAND_KINDS = [
 	"abort",
 	"approve",
 ] as const;
-export const RUN_COMMAND_STATES = ["queued", "claimed", "done", "dead"] as const;
+export const RUN_COMMAND_STATES = [
+	"queued",
+	"claimed",
+	"done",
+	"dead",
+] as const;
 export const SANDBOX_EXEC_STATUSES = [
 	"running",
 	"done",
@@ -36,8 +41,7 @@ export type SandboxProfile = (typeof SANDBOX_PROFILES)[number];
 export type SandboxState = (typeof SANDBOX_STATES)[number];
 export type SandboxMountKind = (typeof SANDBOX_MOUNT_KINDS)[number];
 export type SandboxMountMode = (typeof SANDBOX_MOUNT_MODES)[number];
-export type SandboxNetworkPolicy =
-	(typeof SANDBOX_NETWORK_POLICIES)[number];
+export type SandboxNetworkPolicy = (typeof SANDBOX_NETWORK_POLICIES)[number];
 export type SandboxDestroyMode = (typeof SANDBOX_DESTROY_MODES)[number];
 export type SandboxApprovalState = (typeof SANDBOX_APPROVAL_STATES)[number];
 export type RunCommandKind = (typeof RUN_COMMAND_KINDS)[number];

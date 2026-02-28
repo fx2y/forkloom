@@ -11,10 +11,7 @@ describe("materializeSandboxInputs", () => {
 		try {
 			const staged = await materializeSandboxInputs({
 				runId: "run-1",
-				attachments: [
-					{ sha256: "a".repeat(64) },
-					{ sha256: "b".repeat(64) },
-				],
+				attachments: [{ sha256: "a".repeat(64) }, { sha256: "b".repeat(64) }],
 				inputRoot: root,
 				artifactService: {
 					getArtifactBytes: async (sha256) => ({
@@ -28,7 +25,7 @@ describe("materializeSandboxInputs", () => {
 			expect(staged.staged[0]?.mountPath).toBe(
 				`/inputs/01-${"a".repeat(64)}.bin`,
 			);
-			expect(await readFile(staged.staged[1]!.hostPath, "utf8")).toBe(
+			expect(await readFile(staged.staged[1]?.hostPath ?? "", "utf8")).toBe(
 				`payload:${"b".repeat(64)}`,
 			);
 		} finally {

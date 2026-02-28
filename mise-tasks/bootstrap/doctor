@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds mise jq
+require_cmds mise jq rg
 optional_cmds_status fnox docker curl sqlite3 | tee .cache/doctor.optional.txt >/dev/null
 
 if find . \
@@ -22,6 +22,24 @@ if [[ "${PI_RPC_STRICT_REAL:-0}" == "1" ]]; then
       exit 1
     fi
   done
+  if command -v docker >/dev/null 2>&1; then
+    api_cfg="$(docker compose config api 2>/dev/null || true)"
+    worker_cfg="$(docker compose config worker 2>/dev/null || true)"
+    if ! printf '%s\n' "$api_cfg" | rg -q 'PI_RPC_STRICT_REAL: "1"'; then
+      echo 'strict-real PI must propagate PI_RPC_STRICT_REAL=1 into compose api' >&2
+      exit 1
+    fi
+    if ! printf '%s\n' "$worker_cfg" | rg -q 'PI_RPC_STRICT_REAL: "1"'; then
+      echo 'strict-real PI must propagate PI_RPC_STRICT_REAL=1 into compose worker' >&2
+      exit 1
+    fi
+    for svc_cfg in "$api_cfg" "$worker_cfg"; do
+      if ! printf '%s\n' "$svc_cfg" | rg -q 'target: /root/.pi/agent'; then
+        echo 'strict-real PI requires ~/.pi/agent mounted read-only into compose api/worker' >&2
+        exit 1
+      fi
+    done
+  fi
 fi
 
 if command -v docker >/dev/null 2>&1; then

@@ -4,6 +4,7 @@ import {
 	parseRunCommandPayload,
 	parseRunCreatePayload,
 	parseRunCursor,
+	parseRunFileExportPayload,
 } from "../../apps/api/src/http/run-request-parsers";
 
 function makeRequest(input: {
@@ -104,6 +105,20 @@ describe("run-request-parsers", () => {
 		});
 		expect(() => parseRunCommandPayload({ kind: "nope" })).toThrow(
 			"kind must be one of",
+		);
+	});
+
+	it("parses file export payloads and rejects malformed paths", () => {
+		expect(parseRunFileExportPayload(undefined)).toEqual({});
+		expect(
+			parseRunFileExportPayload({
+				paths: ["project/a.ts", "out/result.txt"],
+			}),
+		).toEqual({
+			paths: ["project/a.ts", "out/result.txt"],
+		});
+		expect(() => parseRunFileExportPayload({ paths: ["", 1] })).toThrow(
+			"paths must be a non-empty string array",
 		);
 	});
 });

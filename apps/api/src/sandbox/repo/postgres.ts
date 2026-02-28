@@ -1,6 +1,5 @@
 import pg from "pg";
 import { createPoolCloseOnce } from "../../repo/pool-close";
-import { needsSandboxApproval } from "../profile";
 import type {
 	ExecResult,
 	RunCommandKind,
@@ -12,6 +11,7 @@ import type {
 	SandboxSpecModel,
 	SandboxState,
 } from "../ports";
+import { needsSandboxApproval } from "../profile";
 
 type QueryResultLike<TRow> = {
 	rows: TRow[];

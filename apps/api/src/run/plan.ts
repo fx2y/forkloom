@@ -1,12 +1,12 @@
 import { resolve } from "node:path";
+import type { AppConfig } from "../config";
 import {
-	createSandboxPreviewSpec,
-	createSandboxSpec,
 	type RunCommandKind,
 	type SandboxPreviewModel,
 	type SandboxSpecModel,
+	createSandboxPreviewSpec,
+	createSandboxSpec,
 } from "../sandbox";
-import type { AppConfig } from "../config";
 import type { RunSpecModel } from "./ports";
 
 export type RunPlan = {

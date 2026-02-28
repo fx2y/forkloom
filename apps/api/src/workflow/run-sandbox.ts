@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import type { PiSessionPort, PiSessionState, PiSessionStats } from "../pi";
+import type { RunModel, RunRepo } from "../run/ports";
+import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import { WORKSPACE_SNAPSHOT_RULE, materializeSandboxInputs } from "../sandbox";
 import type {
 	RunCommandModel,
@@ -8,8 +10,6 @@ import type {
 	SandboxModel,
 	SandboxRepo,
 } from "../sandbox";
-import type { RunModel, RunRepo } from "../run/ports";
-import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
 import { buildRunPromptInput } from "./prompt";
 
@@ -77,10 +77,7 @@ export type RunSandboxDeps = {
 	workflowLauncher: {
 		startRunOnce(runId: string, opts: { workflowID: string }): Promise<void>;
 	};
-	createPiSession(
-		run: RunModel,
-		sandbox: SandboxModel,
-	): Promise<PiSessionPort>;
+	createPiSession(run: RunModel, sandbox: SandboxModel): Promise<PiSessionPort>;
 	readFileBytes?: ((path: string) => Promise<Buffer>) | undefined;
 	leaseMs?: number | undefined;
 	workflowId?: string | undefined;
@@ -129,19 +126,17 @@ function assertLoaded(value: LoadedPlan | null): LoadedPlan {
 	return value;
 }
 
-function assertSession(value: PiSessionPort | null): PiSessionPort {
-	if (!value) {
-		throw new Error("pi session is not initialized");
-	}
-	return value;
-}
-
 function readCommandText(command: RunCommandModel): string {
 	const text = command.payload.text;
 	if (typeof text !== "string" || text.trim().length === 0) {
 		throw new Error(`command ${command.kind} requires payload.text`);
 	}
 	return text.trim();
+}
+
+function normalizeResultText(value: string): string {
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? value : "[no assistant text]";
 }
 
 async function closeSession(session: PiSessionPort | null): Promise<void> {
@@ -160,6 +155,16 @@ export async function executeRunSandbox(
 	let session: PiSessionPort | null = null;
 	let startedAt: string | null = null;
 	let nextPendingSeq: number | null = null;
+
+	const getOrCreateSession = async (): Promise<PiSessionPort> => {
+		if (!session) {
+			session = await deps.createPiSession(
+				assertLoaded(loadedPlan).run,
+				assertLoaded(loadedPlan).sandbox,
+			);
+		}
+		return session;
+	};
 
 	try {
 		loadedPlan = await steps.runStep("loadPlan", async () => {
@@ -212,12 +217,7 @@ export async function executeRunSandbox(
 		});
 
 		if (assertLoaded(loadedPlan).command.kind !== "approve") {
-			session = await steps.runStep("ensurePi", async () =>
-				deps.createPiSession(
-					assertLoaded(loadedPlan).run,
-					assertLoaded(loadedPlan).sandbox,
-				),
-			);
+			await steps.runStep("ensurePi", async () => undefined);
 		} else {
 			await steps.runStep("ensurePi", async () => undefined);
 		}
@@ -240,19 +240,23 @@ export async function executeRunSandbox(
 						...loaded.run.spec,
 						userMsg: readCommandText(loaded.command),
 					};
-					await assertSession(session).prompt(
+					await (await getOrCreateSession()).prompt(
 						await buildRunPromptInput(promptSpec, deps.artifactService),
 					);
 					return;
 				}
 				case "followUp":
-					await assertSession(session).followUp(readCommandText(loaded.command));
+					await (await getOrCreateSession()).followUp(
+						readCommandText(loaded.command),
+					);
 					return;
 				case "steer":
-					await assertSession(session).steer(readCommandText(loaded.command));
+					await (await getOrCreateSession()).steer(
+						readCommandText(loaded.command),
+					);
 					return;
 				case "abort":
-					await assertSession(session).abort();
+					await (await getOrCreateSession()).abort();
 					return;
 			}
 		});
@@ -262,7 +266,7 @@ export async function executeRunSandbox(
 			if (loaded.command.kind === "approve") {
 				return null;
 			}
-			const activeSession = assertSession(session);
+			const activeSession = await getOrCreateSession();
 			await activeSession.waitUntilIdle({
 				onEvent: async (event) => {
 					await deps.runService.appendPiEvent(runId, event);
@@ -289,7 +293,9 @@ export async function executeRunSandbox(
 				kind: "pi_session_jsonl",
 			});
 			return {
-				resultText: await activeSession.getLastAssistantText(),
+				resultText: normalizeResultText(
+					await activeSession.getLastAssistantText(),
+				),
 				stats: await activeSession.getSessionStats(),
 				sessionState,
 				sessionArtifactSha: sessionArtifact.sha256,
@@ -384,10 +390,7 @@ export async function executeRunSandbox(
 					await deps.runService.failRun(runId, error);
 				}
 				await deps.sandboxRepo.releaseLease(runId, workflowId);
-				if (
-					nextPendingSeq != null &&
-					error instanceof RunTransientError
-				) {
+				if (nextPendingSeq != null && error instanceof RunTransientError) {
 					await deps.workflowLauncher.startRunOnce(runId, {
 						workflowID: toRunSandboxWorkflowId(runId, nextPendingSeq),
 					});

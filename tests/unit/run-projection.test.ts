@@ -107,6 +107,18 @@ describe("toRunEventContract", () => {
 		);
 		expect(event.kind).toBe("run_failed");
 	});
+
+	it("maps interactive transport events", () => {
+		const event = toRunEventContract(
+			makeEventModel({
+				kind: "run_command_queued",
+				payload: { seq: 3, kind: "prompt" },
+				eventId: 6,
+			}),
+		);
+		expect(event.kind).toBe("run_command_queued");
+		expect(event.payload).toEqual({ seq: 3, kind: "prompt" });
+	});
 });
 
 describe("toRunStateContract", () => {
@@ -170,5 +182,38 @@ describe("toRunStateContract", () => {
 		const state = toRunStateContract(makeRunModel(), []);
 		expect(state.piSessionId).toBeUndefined();
 		expect(state.piSessionFile).toBeUndefined();
+	});
+
+	it("projects awaiting_approval for queued runs with pending sandbox approval", () => {
+		const state = toRunStateContract(makeRunModel({ status: "queued" }), [], {
+			sandbox: {
+				runId: "run-1",
+				sandboxId: "sbx",
+				backend: "docker",
+				profile: "priv",
+				state: "ready",
+				approvalState: "pending",
+				spec: {} as never,
+				previewSpec: {
+					imageDigest: "node:24-alpine",
+					profile: "priv",
+					network: "egress",
+					containerName: "hidden",
+					workVolume: "hidden",
+					workdir: "/work",
+					timeoutSec: 900,
+					maxBytesOut: 1024,
+					mounts: [],
+				},
+				containerName: "hidden",
+				workVolume: "hidden",
+				inflightWorkflowId: null,
+				leaseExpiresAt: null,
+				createdAt: BASE_TS,
+				updatedAt: BASE_TS,
+				lastSeenAt: BASE_TS,
+			},
+		});
+		expect(state.status).toBe("awaiting_approval");
 	});
 });

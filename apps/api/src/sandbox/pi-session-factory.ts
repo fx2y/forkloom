@@ -1,17 +1,17 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-	createManagedPiSessionFactory,
-	type MockPiProviderManager,
+	type CreatePiSessionInput,
 	type ManagedPiSessionOverrides,
+	type MockPiProviderManager,
 	type PiPromptInput,
 	type PiQueueMode,
+	PiRpcClient,
 	type PiRpcPayload,
 	type PiSessionPort,
 	type PiSessionState,
 	type PiSessionStats,
-	type CreatePiSessionInput,
-	PiRpcClient,
+	createManagedPiSessionFactory,
 } from "../pi";
 import { DockerCli } from "./docker-cli";
 
@@ -27,10 +27,7 @@ export type SandboxPiSessionInput = {
 	piCommand?: string[] | undefined;
 };
 
-function asRecord(
-	value: unknown,
-	label: string,
-): Record<string, unknown> {
+function asRecord(value: unknown, label: string): Record<string, unknown> {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) {
 		throw new Error(`${label} must be an object`);
 	}
@@ -105,7 +102,9 @@ class SandboxRpcSessionPort implements PiSessionPort {
 		this.rpc.send({ ...payload, id, type: command });
 		const response = await this.rpc.waitResponse(id);
 		if (response.success === false) {
-			throw new Error(`${command} failed: ${response.error ?? "unknown error"}`);
+			throw new Error(
+				`${command} failed: ${response.error ?? "unknown error"}`,
+			);
 		}
 		return asRecord(response.data ?? {}, `${command}.data`);
 	}
@@ -224,10 +223,7 @@ function copyPiAgentFile(
 	}
 }
 
-function hydrateSandboxPiHome(
-	sourceHome: string,
-	targetHome: string,
-): void {
+function hydrateSandboxPiHome(sourceHome: string, targetHome: string): void {
 	mkdirSync(join(targetHome, ".pi", "agent", "sessions"), {
 		recursive: true,
 	});
@@ -275,7 +271,7 @@ export function createSandboxPiSessionFactory(
 	} = {},
 ): (overrides?: ManagedPiSessionOverrides) => Promise<PiSessionPort> {
 	const dockerCli = deps.dockerCli ?? new DockerCli();
-	const sourceHome = deps.sourceHome ?? (process.env.HOME ?? "");
+	const sourceHome = deps.sourceHome ?? process.env.HOME ?? "";
 
 	return createManagedPiSessionFactory(
 		{

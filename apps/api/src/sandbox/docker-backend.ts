@@ -1,9 +1,8 @@
-import { hashBytes } from "@forkloom/shared";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { hashBytes } from "@forkloom/shared";
 import { DockerCli } from "./docker-cli";
-import { createSandboxPreviewSpec, needsSandboxApproval } from "./profile";
 import type {
 	ExecResult,
 	ExecSpec,
@@ -17,6 +16,7 @@ import type {
 	SandboxState,
 	SnapshotRule,
 } from "./ports";
+import { createSandboxPreviewSpec, needsSandboxApproval } from "./profile";
 
 type DockerInspectState = {
 	Status?: string | undefined;
@@ -40,7 +40,7 @@ type DockerBackendDeps = {
 					include: string[];
 					exclude: string[];
 				},
-			) => Promise<SandboxArtifactPointer>)
+		  ) => Promise<SandboxArtifactPointer>)
 		| undefined;
 };
 
@@ -119,10 +119,7 @@ async function ensureMountSource(mount: SandboxMountSpec): Promise<void> {
 
 function toRunMountArgs(mount: SandboxMountSpec, workdir: string): string[] {
 	if (mount.kind === "work") {
-		return [
-			"--mount",
-			`type=volume,source=${mount.source},target=${workdir}`,
-		];
+		return ["--mount", `type=volume,source=${mount.source},target=${workdir}`];
 	}
 	const options = [
 		"type=bind",
@@ -146,7 +143,7 @@ export class DockerBackend implements RunnerBackend {
 					include: string[];
 					exclude: string[];
 				},
-			) => Promise<SandboxArtifactPointer>)
+		  ) => Promise<SandboxArtifactPointer>)
 		| undefined;
 
 	constructor(deps: DockerBackendDeps = {}) {
@@ -179,7 +176,9 @@ export class DockerBackend implements RunnerBackend {
 	async wakeSandbox(spec: SandboxSpecModel): Promise<void> {
 		const result = await this.dockerCli.capture(["start", spec.containerName]);
 		if (result.exitCode !== 0) {
-			throw new Error(result.stderr.toString("utf8").trim() || "docker start failed");
+			throw new Error(
+				result.stderr.toString("utf8").trim() || "docker start failed",
+			);
 		}
 	}
 
@@ -191,7 +190,9 @@ export class DockerBackend implements RunnerBackend {
 			handle.containerName,
 		]);
 		if (result.exitCode !== 0) {
-			throw new Error(result.stderr.toString("utf8").trim() || "docker stop failed");
+			throw new Error(
+				result.stderr.toString("utf8").trim() || "docker stop failed",
+			);
 		}
 		return {
 			...handle,
@@ -351,7 +352,9 @@ export class DockerBackend implements RunnerBackend {
 		];
 		const result = await this.dockerCli.capture(args);
 		if (result.exitCode !== 0) {
-			throw new Error(result.stderr.toString("utf8").trim() || "docker run failed");
+			throw new Error(
+				result.stderr.toString("utf8").trim() || "docker run failed",
+			);
 		}
 	}
 
@@ -369,7 +372,9 @@ export class DockerBackend implements RunnerBackend {
 				`${spec.containerName}:/tmp/forkloom-workspace.tgz`,
 			]);
 			if (copy.exitCode !== 0) {
-				throw new Error(copy.stderr.toString("utf8").trim() || "docker cp failed");
+				throw new Error(
+					copy.stderr.toString("utf8").trim() || "docker cp failed",
+				);
 			}
 			const untar = await this.dockerCli.capture([
 				"exec",
@@ -425,14 +430,14 @@ export class DockerBackend implements RunnerBackend {
 		if (!env) {
 			return [];
 		}
-		return Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
+		return Object.entries(env).flatMap(([key, value]) => [
+			"-e",
+			`${key}=${value}`,
+		]);
 	}
 }
 
-function toExecStatus(
-	exitCode: number,
-	timedOut: boolean,
-): SandboxExecStatus {
+function toExecStatus(exitCode: number, timedOut: boolean): SandboxExecStatus {
 	if (timedOut || exitCode === 137) {
 		return "aborted";
 	}

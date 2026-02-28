@@ -197,15 +197,7 @@ async function bootstrap() {
 }
 
 async function main(): Promise<void> {
-	const {
-		app,
-		config,
-		repo,
-		runRepo,
-		sandboxRepo,
-		actorRepo,
-		actorProcessor,
-	} =
+	const { app, config, repo, runRepo, sandboxRepo, actorRepo, actorProcessor } =
 		await bootstrap();
 
 	const server = app.listen(config.port, () => {

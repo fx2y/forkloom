@@ -59,7 +59,8 @@ describe("actor steer live proof", () => {
 			expect(parsed.fallbackUsed).toBe(false);
 			expect(parsed.provider).not.toContain("forkloom-mock");
 			expect(parsed.model).not.toContain("forkloom-mock");
-		} else {
+		}
+		if (parsed.fallbackUsed) {
 			expect(parsed.piEventCount).toBeGreaterThan(0);
 		}
 		expect(parsed.stateAfterPrompt?.status).toBe("idle");

@@ -20,8 +20,18 @@ describe("contracts validate namespace", () => {
 			runId: RUN_ID,
 			seq: 1,
 			t: "2026-02-27T00:00:00Z",
-			kind: "run_started",
-			payload: { scope: "team" },
+			kind: "run_previewed",
+			payload: {
+				preview: {
+					imageDigest: "node:24-alpine",
+					profile: "safe",
+					network: "off",
+					workdir: "/work",
+					timeoutSec: 900,
+					maxBytesOut: 1024,
+					mounts: [{ dest: "/work", mode: "rw", kind: "work" }],
+				},
+			},
 		});
 		const bad = validateAnyByName("RunEvent", {
 			runId: RUN_ID,

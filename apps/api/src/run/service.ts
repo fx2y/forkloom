@@ -6,18 +6,18 @@ import type {
 	RunState,
 } from "@forkloom/contracts";
 import {
-	exportWorkspaceFiles,
-	listWorkspaceFiles,
 	type RunCommandKind,
 	type RunCommandModel,
 	type SandboxModel,
 	type SandboxRepo,
+	exportWorkspaceFiles,
+	listWorkspaceFiles,
 } from "../sandbox";
 import type { ArtifactService } from "../service";
 import { toRunSandboxWorkflowId } from "../workflow/run-sandbox";
 import type { RunEventKind, RunEventPayloadMap } from "./event";
+import type { RunPlan } from "./plan";
 import type { RunEventModel, RunModel, RunRepo, RunSpecModel } from "./ports";
-import { type RunPlan } from "./plan";
 import { toRunEventContract, toRunStateContract } from "./projection";
 
 export type CompleteRunInput = {
@@ -230,7 +230,8 @@ export class RunService {
 		if (!sandbox) {
 			return toRunStateContract(run, artifacts);
 		}
-		const currentCommand = await sandboxDeps.sandboxRepo.getCurrentCommand(runId);
+		const currentCommand =
+			await sandboxDeps.sandboxRepo.getCurrentCommand(runId);
 		const files =
 			sandbox.workspaceRef != null
 				? await listWorkspaceFiles({

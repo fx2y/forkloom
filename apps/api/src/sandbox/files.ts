@@ -1,12 +1,12 @@
-import { createGzip, gunzipSync } from "node:zlib";
 import { once } from "node:events";
+import { createGzip, gunzipSync } from "node:zlib";
 import { hashBytes } from "@forkloom/shared";
 import type { ArtifactService } from "../service";
 import { readArtifactBuffer } from "./input-staging";
 import {
+	type WorkspaceFileEntry,
 	buildWorkspaceManifest,
 	filterDurableWorkspaceEntries,
-	type WorkspaceFileEntry,
 } from "./snapshot";
 
 type ArtifactPointer = {

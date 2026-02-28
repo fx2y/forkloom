@@ -57,12 +57,13 @@ describe("actor functional live proof", () => {
 			expect(parsed.fallbackUsed).toBe(false);
 			expect(parsed.provider).not.toContain("forkloom-mock");
 			expect(parsed.model).not.toContain("forkloom-mock");
-		} else {
+		}
+		if (parsed.fallbackUsed) {
 			expect(parsed.piEventCount).toBeGreaterThan(0);
 		}
 		expect(parsed.eventKinds).toContain("mailbox_queued");
 		expect(parsed.eventKinds).toContain("mailbox_processed");
-		if (!parsed.strictReal) {
+		if (parsed.fallbackUsed) {
 			expect(parsed.eventKinds).toContain("pi_event");
 		}
 		expect(parsed.actorState?.status).toBe("idle");

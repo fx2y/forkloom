@@ -28,6 +28,10 @@ backend = "core:python"
 "platforms.linux-x64" = { checksum = "sha256:1dbaa624a09e15afe7efbdac08d42993135a68db8d34f986ef6977a6d77bdc3c", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.12.12+20260211-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"}
 "platforms.macos-arm64" = { checksum = "sha256:22625deaf5757e7c266cf1a096c9151a06b598b1e14632a2ec9993d58ec5fe84", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.12.12+20260211-aarch64-apple-darwin-install_only_stripped.tar.gz"}
 
+[[tools.ripgrep]]
+version = "15.1.0"
+backend = "aqua:BurntSushi/ripgrep"
+
 [[tools.sqlite]]
 version = "3.51.2"
 backend = "asdf:sqlite"

@@ -10,11 +10,23 @@ export type ArtifactType = "raw" | "md" | "json" | "trace" | "other";
 export type WorkflowStatus = "queued" | "running" | "done" | "err";
 export type ExtensionCapability = "tool" | "cmd" | "ui" | "gate";
 export type RunScope = "me" | "team" | "org";
-export type RunStatus = "queued" | "running" | "done" | "failed";
+export type RunStatus =
+	| "queued"
+	| "awaiting_approval"
+	| "running"
+	| "done"
+	| "failed"
+	| "aborted";
 export type RunEventKind =
 	| "run_started"
+	| "run_previewed"
+	| "run_approval_required"
+	| "run_approved"
+	| "run_command_queued"
 	| "pi_event"
 	| "artifact_written"
+	| "workspace_updated"
+	| "run_aborted"
 	| "run_done"
 	| "run_failed";
 export type MailboxKind =
@@ -108,6 +120,10 @@ export type RunState = {
 	dbosWfId: string;
 	piSessionId?: string;
 	piSessionFile?: string;
+	preview?: Record<string, unknown>;
+	approval?: Record<string, unknown>;
+	currentCommand?: Record<string, unknown>;
+	files?: Record<string, unknown>;
 	artifacts: RunArtifactRef[];
 };
 
@@ -115,11 +131,36 @@ export type RunStartedPayload = {
 	scope?: RunScope;
 };
 
+export type RunPreviewedPayload = {
+	preview: Record<string, unknown>;
+};
+
+export type RunApprovalRequiredPayload = {
+	profile: string;
+};
+
+export type RunApprovedPayload = {
+	seq: number;
+};
+
+export type RunCommandQueuedPayload = {
+	seq: number;
+	kind: string;
+};
+
 export type PiEventPayload = Record<string, unknown>;
 
 export type ArtifactWrittenPayload = {
 	sha256: string;
 	kind: string;
+};
+
+export type WorkspaceUpdatedPayload = {
+	workspaceRef: RunArtifactRef;
+};
+
+export type RunAbortedPayload = {
+	seq: number;
 };
 
 export type RunDonePayload = {
@@ -140,6 +181,38 @@ export type RunStartedEvent = {
 	payload: RunStartedPayload;
 };
 
+export type RunPreviewedEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_previewed";
+	payload: RunPreviewedPayload;
+};
+
+export type RunApprovalRequiredEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_approval_required";
+	payload: RunApprovalRequiredPayload;
+};
+
+export type RunApprovedEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_approved";
+	payload: RunApprovedPayload;
+};
+
+export type RunCommandQueuedEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_command_queued";
+	payload: RunCommandQueuedPayload;
+};
+
 export type PiEvent = {
 	runId: string;
 	seq: number;
@@ -154,6 +227,22 @@ export type ArtifactWrittenEvent = {
 	t: string;
 	kind: "artifact_written";
 	payload: ArtifactWrittenPayload;
+};
+
+export type WorkspaceUpdatedEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "workspace_updated";
+	payload: WorkspaceUpdatedPayload;
+};
+
+export type RunAbortedEvent = {
+	runId: string;
+	seq: number;
+	t: string;
+	kind: "run_aborted";
+	payload: RunAbortedPayload;
 };
 
 export type RunDoneEvent = {
@@ -174,12 +263,18 @@ export type RunFailedEvent = {
 
 export type RunEvent =
 	| RunStartedEvent
+	| RunPreviewedEvent
+	| RunApprovalRequiredEvent
+	| RunApprovedEvent
+	| RunCommandQueuedEvent
 	| PiEvent
 	| ArtifactWrittenEvent
+	| WorkspaceUpdatedEvent
+	| RunAbortedEvent
 	| RunDoneEvent
 	| RunFailedEvent;
 
-export type TerminalRunEvent = RunDoneEvent | RunFailedEvent;
+export type TerminalRunEvent = RunAbortedEvent | RunDoneEvent | RunFailedEvent;
 
 export type ActorSpec = {
 	actorId: string;

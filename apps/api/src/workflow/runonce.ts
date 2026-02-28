@@ -5,7 +5,7 @@ import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
 import { buildRunPromptInput } from "./prompt";
-import { executeRunSandbox, type RunSandboxDeps } from "./run-sandbox";
+import { type RunSandboxDeps, executeRunSandbox } from "./run-sandbox";
 
 type RunCoreStepName =
 	| "initRun"
@@ -71,13 +71,6 @@ function assertRun(ctx: RunOnceContext): RunModel {
 	return ctx.run;
 }
 
-function assertSession(ctx: RunOnceContext): PiSessionPort {
-	if (!ctx.pi) {
-		throw new Error("pi session is not initialized");
-	}
-	return ctx.pi;
-}
-
 function assertState(ctx: RunOnceContext): PiSessionState {
 	if (!ctx.state) {
 		throw new Error("pi state is not initialized");
@@ -106,6 +99,11 @@ function assertSessionArtifactUri(ctx: RunOnceContext): string {
 	return ctx.sessionArtifactUri;
 }
 
+function normalizeResultText(value: string): string {
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? value : "[no assistant text]";
+}
+
 async function closePi(ctx: RunOnceContext): Promise<void> {
 	if (!ctx.pi) {
 		return;
@@ -129,6 +127,13 @@ export async function executeRunOnce(
 		sessionArtifactSha: null,
 		sessionArtifactUri: null,
 		artifactShas: [],
+	};
+
+	const getOrCreateSession = async (): Promise<PiSessionPort> => {
+		if (!ctx.pi) {
+			ctx.pi = await deps.createPiSession(assertRun(ctx));
+		}
+		return ctx.pi;
 	};
 
 	try {
@@ -160,20 +165,19 @@ export async function executeRunOnce(
 		});
 
 		await steps.runStep("startPi", async () => {
-			const run = assertRun(ctx);
-			ctx.pi = await deps.createPiSession(run);
+			return;
 		});
 
 		await steps.runStep("promptPi", async () => {
 			const run = assertRun(ctx);
-			const session = assertSession(ctx);
+			const session = await getOrCreateSession();
 			await session.prompt(
 				await buildRunPromptInput(run.spec, deps.artifactService),
 			);
 		});
 
 		await steps.runStep("pumpEvents", async () => {
-			const session = assertSession(ctx);
+			const session = await getOrCreateSession();
 			await session.waitUntilIdle({
 				onEvent: async (event) => {
 					await deps.runService.appendPiEvent(runId, event);
@@ -182,10 +186,10 @@ export async function executeRunOnce(
 		});
 
 		const finalized = await steps.runStep("finalize", async () => {
-			const session = assertSession(ctx);
+			const session = await getOrCreateSession();
 			return {
 				state: await session.getState(),
-				resultText: await session.getLastAssistantText(),
+				resultText: normalizeResultText(await session.getLastAssistantText()),
 				stats: await session.getSessionStats(),
 			};
 		});

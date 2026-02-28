@@ -10,9 +10,15 @@ import {
 
 class StubDockerCli extends DockerCli {
 	public readonly captureCalls: string[][] = [];
-	private readonly queue: Array<{ exitCode: number; stdout?: string; stderr?: string }>;
+	private readonly queue: Array<{
+		exitCode: number;
+		stdout?: string;
+		stderr?: string;
+	}>;
 
-	constructor(queue: Array<{ exitCode: number; stdout?: string; stderr?: string }>) {
+	constructor(
+		queue: Array<{ exitCode: number; stdout?: string; stderr?: string }>,
+	) {
 		super();
 		this.queue = [...queue];
 	}

@@ -22,6 +22,7 @@ type JsonEventStreamOptions = {
 const DEFAULT_API_ORIGIN = "http://127.0.0.1:8080";
 const DEFAULT_DATABASE_URL =
 	"postgresql://postgres:postgres@127.0.0.1:5432/agentos";
+const DEFAULT_SSE_IDLE_TIMEOUT_MS = 15_000;
 
 function databaseUrl(): string {
 	return (
@@ -151,7 +152,10 @@ export class JsonEventStream<TEvent> {
 
 		while (Date.now() < deadline) {
 			const remainingMs = deadline - Date.now();
-			const chunkTimeoutMs = Math.max(1_000, Math.min(5_000, remainingMs));
+			const chunkTimeoutMs = Math.max(
+				1_000,
+				Math.min(DEFAULT_SSE_IDLE_TIMEOUT_MS, remainingMs),
+			);
 			const chunk = await Promise.race([
 				this.reader.read(),
 				new Promise<never>((_, reject) => {

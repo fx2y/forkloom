@@ -8,7 +8,11 @@ import {
 	listWorkspaceFiles,
 } from "../../apps/api/src/sandbox/files";
 
-function writeString(target: Buffer<ArrayBufferLike>, start: number, value: string) {
+function writeString(
+	target: Buffer<ArrayBufferLike>,
+	start: number,
+	value: string,
+) {
 	Buffer.from(value, "utf8").copy(target, start);
 }
 
@@ -130,8 +134,8 @@ describe("workspace files", () => {
 		});
 
 		expect(stored).not.toBeNull();
-		expect(exported.workspace_manifest.entries.map((entry) => entry.path)).toEqual([
-			"project/other.txt",
-		]);
+		expect(
+			exported.workspace_manifest.entries.map((entry) => entry.path),
+		).toEqual(["project/other.txt"]);
 	});
 });

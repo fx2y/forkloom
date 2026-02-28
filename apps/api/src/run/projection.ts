@@ -1,11 +1,17 @@
 import type {
 	ArtifactWrittenPayload,
 	PiEventPayload,
+	RunAbortedPayload,
+	RunApprovalRequiredPayload,
+	RunApprovedPayload,
+	RunCommandQueuedPayload,
 	RunDonePayload,
 	RunEvent,
 	RunFailedPayload,
+	RunPreviewedPayload,
 	RunStartedPayload,
 	RunState,
+	WorkspaceUpdatedPayload,
 } from "@forkloom/contracts";
 import type { RunCommandModel, SandboxModel } from "../sandbox";
 import type { RunArtifactLinkModel, RunEventModel, RunModel } from "./ports";
@@ -16,10 +22,6 @@ type ProjectedRunState = RunState & {
 	currentCommand?: Record<string, unknown> | undefined;
 	files?: Record<string, unknown> | undefined;
 };
-
-function asRunEvent(event: Record<string, unknown>): RunEvent {
-	return event as unknown as RunEvent;
-}
 
 function toPublicPreview(sandbox: SandboxModel): Record<string, unknown> {
 	return {
@@ -37,6 +39,28 @@ function toPublicPreview(sandbox: SandboxModel): Record<string, unknown> {
 	};
 }
 
+function toPublicStatus(
+	run: RunModel,
+	extra:
+		| {
+				sandbox?: SandboxModel | undefined;
+				currentCommand?: RunCommandModel | null | undefined;
+		  }
+		| undefined,
+): RunState["status"] {
+	if (
+		run.status === "failed" &&
+		extra?.currentCommand?.kind === "abort" &&
+		extra.currentCommand.state === "done"
+	) {
+		return "aborted";
+	}
+	if (run.status === "queued" && extra?.sandbox?.approvalState === "pending") {
+		return "awaiting_approval";
+	}
+	return run.status;
+}
+
 export function toRunEventContract(event: RunEventModel): RunEvent {
 	const base = {
 		runId: event.runId,
@@ -51,16 +75,41 @@ export function toRunEventContract(event: RunEventModel): RunEvent {
 				payload: event.payload as RunStartedPayload,
 			};
 		case "run_previewed":
-		case "run_approval_required":
-		case "run_approved":
-		case "run_command_queued":
-		case "workspace_updated":
-		case "run_aborted":
-			return asRunEvent({
+			return {
 				...base,
 				kind: event.kind,
-				payload: event.payload,
-			});
+				payload: event.payload as RunPreviewedPayload,
+			};
+		case "run_approval_required":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunApprovalRequiredPayload,
+			};
+		case "run_approved":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunApprovedPayload,
+			};
+		case "run_command_queued":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunCommandQueuedPayload,
+			};
+		case "workspace_updated":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as WorkspaceUpdatedPayload,
+			};
+		case "run_aborted":
+			return {
+				...base,
+				kind: event.kind,
+				payload: event.payload as RunAbortedPayload,
+			};
 		case "pi_event":
 			return {
 				...base,
@@ -107,7 +156,10 @@ export function toRunStateContract(
 ): RunState {
 	const state: ProjectedRunState = {
 		runId: run.runId,
-		status: run.status,
+		status: toPublicStatus(run, {
+			sandbox: extra?.sandbox,
+			currentCommand: extra?.currentCommand,
+		}),
 		startedAt: run.createdAt,
 		dbosWfId: run.dbosWorkflowId ?? run.runId,
 		artifacts: artifacts.map((artifact) => ({ sha256: artifact.sha256 })),

@@ -6,6 +6,7 @@ uv = "latest"
 fnox = "latest"
 jq = "latest"
 sqlite = "latest"
+ripgrep = "latest"
 
 [plugins]
 fnox-env = "https://github.com/jdx/mise-env-fnox"
@@ -32,7 +33,7 @@ outputs = [".cache/mise-marks/bootstrap__install.ok"]
 [tasks."bootstrap:doctor"]
 run = "bash ./mise-tasks/bootstrap/doctor"
 depends = ["bootstrap:install"]
-sources = [".mise.toml", "fnox.toml", "mise-tasks/bootstrap/doctor", "scripts/lib/common.sh"]
+sources = [".mise.toml", "fnox.toml", "docker-compose.yml", "mise-tasks/bootstrap/doctor", "scripts/lib/common.sh"]
 outputs = [".cache/mise-marks/bootstrap__doctor.ok", ".cache/doctor.optional.txt"]
 
 [tasks."bootstrap:secrets"]
@@ -177,6 +178,21 @@ run = "bash ./mise-tasks/test/int/run-sandbox-functional"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-sandbox-functional"]
 outputs = [".cache/mise-marks/test__int__run-sandbox-functional.ok", ".cache/test-int/run-sandbox-functional.json"]
 
+[tasks."test:int:run-sandbox-files"]
+run = "bash ./mise-tasks/test/int/run-sandbox-files"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-sandbox-files"]
+outputs = [".cache/mise-marks/test__int__run-sandbox-files.ok", ".cache/test-int/run-sandbox-files.json"]
+
+[tasks."test:int:run-sandbox-sse"]
+run = "bash ./mise-tasks/test/int/run-sandbox-sse"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-sandbox-sse"]
+outputs = [".cache/mise-marks/test__int__run-sandbox-sse.ok", ".cache/test-int/run-sandbox-sse.json"]
+
+[tasks."test:int:run-sandbox-durability"]
+run = "bash ./mise-tasks/test/int/run-sandbox-durability"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/run-sandbox-durability"]
+outputs = [".cache/mise-marks/test__int__run-sandbox-durability.ok", ".cache/test-int/run-sandbox-durability.json", "/tmp/run-sandbox-live.first.log", "/tmp/run-sandbox-live.recover.log"]
+
 [tasks."test:int:ocr-doc"]
 run = "bash ./mise-tasks/test/int/ocr-doc"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]
@@ -196,6 +212,10 @@ run = [
   "mise run test:int:actor-functional",
   "mise run test:int:actor-sse",
   "mise run test:int:run-sse",
+  "mise run test:int:run-sandbox-functional",
+  "mise run test:int:run-sandbox-files",
+  "mise run test:int:run-sandbox-sse",
+  "mise run test:int:run-sandbox-durability",
   "mise run test:int:ocr-doc"
 ]
 
@@ -213,6 +233,10 @@ run = [
   "mise run --force test:int:actor-functional",
   "mise run --force test:int:actor-sse",
   "mise run --force test:int:run-sse",
+  "mise run --force test:int:run-sandbox-functional",
+  "mise run --force test:int:run-sandbox-files",
+  "mise run --force test:int:run-sandbox-sse",
+  "mise run --force test:int:run-sandbox-durability",
   "mise run --force test:int:ocr-doc"
 ]
 

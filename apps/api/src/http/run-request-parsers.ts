@@ -1,11 +1,7 @@
 import { validateRunByName } from "@forkloom/contracts";
 import type { Request } from "express";
 import { HttpError } from "../errors";
-import type {
-	RunProfile,
-	RunScope,
-	RunSpecModel,
-} from "../run/ports";
+import type { RunProfile, RunScope, RunSpecModel } from "../run/ports";
 import { RUN_PUBLIC_COMMAND_KINDS } from "../run/public-surface";
 import {
 	parseArtifactPointer,
@@ -61,8 +57,7 @@ export function parseRunCreatePayload(input: unknown): RunSpecModel {
 				: parseArtifactPointer(record.workdirRef, "workdirRef"),
 		modelPref:
 			typeof record.modelPref === "string" ? record.modelPref : undefined,
-		profile:
-			raw?.profile == null ? undefined : parseRunProfile(raw.profile),
+		profile: raw?.profile == null ? undefined : parseRunProfile(raw.profile),
 	};
 }
 
@@ -90,10 +85,7 @@ export function parseRunCommandPayload(input: unknown): {
 	}
 	let payload: Record<string, unknown> = {};
 	if (record.payload != null) {
-		if (
-			typeof record.payload !== "object" ||
-			Array.isArray(record.payload)
-		) {
+		if (typeof record.payload !== "object" || Array.isArray(record.payload)) {
 			throw new HttpError(400, "payload must be an object");
 		}
 		payload = record.payload as Record<string, unknown>;

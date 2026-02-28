@@ -20,8 +20,14 @@
       "type": "string",
       "enum": [
         "run_started",
+        "run_previewed",
+        "run_approval_required",
+        "run_approved",
+        "run_command_queued",
         "pi_event",
         "artifact_written",
+        "workspace_updated",
+        "run_aborted",
         "run_done",
         "run_failed"
       ]
@@ -43,6 +49,139 @@
             "scope": {
               "type": "string",
               "enum": ["me", "team", "org"]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_previewed"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["preview"],
+          "properties": {
+            "preview": {
+              "type": "object",
+              "required": [
+                "imageDigest",
+                "profile",
+                "network",
+                "workdir",
+                "timeoutSec",
+                "maxBytesOut",
+                "mounts"
+              ],
+              "properties": {
+                "imageDigest": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "profile": {
+                  "type": "string",
+                  "enum": ["safe", "std", "priv"]
+                },
+                "network": {
+                  "type": "string",
+                  "enum": ["off", "egress"]
+                },
+                "workdir": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "timeoutSec": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxBytesOut": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "mounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["dest", "mode", "kind"],
+                    "properties": {
+                      "dest": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": ["rw", "ro"]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["work", "inputs", "cache"]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_approval_required"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["profile"],
+          "properties": {
+            "profile": {
+              "type": "string",
+              "enum": ["safe", "std", "priv"]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_approved"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["seq"],
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_command_queued"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["seq", "kind"],
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["approve", "prompt", "followUp", "steer", "abort"]
             }
           },
           "additionalProperties": false
@@ -76,6 +215,49 @@
             "kind": {
               "type": "string",
               "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "workspace_updated"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["workspaceRef"],
+          "properties": {
+            "workspaceRef": {
+              "type": "object",
+              "required": ["sha256"],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "run_aborted"
+        },
+        "payload": {
+          "type": "object",
+          "required": ["seq"],
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "additionalProperties": false

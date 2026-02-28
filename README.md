@@ -36,7 +36,7 @@ MISE_EXPERIMENTAL=1 mise run bootstrap
 MISE_EXPERIMENTAL=1 mise run svc
 ```
 
-Open `http://127.0.0.1:5173` for the inbox/thread actor UI.
+Open `http://127.0.0.1:5173` for the inbox/thread actor UI plus the run lab (`WILL-RUN`, files, approve/steer/abort).
 
 Optional worker seam:
 
@@ -51,7 +51,7 @@ PI_RPC_STRICT_REAL=1 MISE_EXPERIMENTAL=1 mise run svc
 curl -fsS localhost:8080/health | jq .
 ```
 
-Strict-real prerequisite: host `~/.pi/agent/auth.json` and `~/.pi/agent/settings.json` must exist; `bootstrap:doctor` now fails fast on that path when `PI_RPC_STRICT_REAL=1`. `PI_PROVIDER`/`PI_MODEL` come from `fnox`; strict-real itself is a caller override and must not be silently reset by `mise`.
+Strict-real prerequisite: host `~/.pi/agent/auth.json` and `~/.pi/agent/settings.json` must exist; `bootstrap:doctor` now also verifies `PI_RPC_STRICT_REAL=1` reaches compose `api` and `worker` and that both mount `~/.pi/agent` read-only. `PI_PROVIDER`/`PI_MODEL` come from `fnox`; strict-real itself is a caller override and must not be silently reset by `mise`.
 
 ## Quick Artifact Demo
 
@@ -90,6 +90,12 @@ curl -fsS http://localhost:8080/artifacts/$SHA/meta | jq .
 - truthful send policy: idle thread => `prompt`, streaming thread => `followUp`, explicit interrupt => `steer`
 - `@actor` routing stays client-side and still resolves onto the same actor API surface
 - trace drawer and artifact/session strip are reducer-derived, not hand-authored summaries
+
+## Run UI
+
+- run lab renders persisted `WILL-RUN` preview, durable files, and live trace for `/runs*`
+- approve only appears while `approval.state=pending`; prompt/followUp/steer/abort map 1:1 onto `POST /runs/:runId/commands`
+- files refresh from `GET /runs/:runId/files` after `workspace_updated`; export calls `POST /runs/:runId/files/export`
 
 ## Run API Smoke
 
@@ -142,6 +148,10 @@ MISE_EXPERIMENTAL=1 mise run bootstrap:doctor
 MISE_EXPERIMENTAL=1 mise run check:contract
 MISE_EXPERIMENTAL=1 mise run check:unit
 MISE_EXPERIMENTAL=1 mise run test:int
+MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-functional
+MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-files
+MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-sse
+MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-durability
 MISE_EXPERIMENTAL=1 mise run test:int:actor-durability
 MISE_EXPERIMENTAL=1 mise run test:int:actor-functional
 MISE_EXPERIMENTAL=1 mise run test:int:actor-sse

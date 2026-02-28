@@ -37,12 +37,14 @@ body {
 
 button,
 input,
+select,
 textarea {
 	font: inherit;
 }
 
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible,
 .thread-list-item:focus-visible,
 summary:focus-visible {
@@ -129,6 +131,7 @@ h1 {
 }
 
 input[type="text"],
+select,
 textarea,
 input[type="file"] {
 	width: 100%;
@@ -299,10 +302,59 @@ button:disabled {
 	gap: 16px;
 }
 
+.run-lab {
+	margin-top: 24px;
+}
+
+.run-form {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+}
+
+.run-form-wide {
+	grid-column: 1 / -1;
+}
+
+.run-actions {
+	flex-wrap: wrap;
+}
+
+.run-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+}
+
+.run-subpanel {
+	padding: 18px;
+	box-shadow: none;
+	background: rgba(255, 255, 255, 0.76);
+}
+
+.file-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 10px;
+}
+
+.file-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--border);
+}
+
 @media (max-width: 960px) {
 	.workspace,
 	.thread-form,
-	.composer-meta {
+	.composer-meta,
+	.run-form,
+	.run-grid {
 		grid-template-columns: 1fr;
 	}
 }

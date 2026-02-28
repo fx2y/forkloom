@@ -195,7 +195,10 @@ describe("PgSandboxRepo", () => {
 			{},
 			{ rows: [sandboxRow({ inflight_workflow_id: "wf-1" })], rowCount: 1 },
 			{},
-			{ rows: [commandRow({ state: "claimed", claimed_by: "wf-1" })], rowCount: 1 },
+			{
+				rows: [commandRow({ state: "claimed", claimed_by: "wf-1" })],
+				rowCount: 1,
+			},
 		]);
 		const repo = new PgSandboxRepo({
 			databaseUrl: "postgres://unused",
@@ -215,7 +218,9 @@ describe("PgSandboxRepo", () => {
 		expect(acquired).toBe(true);
 		expect(claimed?.claimedBy).toBe("wf-1");
 		expect(pool.calls[1]?.sql.toLowerCase()).toContain("lease_expires_at");
-		expect(pool.calls[3]?.sql.toLowerCase()).toContain("for update skip locked");
+		expect(pool.calls[3]?.sql.toLowerCase()).toContain(
+			"for update skip locked",
+		);
 	});
 
 	it("persists exec rows and advances sandbox state in one transaction", async () => {
@@ -223,7 +228,10 @@ describe("PgSandboxRepo", () => {
 			{},
 			{ rows: [execRow()], rowCount: 1 },
 			{},
-			{ rows: [sandboxRow({ state: "ready", workspace_ref: "a".repeat(64) })], rowCount: 1 },
+			{
+				rows: [sandboxRow({ state: "ready", workspace_ref: "a".repeat(64) })],
+				rowCount: 1,
+			},
 			{ rows: [{ seq: null }], rowCount: 1 },
 			{},
 		]);

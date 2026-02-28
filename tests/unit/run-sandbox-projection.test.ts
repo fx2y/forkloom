@@ -81,17 +81,67 @@ describe("run sandbox projection", () => {
 					workspaceRef: { sha256: "a".repeat(64) },
 					workspace_manifest: {
 						version: 1,
-						entries: [{ path: "project/keep.txt", bytes: 4, sha256: "b".repeat(64) }],
+						entries: [
+							{ path: "project/keep.txt", bytes: 4, sha256: "b".repeat(64) },
+						],
 					},
 				},
 			},
 		) as Record<string, unknown>;
 
 		expect((state.preview as Record<string, unknown>).profile).toBe("safe");
-		expect((state.preview as Record<string, unknown>).containerName).toBeUndefined();
+		expect(
+			(state.preview as Record<string, unknown>).containerName,
+		).toBeUndefined();
 		expect((state.approval as Record<string, unknown>).state).toBe("approved");
-		expect((state.currentCommand as Record<string, unknown>).kind).toBe("followUp");
-		expect(((state.files as Record<string, unknown>).entries as unknown[])).toHaveLength(1);
+		expect((state.currentCommand as Record<string, unknown>).kind).toBe(
+			"followUp",
+		);
+		expect(
+			(state.files as Record<string, unknown>).entries as unknown[],
+		).toHaveLength(1);
+	});
+
+	it("projects aborted when the latest durable command is an abort", () => {
+		const state = toRunStateContract(
+			{
+				runId: "run-1",
+				status: "failed",
+				spec: {
+					runId: "run-1",
+					scope: "team",
+					userMsg: "hi",
+					attachments: [],
+				},
+				createdAt: ISO,
+				updatedAt: ISO,
+				dbosWorkflowId: "wf-1",
+				piSessionId: null,
+				piSessionFile: null,
+				resultText: null,
+				resultStats: null,
+				error: "aborted by user",
+			},
+			[],
+			{
+				currentCommand: {
+					runId: "run-1",
+					seq: 9,
+					kind: "abort",
+					payload: {},
+					dedupeKey: null,
+					state: "done",
+					claimedBy: "wf-1",
+					claimedAt: ISO,
+					leaseExpiresAt: null,
+					doneAt: ISO,
+					error: null,
+					createdAt: ISO,
+				},
+			},
+		);
+
+		expect(state.status).toBe("aborted");
 	});
 
 	it("maps additive run sandbox events through the replay seam", () => {

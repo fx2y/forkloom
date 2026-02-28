@@ -41,9 +41,7 @@ export function filterDurableWorkspaceEntries<T extends { path: string }>(
 	return entries.filter((entry) => isDurableWorkspacePath(entry.path));
 }
 
-export function buildWorkspaceManifest(
-	entries: WorkspaceFileEntry[],
-): {
+export function buildWorkspaceManifest(entries: WorkspaceFileEntry[]): {
 	version: 1;
 	entries: WorkspaceFileEntry[];
 } {

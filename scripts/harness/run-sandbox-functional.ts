@@ -104,7 +104,11 @@ async function prepareSourceHome(root: string): Promise<string> {
 	const homeDir = join(root, "source-home");
 	await mkdir(join(homeDir, ".pi", "agent"), { recursive: true });
 	await writeFile(join(homeDir, ".pi", "agent", "auth.json"), "{}\n", "utf8");
-	await writeFile(join(homeDir, ".pi", "agent", "settings.json"), "{}\n", "utf8");
+	await writeFile(
+		join(homeDir, ".pi", "agent", "settings.json"),
+		"{}\n",
+		"utf8",
+	);
 	await writeFile(join(homeDir, ".pi", "agent", "models.json"), "{}\n", "utf8");
 	return homeDir;
 }
@@ -118,7 +122,11 @@ async function main(): Promise<void> {
 	const sourceHome = await prepareSourceHome(tempRoot);
 	await mkdir(inputsDir, { recursive: true });
 	await mkdir(piHomeHostDir, { recursive: true });
-	await writeFile(join(inputsDir, "mock-pi-rpc.mjs"), MOCK_PI_RPC_SCRIPT, "utf8");
+	await writeFile(
+		join(inputsDir, "mock-pi-rpc.mjs"),
+		MOCK_PI_RPC_SCRIPT,
+		"utf8",
+	);
 
 	const backend = new DockerBackend();
 	const spec = createSandboxSpec({
@@ -203,9 +211,7 @@ async function main(): Promise<void> {
 			const stats = await session.getSessionStats();
 			await session.close();
 
-			const sessionLog = (
-				await readFile(state.sessionFile, "utf8")
-			)
+			const sessionLog = (await readFile(state.sessionFile, "utf8"))
 				.trim()
 				.split("\n")
 				.filter((line) => line.length > 0)
