@@ -11,5 +11,23 @@ export const RUN_WORKFLOW_STEPS = [
 
 export type RunWorkflowStep = (typeof RUN_WORKFLOW_STEPS)[number];
 
+export const ACTOR_TICK_WORKFLOW_STEPS = [
+	"acquire_lock",
+	"claim_batch",
+	"load_actor",
+	"ensure_session",
+	"apply_batch",
+	"persist_batch",
+	"mark_batch",
+	"release_lock",
+] as const;
+
+export type ActorTickWorkflowStep = (typeof ACTOR_TICK_WORKFLOW_STEPS)[number];
+
 export { executeRunOnce, registerRunOnceWorkflow } from "./runonce";
 export type { RunOnceDeps } from "./runonce";
+export { executeActorTick, registerActorTickWorkflow } from "./actor-tick";
+export type {
+	ActorTickDeps,
+	RegisteredActorWorkflow,
+} from "./actor-tick";

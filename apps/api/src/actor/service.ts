@@ -39,12 +39,15 @@ export class ActorService {
 	}
 
 	async sendMessage(input: MailboxPostModel): Promise<ActorEventModel> {
-		const message = await this.deps.repo.postMailboxMessage({
+		const posted = await this.deps.repo.postMailboxMessage({
 			...input,
 			text: normalizeMailboxText(input.text),
 		});
-		await this.deps.workflowLauncher.enqueueActorTick(input.actorId);
-		return message;
+		await this.deps.workflowLauncher.enqueueActorTick({
+			actorId: input.actorId,
+			firstPendingSeq: posted.firstPendingSeq,
+		});
+		return posted.event;
 	}
 }
 

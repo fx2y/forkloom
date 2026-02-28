@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker
+
+docker compose up -d postgres
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/dev/null 2>&1; then
+  echo "postgres is not ready" >&2
+  exit 1
+fi
+
+ACTOR_ID="actor-live-$(date +%s)-$RANDOM"
+rm -f .cache/dbos/actor-tick.crash.once
+
+set +e
+pnpm exec tsx scripts/harness/dbos-live-actor-tick.ts first "$ACTOR_ID" >/tmp/actor-tick-live.first.log 2>&1
+FIRST_EXIT=$?
+set -e
+if [[ "$FIRST_EXIT" -eq 0 ]]; then
+  echo "expected first ActorTick live run to crash/terminate" >&2
+  cat /tmp/actor-tick-live.first.log >&2
+  exit 1
+fi
+
+pnpm exec tsx scripts/harness/dbos-live-actor-tick.ts recover "$ACTOR_ID" >/tmp/actor-tick-live.recover.log 2>&1
+pnpm exec vitest run tests/int/actor-durability.test.ts
+
+write_mark "test:int:actor-durability"
+echo "test:int:actor-durability ok"

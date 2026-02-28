@@ -1,6 +1,11 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
+import {
+	LazyDbosActorWorkflowLauncher,
+	NoopActorBatchProcessor,
+	PgActorRepo,
+} from "./actor";
 import { loadConfig } from "./config";
 import {
 	DbosStepRunner,
@@ -19,7 +24,7 @@ import { PgArtifactRepo } from "./repo/postgres";
 import { LazyDbosRunWorkflowLauncher, PgRunRepo, RunService } from "./run";
 import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
-import { registerRunOnceWorkflow } from "./workflow";
+import { registerActorTickWorkflow, registerRunOnceWorkflow } from "./workflow";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(__dirname, "../migrations");
@@ -31,6 +36,9 @@ async function bootstrap() {
 		migrationsDir,
 	});
 	const runRepo = new PgRunRepo({
+		databaseUrl: config.databaseUrl,
+	});
+	const actorRepo = new PgActorRepo({
 		databaseUrl: config.databaseUrl,
 	});
 	const store = new S3ArtifactStore({
@@ -76,6 +84,7 @@ async function bootstrap() {
 
 	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
 	const runService = new RunService({ runRepo, workflowLauncher });
+	const actorWorkflowLauncher = new LazyDbosActorWorkflowLauncher();
 	const runWorkflow = registerRunOnceWorkflow({
 		runRepo,
 		runService,
@@ -85,7 +94,13 @@ async function bootstrap() {
 				model: run.spec.modelPref ?? config.piModel,
 			}),
 	});
+	const actorWorkflow = registerActorTickWorkflow({
+		repo: actorRepo,
+		processor: new NoopActorBatchProcessor(),
+		workflowLauncher: actorWorkflowLauncher,
+	});
 	workflowLauncher.bind(runWorkflow);
+	actorWorkflowLauncher.bind(actorWorkflow);
 	await launchDbos(config.databaseUrl);
 
 	const app = buildApiRouter({ artifactService: service, runService });
@@ -98,11 +113,11 @@ async function bootstrap() {
 		}),
 	);
 
-	return { app, config, repo, runRepo };
+	return { app, config, repo, runRepo, actorRepo };
 }
 
 async function main(): Promise<void> {
-	const { app, config, repo, runRepo } = await bootstrap();
+	const { app, config, repo, runRepo, actorRepo } = await bootstrap();
 
 	const server = app.listen(config.port, () => {
 		const payload = {
@@ -121,6 +136,7 @@ async function main(): Promise<void> {
 		server.close();
 		await repo.close();
 		await runRepo.close();
+		await actorRepo.close();
 		await shutdownDbos();
 	};
 
