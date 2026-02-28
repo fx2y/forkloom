@@ -3,6 +3,7 @@ import { isSha256 } from "@forkloom/shared";
 import type { Request } from "express";
 import { HttpError } from "../errors";
 import type { RunScope, RunSpecModel } from "../run/ports";
+import { parseEventReplayCursor } from "./event-stream";
 
 function parseRunScope(input: unknown): RunScope {
 	if (input === "me" || input === "team" || input === "org") {
@@ -32,19 +33,6 @@ function parseAttachments(input: unknown): { sha256: string }[] {
 	return input.map((item, index) =>
 		parseArtifactPointer(item, `attachments[${index}]`),
 	);
-}
-
-function parseInteger(
-	input: string | undefined,
-	label: string,
-): number | undefined {
-	if (input == null || input === "") {
-		return undefined;
-	}
-	if (!/^\d+$/.test(input)) {
-		throw new HttpError(400, `${label} must be a non-negative integer`);
-	}
-	return Number(input);
 }
 
 export function parseRunCreatePayload(input: unknown): RunSpecModel {
@@ -81,18 +69,5 @@ export function parseRunCursor(req: Request): {
 	sinceEventId: number;
 	limit: number;
 } {
-	const since =
-		parseInteger(
-			req.header("last-event-id") ?? String(req.query.since ?? ""),
-			"cursor",
-		) ?? 0;
-	const limit = parseInteger(
-		typeof req.query.limit === "string" ? req.query.limit : undefined,
-		"limit",
-	);
-
-	return {
-		sinceEventId: since,
-		limit: limit ?? 100,
-	};
+	return parseEventReplayCursor(req);
 }

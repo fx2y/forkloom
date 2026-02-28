@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-	BufferedSseStream,
-	encodeRunEventFrame,
-} from "../../apps/api/src/http/sse";
+import { encodeRunEventFrame } from "../../apps/api/src/http/sse";
+import { BufferedSseStream } from "../../apps/api/src/http/sse-buffer";
 
 class StubWritable {
 	public readonly chunks: string[] = [];
@@ -57,30 +55,21 @@ describe("run SSE helpers", () => {
 		const stream = new BufferedSseStream(writable, 1, 0);
 
 		expect(
-			stream.enqueueEvent({
-				runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
-				seq: 1,
-				t: "2026-02-27T00:00:00.000Z",
-				kind: "run_started",
-				payload: {},
+			stream.enqueueFrame({
+				chunk: 'id: 1\nevent: run_started\ndata: {"seq":1}\n\n',
+				deliveredSeq: 1,
 			}),
 		).toBe(true);
 		expect(
-			stream.enqueueEvent({
-				runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
-				seq: 2,
-				t: "2026-02-27T00:00:01.000Z",
-				kind: "pi_event",
-				payload: { chunk: "a" },
+			stream.enqueueFrame({
+				chunk: 'id: 2\nevent: pi_event\ndata: {"seq":2}\n\n',
+				deliveredSeq: 2,
 			}),
 		).toBe(true);
 		expect(
-			stream.enqueueEvent({
-				runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
-				seq: 3,
-				t: "2026-02-27T00:00:02.000Z",
-				kind: "run_done",
-				payload: { resultText: "done", stats: {}, artifacts: [] },
+			stream.enqueueFrame({
+				chunk: 'id: 3\nevent: run_done\ndata: {"seq":3}\n\n',
+				deliveredSeq: 3,
 			}),
 		).toBe(false);
 
