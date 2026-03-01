@@ -17,6 +17,9 @@ describe("contracts validate namespace", () => {
 			"RunState",
 			"RunEvent",
 			"TruthBundle",
+			"SpanRef",
+			"RunDocSearch",
+			"RunDocResolve",
 		]);
 	});
 
@@ -50,5 +53,49 @@ describe("contracts validate namespace", () => {
 		expect(good.errors).toHaveLength(0);
 		expect(bad.valid).toBe(false);
 		expect(bad.errors.join("; ")).toContain("/seq");
+	});
+
+	it("validates run-owned doc contracts through the run namespace", () => {
+		const search = validateAnyByName("RunDocSearch", {
+			query: "footnote",
+			scope: "parse:abc",
+			hits: [
+				{
+					chunkId: "chunk:abc",
+					score: 0.7,
+					spans: [
+						{
+							docSha: "a".repeat(64),
+							parseId: "parse:abc",
+							page: 1,
+							bbox: [1, 2, 3, 4],
+							charStart: null,
+							charEnd: null,
+							blockPath: "0.1",
+							chunkId: "chunk:abc",
+						},
+					],
+					snippet: "footnote text",
+				},
+			],
+		});
+		const resolve = validateAnyByName("RunDocResolve", {
+			span: {
+				docSha: "a".repeat(64),
+				parseId: "parse:abc",
+				page: 1,
+				bbox: [1, 2, 3, 4],
+				charStart: null,
+				charEnd: null,
+				blockPath: "0.1",
+				chunkId: "chunk:abc",
+			},
+			md: "footnote text",
+			bbox: [1, 2, 3, 4],
+			pageImageSha: "b".repeat(64),
+		});
+
+		expect(search.valid).toBe(true);
+		expect(resolve.valid).toBe(true);
 	});
 });

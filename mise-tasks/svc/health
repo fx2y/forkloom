@@ -20,6 +20,17 @@ if ! docker compose exec -T postgres pg_isready -U postgres -d agentos >/tmp/svc
   exit 1
 fi
 
+if ! docker compose exec -T postgres psql -U postgres -d agentos -Atqc \
+  "select 1 from pg_available_extensions where name='vector';" >/tmp/svc.pgvector 2>/dev/null; then
+  echo "postgres pgvector availability check failed" >&2
+  exit 1
+fi
+
+if ! grep -qx '1' /tmp/svc.pgvector; then
+  echo "postgres is missing pgvector (vector extension unavailable)" >&2
+  exit 1
+fi
+
 wait_for_url "seaweed" "http://localhost:8333" "/tmp/svc.s3" "-sS" || exit 1
 wait_for_url "api" "http://localhost:8080/health" "/tmp/svc.api" "-fsS" || exit 1
 wait_for_url "web" "http://localhost:5173" "/tmp/svc.web" "-fsS" || exit 1

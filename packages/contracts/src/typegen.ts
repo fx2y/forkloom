@@ -62,6 +62,9 @@ export function renderTypes(): string {
 	const runState = readSchema(V1_SCHEMA_DIR, "RunState");
 	const runEvent = readSchema(V1_SCHEMA_DIR, "RunEvent");
 	const truthBundle = readSchema(V1_SCHEMA_DIR, "TruthBundle");
+	const spanRef = readSchema(V1_SCHEMA_DIR, "SpanRef");
+	const runDocSearch = readSchema(V1_SCHEMA_DIR, "RunDocSearch");
+	const runDocResolve = readSchema(V1_SCHEMA_DIR, "RunDocResolve");
 	const actorSpec = readSchema(V1_SCHEMA_DIR, "ActorSpec");
 	const mailboxPost = readSchema(V1_SCHEMA_DIR, "MailboxPost");
 	const actorState = readSchema(V1_SCHEMA_DIR, "ActorState");
@@ -99,6 +102,15 @@ export function renderTypes(): string {
 	);
 	if (truthBundle.title !== "TruthBundle") {
 		throw new Error("TruthBundle schema title mismatch");
+	}
+	if (spanRef.title !== "SpanRef") {
+		throw new Error("SpanRef schema title mismatch");
+	}
+	if (runDocSearch.title !== "RunDocSearch") {
+		throw new Error("RunDocSearch schema title mismatch");
+	}
+	if (runDocResolve.title !== "RunDocResolve") {
+		throw new Error("RunDocResolve schema title mismatch");
 	}
 
 	return [
@@ -259,6 +271,35 @@ export function renderTypes(): string {
 		"\t\tpayload: Record<string, unknown>;",
 		"\t\tcreatedAt: string;",
 		"\t}>;",
+		"};",
+		"",
+		"export type SpanRef = {",
+		"\tdocSha: string;",
+		"\tparseId: string;",
+		"\tpage: number;",
+		"\tbbox: [number, number, number, number] | null;",
+		"\tcharStart: number | null;",
+		"\tcharEnd: number | null;",
+		"\tblockPath: string;",
+		"\tchunkId: string;",
+		"};",
+		"",
+		"export type RunDocSearch = {",
+		"\tquery: string;",
+		"\tscope: string;",
+		"\thits: Array<{",
+		"\t\tchunkId: string;",
+		"\t\tscore: number;",
+		"\t\tspans: SpanRef[];",
+		"\t\tsnippet: string;",
+		"\t}>;",
+		"};",
+		"",
+		"export type RunDocResolve = {",
+		"\tspan: SpanRef;",
+		"\tmd: string;",
+		"\tbbox: [number, number, number, number] | null;",
+		"\tpageImageSha: string | null;",
 		"};",
 		"",
 		"export type RunStartedPayload = {",
@@ -440,7 +481,6 @@ export function renderTypes(): string {
 		"\tkind: ActorEventKind;",
 		"\tpayload: Record<string, unknown>;",
 		"};",
-		"",
 	].join("\n");
 }
 

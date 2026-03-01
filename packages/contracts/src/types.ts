@@ -185,6 +185,35 @@ export type TruthBundle = {
 	}>;
 };
 
+export type SpanRef = {
+	docSha: string;
+	parseId: string;
+	page: number;
+	bbox: [number, number, number, number] | null;
+	charStart: number | null;
+	charEnd: number | null;
+	blockPath: string;
+	chunkId: string;
+};
+
+export type RunDocSearch = {
+	query: string;
+	scope: string;
+	hits: Array<{
+		chunkId: string;
+		score: number;
+		spans: SpanRef[];
+		snippet: string;
+	}>;
+};
+
+export type RunDocResolve = {
+	span: SpanRef;
+	md: string;
+	bbox: [number, number, number, number] | null;
+	pageImageSha: string | null;
+};
+
 export type RunStartedPayload = {
 	scope?: RunScope;
 };

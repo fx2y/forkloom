@@ -33,6 +33,12 @@ import actorStateSchema from "../../../contracts/v1/ActorState.schema.json" with
 import mailboxPostSchema from "../../../contracts/v1/MailboxPost.schema.json" with {
 	type: "json",
 };
+import runDocResolveSchema from "../../../contracts/v1/RunDocResolve.schema.json" with {
+	type: "json",
+};
+import runDocSearchSchema from "../../../contracts/v1/RunDocSearch.schema.json" with {
+	type: "json",
+};
 import runEventSchema from "../../../contracts/v1/RunEvent.schema.json" with {
 	type: "json",
 };
@@ -40,6 +46,9 @@ import runSpecSchema from "../../../contracts/v1/RunSpec.schema.json" with {
 	type: "json",
 };
 import runStateSchema from "../../../contracts/v1/RunState.schema.json" with {
+	type: "json",
+};
+import spanRefSchema from "../../../contracts/v1/SpanRef.schema.json" with {
 	type: "json",
 };
 import truthBundleSchema from "../../../contracts/v1/TruthBundle.schema.json" with {
@@ -56,7 +65,10 @@ export type RunContractName =
 	| "RunSpec"
 	| "RunState"
 	| "RunEvent"
-	| "TruthBundle";
+	| "TruthBundle"
+	| "SpanRef"
+	| "RunDocSearch"
+	| "RunDocResolve";
 export type ActorContractName =
 	| "ActorSpec"
 	| "MailboxPost"
@@ -67,6 +79,7 @@ export type AnyContractName = ContractName | V1ContractName;
 
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
 ajv.addSchema(artifactRefSchema);
+ajv.addSchema(spanRefSchema);
 
 const v0Validators: Record<ContractName, ValidateFunction> = {
 	Message: ajv.compile(messageSchema),
@@ -80,6 +93,9 @@ const v1RunValidators: Record<RunContractName, ValidateFunction> = {
 	RunState: ajv.compile(runStateSchema),
 	RunEvent: ajv.compile(runEventSchema),
 	TruthBundle: ajv.compile(truthBundleSchema),
+	SpanRef: ajv.compile(spanRefSchema),
+	RunDocSearch: ajv.compile(runDocSearchSchema),
+	RunDocResolve: ajv.compile(runDocResolveSchema),
 };
 const v1ActorValidators: Record<ActorContractName, ValidateFunction> = {
 	ActorSpec: ajv.compile(actorSpecSchema),

@@ -1,0 +1,27 @@
+{
+  "$id": "https://forkloom/contracts/v1/RunDocResolve.schema.json",
+  "title": "RunDocResolve",
+  "type": "object",
+  "required": ["span", "md", "bbox", "pageImageSha"],
+  "properties": {
+    "span": {
+      "$ref": "https://forkloom/contracts/v1/SpanRef.schema.json"
+    },
+    "md": {
+      "type": "string"
+    },
+    "bbox": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "pageImageSha": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}

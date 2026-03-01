@@ -6,8 +6,9 @@ import {
 } from "../../apps/api/src/seams";
 
 describe("api seam ownership map", () => {
-	it("declares actor/run/sandbox/pi/workflow/http roots", () => {
+	it("declares actor/doc/run/sandbox/pi/workflow/http roots", () => {
 		expect(API_SEAMS.actor.root).toBe("apps/api/src/actor");
+		expect(API_SEAMS.doc.root).toBe("apps/api/src/doc");
 		expect(API_SEAMS.run.root).toBe("apps/api/src/run");
 		expect(API_SEAMS.sandbox.root).toBe("apps/api/src/sandbox");
 		expect(API_SEAMS.pi.root).toBe("apps/api/src/pi");
@@ -36,6 +37,7 @@ describe("api seam ownership map", () => {
 
 	it("freezes run vs sandbox ownership before backend work lands", () => {
 		expect(API_OWNERSHIP_LAW.run).toContain("run owns");
+		expect(API_OWNERSHIP_LAW.doc).toContain("/runs");
 		expect(API_OWNERSHIP_LAW.sandbox).toContain("sandbox owns");
 		expect(API_OWNERSHIP_LAW.actorReuseOnly).toContain("reuse");
 	});

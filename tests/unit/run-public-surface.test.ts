@@ -29,6 +29,9 @@ describe("run public surface freeze", () => {
 			"RunState",
 			"RunEvent",
 			"TruthBundle",
+			"SpanRef",
+			"RunDocSearch",
+			"RunDocResolve",
 		]);
 		expect(RUN_PUBLIC_BANNED_SANDBOX_NOUNS).toEqual([
 			"SandboxSpec",
@@ -64,6 +67,9 @@ describe("run public surface freeze", () => {
 			"currentCommand",
 			"files",
 		]);
+		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain(
+			"/runs",
+		);
 		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain(
 			"sandbox stays internal",
 		);

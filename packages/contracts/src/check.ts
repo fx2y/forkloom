@@ -58,6 +58,12 @@ function contractForV1Example(
 			return "RunEvent";
 		case "truth-bundle":
 			return "TruthBundle";
+		case "span-ref":
+			return "SpanRef";
+		case "run-doc-search":
+			return "RunDocSearch";
+		case "run-doc-resolve":
+			return "RunDocResolve";
 		default:
 			return "";
 	}
@@ -128,7 +134,10 @@ function assertV1Examples(): void {
 				name === "RunSpec" ||
 				name === "RunState" ||
 				name === "RunEvent" ||
-				name === "TruthBundle"
+				name === "TruthBundle" ||
+				name === "SpanRef" ||
+				name === "RunDocSearch" ||
+				name === "RunDocResolve"
 			) {
 				return validateRunByName(name, payload);
 			}
@@ -205,6 +214,9 @@ function assertRunNounsScopedToV1(): void {
 		"RunState",
 		"RunEvent",
 		"TruthBundle",
+		"SpanRef",
+		"RunDocSearch",
+		"RunDocResolve",
 	];
 	const actorNouns: ActorContractName[] = [
 		"ActorSpec",

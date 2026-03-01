@@ -1,0 +1,54 @@
+{
+  "$id": "https://forkloom/contracts/v1/SpanRef.schema.json",
+  "title": "SpanRef",
+  "type": "object",
+  "required": [
+    "docSha",
+    "parseId",
+    "page",
+    "bbox",
+    "charStart",
+    "charEnd",
+    "blockPath",
+    "chunkId"
+  ],
+  "properties": {
+    "docSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "parseId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "bbox": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "charStart": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "charEnd": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "blockPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chunkId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

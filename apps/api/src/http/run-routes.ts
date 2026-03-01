@@ -2,6 +2,7 @@ import type { Express } from "express";
 import express from "express";
 import type { RunService } from "../run/service";
 import { requireRouteParam } from "./request-parsers";
+import { attachRunDocRoutes } from "./run-doc-routes";
 import { asyncHandler } from "./route-utils";
 import {
 	parseRunCommandPayload,
@@ -155,4 +156,6 @@ export function attachRunRoutes(app: Express, runService: RunService): void {
 			);
 		}),
 	);
+
+	attachRunDocRoutes(app, runService);
 }

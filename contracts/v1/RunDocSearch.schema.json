@@ -1,0 +1,44 @@
+{
+  "$id": "https://forkloom/contracts/v1/RunDocSearch.schema.json",
+  "title": "RunDocSearch",
+  "type": "object",
+  "required": ["query", "scope", "hits"],
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chunkId", "score", "spans", "snippet"],
+        "properties": {
+          "chunkId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "score": {
+            "type": "number"
+          },
+          "spans": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "https://forkloom/contracts/v1/SpanRef.schema.json"
+            }
+          },
+          "snippet": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

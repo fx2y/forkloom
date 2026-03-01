@@ -1,5 +1,6 @@
 export type ApiSeamName =
 	| "actor"
+	| "doc"
 	| "run"
 	| "sandbox"
 	| "pi"
@@ -20,6 +21,12 @@ export const API_SEAMS: Record<ApiSeamName, ApiSeam> = {
 		intent:
 			"actor/mailbox nouns and service boundary before SQL/runtime wiring",
 		canImportFrom: [],
+	},
+	doc: {
+		owner: "doc ingest domain",
+		root: "apps/api/src/doc",
+		intent: "typed ingest rows, alias law, and doc transaction seam",
+		canImportFrom: ["apps/api/src/service"],
 	},
 	run: {
 		owner: "run domain",
@@ -43,7 +50,11 @@ export const API_SEAMS: Record<ApiSeamName, ApiSeam> = {
 		owner: "durable workflow",
 		root: "apps/api/src/workflow",
 		intent: "named DBOS run steps and orchestration state",
-		canImportFrom: ["apps/api/src/service", "apps/api/src/ports"],
+		canImportFrom: [
+			"apps/api/src/service",
+			"apps/api/src/ports",
+			"apps/api/src/doc",
+		],
 	},
 	http: {
 		owner: "http transport",
@@ -92,6 +103,7 @@ export const API_REUSE_CUTS: Record<ApiReuseCutName, ApiReuseCut> = {
 
 export const API_OWNERSHIP_LAW = {
 	run: "run owns preview/state/commands/files on the public wire",
+	doc: "doc ingest/search stays internal until attached under run-owned /runs",
 	sandbox: "sandbox owns container/workspace/exec/image lifecycle off-wire",
 	actorReuseOnly:
 		"actor contributes lease/queue law reuse-only; actor nouns stay off the run wire",
