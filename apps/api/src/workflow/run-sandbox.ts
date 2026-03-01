@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { hashText } from "@forkloom/shared";
 import type { PiSessionPort, PiSessionState, PiSessionStats } from "../pi";
 import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
@@ -43,6 +44,13 @@ type CollectedCommand = {
 	resultText: string;
 	stats: PiSessionStats;
 	sessionState: PiSessionState;
+	sessionEntryIds: string[];
+	sessionIndex: {
+		entryCount: number;
+		rootId?: string | undefined;
+		leafId?: string | undefined;
+		summaryEntryCount: number;
+	};
 	sessionArtifactSha: string;
 	execResult: ExecResult;
 	workspaceRef?: { sha256: string } | undefined;
@@ -60,6 +68,7 @@ export type RunSandboxDeps = {
 		| "beginRun"
 		| "failRun"
 		| "linkArtifact"
+		| "recordStepLedger"
 	>;
 	artifactService: Pick<
 		ArtifactService,
@@ -196,6 +205,85 @@ function withPointer(
 		return list;
 	}
 	return [...list, pointer];
+}
+
+function parseSessionIndex(sessionBytes: Buffer): {
+	entryCount: number;
+	rootId?: string | undefined;
+	leafId?: string | undefined;
+	summaryEntryCount: number;
+	sessionEntryIds: string[];
+} {
+	const lines = sessionBytes.toString("utf8").split("\n").filter(Boolean);
+	let rootId: string | undefined;
+	let leafId: string | undefined;
+	let summaryEntryCount = 0;
+	const sessionEntryIds: string[] = [];
+	for (const line of lines) {
+		try {
+			const parsed = JSON.parse(line) as Record<string, unknown>;
+			const id = typeof parsed.id === "string" ? parsed.id : undefined;
+			const type = typeof parsed.type === "string" ? parsed.type : "";
+			if (id) {
+				if (!rootId) {
+					rootId = id;
+				}
+				leafId = id;
+				if (!sessionEntryIds.includes(id)) {
+					sessionEntryIds.push(id);
+				}
+			}
+			if (type.includes("summary")) {
+				summaryEntryCount += 1;
+			}
+		} catch {
+			// Session JSONL may contain partial/truncated lines during live tailing.
+		}
+	}
+	return {
+		entryCount: lines.length,
+		rootId,
+		leafId,
+		summaryEntryCount,
+		sessionEntryIds,
+	};
+}
+
+function buildStepHashes(input: {
+	command: RunCommandModel;
+	exec: ExecResult;
+	workspaceRef?: { sha256: string } | undefined;
+}): { inHash: string; outHash: string } {
+	const inHash = hashText(
+		JSON.stringify({
+			kind: input.command.kind,
+			payload: input.command.payload,
+			cmdList: input.exec.cmdList ?? [],
+			artifactReads: input.exec.artifactReads ?? [],
+		}),
+	);
+	const outHash = hashText(
+		JSON.stringify({
+			exitCode: input.exec.exitCode,
+			status: input.exec.status,
+			artifactWrites: input.exec.artifactWrites ?? [],
+			stdoutRef: input.exec.stdoutRef ?? null,
+			stderrRef: input.exec.stderrRef ?? null,
+			workspaceRef: input.workspaceRef ?? input.exec.workspaceRef ?? null,
+		}),
+	);
+	return { inHash, outHash };
+}
+
+function toLedgerArtifactShas(exec: ExecResult): string[] {
+	const unique = new Set<string>();
+	for (const read of exec.artifactReads ?? []) {
+		unique.add(read.sha256);
+	}
+	for (const write of exec.artifactWrites ?? []) {
+		unique.add(write.sha256);
+	}
+	return [...unique];
 }
 
 async function closeSession(session: PiSessionPort | null): Promise<void> {
@@ -355,6 +443,7 @@ export async function executeRunSandbox(
 			});
 			const sessionState = await activeSession.getState();
 			const sessionBytes = await readFileBytes(sessionState.sessionFile);
+			const parsedSession = parseSessionIndex(sessionBytes);
 			const sessionArtifact = await deps.artifactService.putArtifact({
 				body: sessionBytes,
 				mime: "application/jsonl",
@@ -440,6 +529,16 @@ export async function executeRunSandbox(
 				),
 				stats: await activeSession.getSessionStats(),
 				sessionState,
+				sessionEntryIds:
+					parsedSession.sessionEntryIds.length > 0
+						? parsedSession.sessionEntryIds
+						: [sessionState.sessionId],
+				sessionIndex: {
+					entryCount: parsedSession.entryCount,
+					rootId: parsedSession.rootId,
+					leafId: parsedSession.leafId,
+					summaryEntryCount: parsedSession.summaryEntryCount,
+				},
 				sessionArtifactSha: sessionArtifact.sha256,
 				execResult: withRefs,
 			} satisfies Omit<CollectedCommand, "workspaceRef">;
@@ -520,6 +619,47 @@ export async function executeRunSandbox(
 				commandKind: loaded.command.kind,
 				result: baseResult,
 				workspaceRef: withSnapshot?.workspaceRef,
+			});
+			const stepName = "run_command";
+			const attempt = loaded.command.seq;
+			const { inHash, outHash } = buildStepHashes({
+				command: loaded.command,
+				exec: baseResult,
+				workspaceRef: withSnapshot?.workspaceRef,
+			});
+			await deps.runService.recordStepLedger({
+				runId,
+				stepName,
+				attempt,
+				stepKey: `${loaded.command.kind}:${attempt}`,
+				inHash,
+				outHash,
+				sessionEntryIds: withSnapshot?.sessionEntryIds ?? [],
+				artifactShas: toLedgerArtifactShas(baseResult),
+				note: `kind=${loaded.command.kind} status=${baseResult.status}`,
+				payload: {
+					commandSeq: loaded.command.seq,
+					commandKind: loaded.command.kind,
+					commandPayload: loaded.command.payload,
+					exec: {
+						exitCode: baseResult.exitCode,
+						status: baseResult.status,
+						startedAt: baseResult.startedAt,
+						endedAt: baseResult.endedAt,
+						cmdList: baseResult.cmdList,
+						artifactReads: baseResult.artifactReads,
+						artifactWrites: baseResult.artifactWrites,
+					},
+					session: withSnapshot
+						? {
+								sessionId: withSnapshot.sessionState.sessionId,
+								sessionFile: withSnapshot.sessionState.sessionFile,
+								sessionArtifactSha: withSnapshot.sessionArtifactSha,
+								sessionEntryIds: withSnapshot.sessionEntryIds,
+							}
+						: null,
+				},
+				sessionIndex: withSnapshot?.sessionIndex,
 			});
 			nextPendingSeq = persisted.nextPendingSeq;
 			if (loaded.command.kind === "abort") {

@@ -29,6 +29,27 @@ export type CompleteRunInput = {
 	piSessionFile: string;
 };
 
+export type RunStepLedgerInput = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	stepKey: string;
+	inHash: string;
+	outHash?: string | undefined;
+	sessionEntryIds: string[];
+	artifactShas: string[];
+	note?: string | undefined;
+	payload?: Record<string, unknown> | undefined;
+	sessionIndex?:
+		| {
+				entryCount: number;
+				rootId?: string | undefined;
+				leafId?: string | undefined;
+				summaryEntryCount?: number | undefined;
+		  }
+		| undefined;
+};
+
 export interface RunWorkflowLauncher {
 	startRunOnce(runId: string, opts: { workflowID: string }): Promise<void>;
 }
@@ -407,6 +428,42 @@ export class RunService {
 			sha256,
 			kind,
 		});
+	}
+
+	async recordStepLedger(input: RunStepLedgerInput): Promise<void> {
+		await this.deps.runRepo.createStep({
+			runId: input.runId,
+			stepName: input.stepName,
+			attempt: input.attempt,
+			stepKey: input.stepKey,
+			inHash: input.inHash,
+			outHash: input.outHash,
+		});
+		if (input.payload) {
+			await this.deps.runRepo.upsertStepPayload({
+				runId: input.runId,
+				stepName: input.stepName,
+				attempt: input.attempt,
+				payload: input.payload,
+			});
+		}
+		await this.deps.runRepo.upsertLink({
+			runId: input.runId,
+			stepName: input.stepName,
+			attempt: input.attempt,
+			sessionEntryIds: input.sessionEntryIds,
+			artifactShas: input.artifactShas,
+			note: input.note,
+		});
+		if (input.sessionIndex) {
+			await this.deps.runRepo.upsertSessionIndex({
+				runId: input.runId,
+				entryCount: input.sessionIndex.entryCount,
+				rootId: input.sessionIndex.rootId,
+				leafId: input.sessionIndex.leafId,
+				summaryEntryCount: input.sessionIndex.summaryEntryCount ?? 0,
+			});
+		}
 	}
 
 	private requireSandboxDeps(): SandboxDeps {

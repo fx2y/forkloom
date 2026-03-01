@@ -10,7 +10,7 @@ const DATABASE_URL =
 	"postgresql://postgres:postgres@127.0.0.1:5432/agentos";
 
 describe("sandbox schema live proof", () => {
-	it("applies sandbox migration and exposes the queue/lease indexes live", async () => {
+	it("applies sandbox + truth-ledger migrations and exposes key indexes live", async () => {
 		const repo = new PgArtifactRepo({
 			databaseUrl: DATABASE_URL,
 			migrationsDir: resolve("apps/api/migrations"),
@@ -24,11 +24,19 @@ describe("sandbox schema live proof", () => {
 				sandbox: string | null;
 				run_command: string | null;
 				sandbox_exec: string | null;
+				steps: string | null;
+				links: string | null;
+				sessions_index: string | null;
+				step_payloads: string | null;
 			}>(
 				`select
 					 to_regclass('public.sandbox') as sandbox,
 					 to_regclass('public.run_command') as run_command,
-					 to_regclass('public.sandbox_exec') as sandbox_exec`,
+					 to_regclass('public.sandbox_exec') as sandbox_exec,
+					 to_regclass('public.steps') as steps,
+					 to_regclass('public.links') as links,
+					 to_regclass('public.sessions_index') as sessions_index,
+					 to_regclass('public.step_payloads') as step_payloads`,
 			);
 			const columns = await pool.query<{ column_name: string }>(
 				`select column_name
@@ -45,7 +53,11 @@ describe("sandbox schema live proof", () => {
 				   and indexname in (
 					 'run_command_run_dedupe_idx',
 					 'run_command_lease_idx',
-					 'sandbox_exec_run_created_idx'
+					 'sandbox_exec_run_created_idx',
+					 'steps_run_started_idx',
+					 'links_run_step_idx',
+					 'sessions_index_leaf_idx',
+					 'step_payloads_run_step_idx'
 				   )
 				 order by indexname asc`,
 			);
@@ -54,6 +66,10 @@ describe("sandbox schema live proof", () => {
 				sandbox: "sandbox",
 				run_command: "run_command",
 				sandbox_exec: "sandbox_exec",
+				steps: "steps",
+				links: "links",
+				sessions_index: "sessions_index",
+				step_payloads: "step_payloads",
 			});
 			expect(columns.rows.map((row) => row.column_name)).toEqual([
 				"lease_expires_at",
@@ -61,9 +77,13 @@ describe("sandbox schema live proof", () => {
 				"preview_spec",
 			]);
 			expect(indexes.rows.map((row) => row.indexname)).toEqual([
+				"links_run_step_idx",
 				"run_command_lease_idx",
 				"run_command_run_dedupe_idx",
 				"sandbox_exec_run_created_idx",
+				"sessions_index_leaf_idx",
+				"step_payloads_run_step_idx",
+				"steps_run_started_idx",
 			]);
 
 			await writeJson(".cache/test-int/sandbox-schema-live.json", {

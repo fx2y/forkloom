@@ -49,6 +49,22 @@ describe("RunService sandbox persist-first path", () => {
 				},
 				listEventsSince: async () => [],
 				listArtifacts: async () => [],
+				createStep: async () => {
+					throw new Error("not used");
+				},
+				upsertLink: async () => {
+					throw new Error("not used");
+				},
+				upsertSessionIndex: async () => {
+					throw new Error("not used");
+				},
+				upsertStepPayload: async () => {
+					throw new Error("not used");
+				},
+				listSteps: async () => [],
+				listLinks: async () => [],
+				listStepPayloads: async () => [],
+				getTruthBundle: async () => null,
 				completeRun: async () => ({ run: null, event: null }),
 				failRun: async () => ({ run: null, event: null }),
 				linkArtifact: async () => undefined,

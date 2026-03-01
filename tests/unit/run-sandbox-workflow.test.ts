@@ -114,6 +114,7 @@ describe("executeRunSandbox", () => {
 					},
 					failRun: async () => null,
 					linkArtifact: async () => undefined,
+					recordStepLedger: async () => undefined,
 				},
 				artifactService: {
 					getArtifactBytes: async () => {
@@ -226,6 +227,7 @@ describe("executeRunSandbox", () => {
 						},
 						failRun: async () => null,
 						linkArtifact: async () => undefined,
+						recordStepLedger: async () => undefined,
 					},
 					artifactService: {
 						getArtifactBytes: async () => {
@@ -342,6 +344,7 @@ describe("executeRunSandbox", () => {
 							return null;
 						},
 						linkArtifact: async () => undefined,
+						recordStepLedger: async () => undefined,
 					},
 					artifactService: {
 						getArtifactBytes: async () => {

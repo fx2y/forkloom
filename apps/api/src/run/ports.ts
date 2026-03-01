@@ -53,6 +53,53 @@ export type RunArtifactLinkModel = {
 	createdAt: string;
 };
 
+export type StepModel = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	stepKey: string;
+	inHash: string;
+	outHash: string | null;
+	startedAt: string;
+	endedAt: string | null;
+};
+
+export type LinkModel = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	sessionEntryIds: string[];
+	artifactShas: string[];
+	note: string | null;
+	createdAt: string;
+};
+
+export type SessionIndexModel = {
+	runId: string;
+	entryCount: number;
+	rootId: string | null;
+	leafId: string | null;
+	summaryEntryCount: number;
+	updatedAt: string;
+};
+
+export type StepPayloadModel = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	payload: Record<string, unknown>;
+	createdAt: string;
+};
+
+export type TruthBundle = {
+	run: RunModel;
+	steps: StepModel[];
+	links: LinkModel[];
+	artifacts: RunArtifactLinkModel[];
+	sessionIndex: SessionIndexModel | null;
+	stepPayloads: StepPayloadModel[];
+};
+
 export type CreateRunInput = {
 	runId: string;
 	spec: RunSpecModel;
@@ -68,6 +115,41 @@ export type LinkRunArtifactInput = {
 	runId: string;
 	sha256: string;
 	kind: string;
+};
+
+export type CreateStepInput = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	stepKey: string;
+	inHash: string;
+	outHash?: string | undefined;
+	startedAt?: string | undefined;
+	endedAt?: string | undefined;
+};
+
+export type UpsertLinkInput = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	sessionEntryIds: string[];
+	artifactShas: string[];
+	note?: string | undefined;
+};
+
+export type UpsertSessionIndexInput = {
+	runId: string;
+	entryCount: number;
+	rootId?: string | undefined;
+	leafId?: string | undefined;
+	summaryEntryCount?: number | undefined;
+};
+
+export type UpsertStepPayloadInput = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	payload: Record<string, unknown>;
 };
 
 export interface RunRepo {
@@ -91,6 +173,16 @@ export interface RunRepo {
 		limit: number,
 	): Promise<RunEventModel[]>;
 	listArtifacts(runId: string): Promise<RunArtifactLinkModel[]>;
+	createStep(input: CreateStepInput): Promise<StepModel>;
+	upsertLink(input: UpsertLinkInput): Promise<LinkModel>;
+	upsertSessionIndex(
+		input: UpsertSessionIndexInput,
+	): Promise<SessionIndexModel>;
+	upsertStepPayload(input: UpsertStepPayloadInput): Promise<StepPayloadModel>;
+	listSteps(runId: string): Promise<StepModel[]>;
+	listLinks(runId: string): Promise<LinkModel[]>;
+	listStepPayloads(runId: string): Promise<StepPayloadModel[]>;
+	getTruthBundle(runId: string): Promise<TruthBundle | null>;
 	completeRun(input: {
 		runId: string;
 		resultText: string;

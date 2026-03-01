@@ -3,11 +3,20 @@ import { createPoolCloseOnce } from "../../repo/pool-close";
 import type {
 	AppendRunEventInput,
 	CreateRunInput,
+	CreateStepInput,
+	LinkModel,
 	RunArtifactLinkModel,
 	RunEventModel,
 	RunModel,
 	RunRepo,
 	RunSpecModel,
+	SessionIndexModel,
+	StepModel,
+	StepPayloadModel,
+	TruthBundle,
+	UpsertLinkInput,
+	UpsertSessionIndexInput,
+	UpsertStepPayloadInput,
 } from "../ports";
 
 type PgRowBase = {
@@ -38,6 +47,42 @@ type RunArtifactRow = PgRowBase & {
 	run_id: string;
 	sha256: string;
 	kind: string;
+};
+
+type StepRow = {
+	run_id: string;
+	step_name: string;
+	attempt: number;
+	step_key: string;
+	in_hash: string;
+	out_hash: string | null;
+	started_at: Date | string;
+	ended_at: Date | string | null;
+};
+
+type LinkRow = PgRowBase & {
+	run_id: string;
+	step_name: string;
+	attempt: number;
+	session_entry_ids: string[] | null;
+	artifact_shas: string[] | null;
+	note: string | null;
+};
+
+type SessionIndexRow = {
+	run_id: string;
+	entry_count: number;
+	root_id: string | null;
+	leaf_id: string | null;
+	summary_entry_count: number;
+	updated_at: Date | string;
+};
+
+type StepPayloadRow = PgRowBase & {
+	run_id: string;
+	step_name: string;
+	attempt: number;
+	payload: Record<string, unknown> | null;
 };
 
 type QueryResultLike<TRow> = {
@@ -112,6 +157,52 @@ function toRunArtifactLinkModel(row: RunArtifactRow): RunArtifactLinkModel {
 		runId: row.run_id,
 		sha256: row.sha256,
 		kind: row.kind,
+		createdAt: asIsoString(row.created_at),
+	};
+}
+
+function toStepModel(row: StepRow): StepModel {
+	return {
+		runId: row.run_id,
+		stepName: row.step_name,
+		attempt: row.attempt,
+		stepKey: row.step_key,
+		inHash: row.in_hash,
+		outHash: row.out_hash,
+		startedAt: asIsoString(row.started_at),
+		endedAt: row.ended_at ? asIsoString(row.ended_at) : null,
+	};
+}
+
+function toLinkModel(row: LinkRow): LinkModel {
+	return {
+		runId: row.run_id,
+		stepName: row.step_name,
+		attempt: row.attempt,
+		sessionEntryIds: row.session_entry_ids ?? [],
+		artifactShas: row.artifact_shas ?? [],
+		note: row.note,
+		createdAt: asIsoString(row.created_at),
+	};
+}
+
+function toSessionIndexModel(row: SessionIndexRow): SessionIndexModel {
+	return {
+		runId: row.run_id,
+		entryCount: row.entry_count,
+		rootId: row.root_id,
+		leafId: row.leaf_id,
+		summaryEntryCount: row.summary_entry_count,
+		updatedAt: asIsoString(row.updated_at),
+	};
+}
+
+function toStepPayloadModel(row: StepPayloadRow): StepPayloadModel {
+	return {
+		runId: row.run_id,
+		stepName: row.step_name,
+		attempt: row.attempt,
+		payload: row.payload ?? {},
 		createdAt: asIsoString(row.created_at),
 	};
 }
@@ -286,6 +377,174 @@ export class PgRunRepo implements RunRepo {
 			[runId],
 		);
 		return result.rows.map(toRunArtifactLinkModel);
+	}
+
+	async createStep(input: CreateStepInput): Promise<StepModel> {
+		const result = await this.pool.query<StepRow>(
+			`insert into steps(
+				 run_id, step_name, attempt, step_key, in_hash, out_hash, started_at, ended_at
+			 )
+			 values (
+				 $1, $2, $3, $4, $5, $6, coalesce($7::timestamptz, now()), $8::timestamptz
+			 )
+			 on conflict (run_id, step_name, attempt) do update
+			 set step_key = excluded.step_key,
+				 in_hash = excluded.in_hash,
+				 out_hash = coalesce(excluded.out_hash, steps.out_hash),
+				 started_at = least(steps.started_at, excluded.started_at),
+				 ended_at = coalesce(excluded.ended_at, steps.ended_at)
+			 returning run_id, step_name, attempt, step_key, in_hash, out_hash,
+			 started_at, ended_at`,
+			[
+				input.runId,
+				input.stepName,
+				input.attempt,
+				input.stepKey,
+				input.inHash,
+				input.outHash ?? null,
+				input.startedAt ?? null,
+				input.endedAt ?? null,
+			],
+		);
+		return toStepModel(requireRow(result, "create step"));
+	}
+
+	async upsertLink(input: UpsertLinkInput): Promise<LinkModel> {
+		const result = await this.pool.query<LinkRow>(
+			`insert into links(
+				 run_id, step_name, attempt, session_entry_ids, artifact_shas, note
+			 )
+			 values ($1, $2, $3, $4::text[], $5::text[], $6)
+			 on conflict (run_id, step_name, attempt) do update
+			 set session_entry_ids = excluded.session_entry_ids,
+				 artifact_shas = excluded.artifact_shas,
+				 note = coalesce(excluded.note, links.note),
+				 created_at = links.created_at
+			 returning run_id, step_name, attempt, session_entry_ids, artifact_shas,
+			 note, created_at`,
+			[
+				input.runId,
+				input.stepName,
+				input.attempt,
+				input.sessionEntryIds,
+				input.artifactShas,
+				input.note ?? null,
+			],
+		);
+		return toLinkModel(requireRow(result, "upsert link"));
+	}
+
+	async upsertSessionIndex(
+		input: UpsertSessionIndexInput,
+	): Promise<SessionIndexModel> {
+		const result = await this.pool.query<SessionIndexRow>(
+			`insert into sessions_index(
+				 run_id, entry_count, root_id, leaf_id, summary_entry_count
+			 )
+			 values ($1, $2, $3, $4, $5)
+			 on conflict (run_id) do update
+			 set entry_count = excluded.entry_count,
+				 root_id = coalesce(excluded.root_id, sessions_index.root_id),
+				 leaf_id = coalesce(excluded.leaf_id, sessions_index.leaf_id),
+				 summary_entry_count = excluded.summary_entry_count,
+				 updated_at = now()
+			 returning run_id, entry_count, root_id, leaf_id, summary_entry_count,
+			 updated_at`,
+			[
+				input.runId,
+				input.entryCount,
+				input.rootId ?? null,
+				input.leafId ?? null,
+				input.summaryEntryCount ?? 0,
+			],
+		);
+		return toSessionIndexModel(requireRow(result, "upsert session index"));
+	}
+
+	async upsertStepPayload(
+		input: UpsertStepPayloadInput,
+	): Promise<StepPayloadModel> {
+		const result = await this.pool.query<StepPayloadRow>(
+			`insert into step_payloads(run_id, step_name, attempt, payload)
+			 values ($1, $2, $3, $4::jsonb)
+			 on conflict (run_id, step_name, attempt) do update
+			 set payload = excluded.payload
+			 returning run_id, step_name, attempt, payload, created_at`,
+			[
+				input.runId,
+				input.stepName,
+				input.attempt,
+				JSON.stringify(input.payload),
+			],
+		);
+		return toStepPayloadModel(requireRow(result, "upsert step payload"));
+	}
+
+	async listSteps(runId: string): Promise<StepModel[]> {
+		const result = await this.pool.query<StepRow>(
+			`select run_id, step_name, attempt, step_key, in_hash, out_hash,
+			 started_at, ended_at
+			 from steps
+			 where run_id = $1
+			 order by started_at asc, step_name asc, attempt asc`,
+			[runId],
+		);
+		return result.rows.map(toStepModel);
+	}
+
+	async listLinks(runId: string): Promise<LinkModel[]> {
+		const result = await this.pool.query<LinkRow>(
+			`select run_id, step_name, attempt, session_entry_ids, artifact_shas,
+			 note, created_at
+			 from links
+			 where run_id = $1
+			 order by created_at asc, step_name asc, attempt asc`,
+			[runId],
+		);
+		return result.rows.map(toLinkModel);
+	}
+
+	async listStepPayloads(runId: string): Promise<StepPayloadModel[]> {
+		const result = await this.pool.query<StepPayloadRow>(
+			`select run_id, step_name, attempt, payload, created_at
+			 from step_payloads
+			 where run_id = $1
+			 order by created_at asc, step_name asc, attempt asc`,
+			[runId],
+		);
+		return result.rows.map(toStepPayloadModel);
+	}
+
+	async getTruthBundle(runId: string): Promise<TruthBundle | null> {
+		const run = await this.getRun(runId);
+		if (!run) {
+			return null;
+		}
+		const [steps, links, artifacts, stepPayloads] = await Promise.all([
+			this.listSteps(runId),
+			this.listLinks(runId),
+			this.listArtifacts(runId),
+			this.listStepPayloads(runId),
+		]);
+		const sessionIndexResult = await this.pool.query<SessionIndexRow>(
+			`select run_id, entry_count, root_id, leaf_id, summary_entry_count,
+			 updated_at
+			 from sessions_index
+			 where run_id = $1`,
+			[runId],
+		);
+		return {
+			run,
+			steps,
+			links,
+			artifacts,
+			sessionIndex: sessionIndexResult.rowCount
+				? toSessionIndexModel(
+						requireRow(sessionIndexResult, "get truth bundle session index"),
+					)
+				: null,
+			stepPayloads,
+		};
 	}
 
 	async completeRun(input: {

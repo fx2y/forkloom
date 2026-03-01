@@ -129,6 +129,38 @@ class InMemoryRunRepo implements RunRepo {
 		return this.artifacts.filter((artifact) => artifact.runId === runId);
 	}
 
+	async createStep(): Promise<never> {
+		throw new Error("unused");
+	}
+
+	async upsertLink(): Promise<never> {
+		throw new Error("unused");
+	}
+
+	async upsertSessionIndex(): Promise<never> {
+		throw new Error("unused");
+	}
+
+	async upsertStepPayload(): Promise<never> {
+		throw new Error("unused");
+	}
+
+	async listSteps(): Promise<[]> {
+		return [];
+	}
+
+	async listLinks(): Promise<[]> {
+		return [];
+	}
+
+	async listStepPayloads(): Promise<[]> {
+		return [];
+	}
+
+	async getTruthBundle(): Promise<null> {
+		return null;
+	}
+
 	async completeRun(input: {
 		runId: string;
 		resultText: string;

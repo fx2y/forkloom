@@ -69,6 +69,44 @@ function runRow(overrides: Record<string, unknown> = {}) {
 	};
 }
 
+function stepRow(overrides: Record<string, unknown> = {}) {
+	return {
+		run_id: RUN_ID,
+		step_name: "run_command",
+		attempt: 1,
+		step_key: "prompt:1",
+		in_hash: "in",
+		out_hash: "out",
+		started_at: ISO,
+		ended_at: ISO,
+		...overrides,
+	};
+}
+
+function linkRow(overrides: Record<string, unknown> = {}) {
+	return {
+		run_id: RUN_ID,
+		step_name: "run_command",
+		attempt: 1,
+		session_entry_ids: ["entry-1"],
+		artifact_shas: ["a".repeat(64)],
+		note: "ok",
+		created_at: ISO,
+		...overrides,
+	};
+}
+
+function stepPayloadRow(overrides: Record<string, unknown> = {}) {
+	return {
+		run_id: RUN_ID,
+		step_name: "run_command",
+		attempt: 1,
+		payload: { x: 1 },
+		created_at: ISO,
+		...overrides,
+	};
+}
+
 describe("PgRunRepo", () => {
 	it("creates run transactionally and returns created=true", async () => {
 		const pool = new StubPool([{}, { rows: [runRow()], rowCount: 1 }, {}]);
@@ -229,5 +267,95 @@ describe("PgRunRepo", () => {
 			expect.stringContaining("insert into events"),
 			"commit",
 		]);
+	});
+
+	it("serializes link arrays and step payload json through sql casts", async () => {
+		const pool = new StubPool([
+			{ rows: [stepRow()], rowCount: 1 },
+			{ rows: [linkRow()], rowCount: 1 },
+			{ rows: [stepPayloadRow()], rowCount: 1 },
+		]);
+		const repo = new PgRunRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		await repo.createStep({
+			runId: RUN_ID,
+			stepName: "run_command",
+			attempt: 1,
+			stepKey: "prompt:1",
+			inHash: "in",
+			outHash: "out",
+		});
+		await repo.upsertLink({
+			runId: RUN_ID,
+			stepName: "run_command",
+			attempt: 1,
+			sessionEntryIds: ["entry-1", "entry-2"],
+			artifactShas: ["a".repeat(64)],
+			note: "note",
+		});
+		await repo.upsertStepPayload({
+			runId: RUN_ID,
+			stepName: "run_command",
+			attempt: 1,
+			payload: { command: "prompt", seq: 1 },
+		});
+
+		expect(pool.calls[1]?.sql.toLowerCase()).toContain("session_entry_ids");
+		expect(pool.calls[1]?.sql.toLowerCase()).toContain("artifact_shas");
+		expect(pool.calls[1]?.params?.[3]).toEqual(["entry-1", "entry-2"]);
+		expect(pool.calls[1]?.params?.[4]).toEqual(["a".repeat(64)]);
+		expect(pool.calls[2]?.sql.toLowerCase()).toContain("payload");
+		expect(pool.calls[2]?.params?.[3]).toBe(
+			JSON.stringify({ command: "prompt", seq: 1 }),
+		);
+	});
+
+	it("assembles truth bundle from run + ledger tables", async () => {
+		const pool = new StubPool([
+			{ rows: [runRow()], rowCount: 1 },
+			{ rows: [stepRow()], rowCount: 1 },
+			{ rows: [linkRow()], rowCount: 1 },
+			{
+				rows: [
+					{
+						run_id: RUN_ID,
+						sha256: "b".repeat(64),
+						kind: "pi_session_jsonl",
+						created_at: ISO,
+					},
+				],
+				rowCount: 1,
+			},
+			{ rows: [stepPayloadRow()], rowCount: 1 },
+			{
+				rows: [
+					{
+						run_id: RUN_ID,
+						entry_count: 8,
+						root_id: "root",
+						leaf_id: "leaf",
+						summary_entry_count: 1,
+						updated_at: ISO,
+					},
+				],
+				rowCount: 1,
+			},
+		]);
+		const repo = new PgRunRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const truth = await repo.getTruthBundle(RUN_ID);
+
+		expect(truth?.run.runId).toBe(RUN_ID);
+		expect(truth?.steps).toHaveLength(1);
+		expect(truth?.links).toHaveLength(1);
+		expect(truth?.artifacts).toHaveLength(1);
+		expect(truth?.stepPayloads).toHaveLength(1);
+		expect(truth?.sessionIndex?.entryCount).toBe(8);
 	});
 });
