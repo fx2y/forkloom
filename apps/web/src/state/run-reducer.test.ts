@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	hydrateRunState,
+	hydrateRunDocResolve,
+	hydrateRunDocSearch,
 	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
+	toSpanKey,
 } from "./run-reducer";
 
 const RUN_ID = "01HS7Z6E5R4W6NED8MH4D9Y6A0";
@@ -136,5 +139,44 @@ describe("run reducer", () => {
 				parentShas: ["b".repeat(64)],
 			},
 		]);
+	});
+
+	it("hydrates doc search + resolve rows keyed by SpanRef identity", () => {
+		const searched = hydrateRunDocSearch(initialRunViewState, {
+			query: "invoice total",
+			scope: "*",
+			hits: [
+				{
+					chunkId: "chunk:1",
+					score: 1.23,
+					snippet: "Invoice total is $19.99",
+					spans: [
+						{
+							docSha: "a".repeat(64),
+							parseId: "parse:1",
+							page: 1,
+							bbox: [0, 0, 100, 100],
+							charStart: 0,
+							charEnd: 10,
+							blockPath: "p1/b1",
+							chunkId: "chunk:1",
+						},
+					],
+				},
+			],
+		});
+		expect(searched.docSearch?.hits.length).toBe(1);
+		const span = searched.docSearch?.hits[0]?.spans[0];
+		if (!span) {
+			throw new Error("missing test span");
+		}
+		const resolved = hydrateRunDocResolve(searched, {
+			span,
+			md: "Total: $19.99",
+			bbox: [0, 0, 100, 100],
+			pageImageSha: "b".repeat(64),
+		});
+		const key = toSpanKey(span);
+		expect(resolved.resolvedSpanByKey[key]?.md).toContain("19.99");
 	});
 });

@@ -1,10 +1,13 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { validateRunByName } from "@forkloom/contracts";
 import type {
+	RunDocResolve,
+	RunDocSearch,
 	RunDonePayload,
 	RunEvent,
 	RunFailedPayload,
 	RunState,
+	SpanRef,
 	TruthBundle as TruthBundleContract,
 } from "@forkloom/contracts";
 import { HttpError } from "../errors";
@@ -109,10 +112,29 @@ type SandboxDeps = {
 	>;
 };
 
+type RunDocDeps = {
+	searchDocs(input: {
+		query: string;
+		scope: string;
+		limit?: number | undefined;
+	}): Promise<RunDocSearch>;
+	resolveSpan(span: SpanRef): Promise<RunDocResolve | null>;
+	ingestDoc(input: {
+		body: Buffer;
+		mime: string;
+	}): Promise<{
+		docSha: string;
+		parseId: string;
+		status: "queued" | "rejected" | "deduped";
+		reason?: string | undefined;
+	}>;
+};
+
 export type RunServiceDeps = {
 	runRepo: RunRepo;
 	workflowLauncher: RunWorkflowLauncher;
 	sandbox?: SandboxDeps | undefined;
+	docs?: RunDocDeps | undefined;
 };
 
 export type StartRunResult = {
@@ -312,6 +334,62 @@ export class RunService {
 		return truth as TruthBundleContract;
 	}
 
+	async searchDocs(input: {
+		runId: string;
+		query: string;
+		scope: string;
+		limit?: number | undefined;
+	}): Promise<RunDocSearch> {
+		await this.requireRun(input.runId);
+		const result = await this.requireDocDeps().searchDocs({
+			query: input.query,
+			scope: input.scope,
+			limit: input.limit,
+		});
+		const validated = validateRunByName("RunDocSearch", result);
+		if (!validated.valid) {
+			throw new Error(
+				`doc search contract invalid: ${validated.errors.join("; ")}`,
+			);
+		}
+		return result;
+	}
+
+	async resolveDocSpan(input: {
+		runId: string;
+		span: SpanRef;
+	}): Promise<RunDocResolve | null> {
+		await this.requireRun(input.runId);
+		const resolved = await this.requireDocDeps().resolveSpan(input.span);
+		if (!resolved) {
+			return null;
+		}
+		const validated = validateRunByName("RunDocResolve", resolved);
+		if (!validated.valid) {
+			throw new Error(
+				`doc resolve contract invalid: ${validated.errors.join("; ")}`,
+			);
+		}
+		return resolved;
+	}
+
+	async ingestDoc(input: {
+		runId: string;
+		body: Buffer;
+		mime: string;
+	}): Promise<{
+		docSha: string;
+		parseId: string;
+		status: "queued" | "rejected" | "deduped";
+		reason?: string | undefined;
+	}> {
+		await this.requireRun(input.runId);
+		return this.requireDocDeps().ingestDoc({
+			body: input.body,
+			mime: input.mime,
+		});
+	}
+
 	async listFiles(runId: string): Promise<{
 		workspaceRef?: { sha256: string } | undefined;
 		workspace_manifest: {
@@ -457,6 +535,21 @@ export class RunService {
 			throw new HttpError(503, "sandbox control is not configured");
 		}
 		return this.deps.sandbox;
+	}
+
+	private requireDocDeps(): RunDocDeps {
+		if (!this.deps.docs) {
+			throw new HttpError(503, "doc search is not configured");
+		}
+		return this.deps.docs;
+	}
+
+	private async requireRun(runId: string): Promise<RunModel> {
+		const run = await this.deps.runRepo.getRun(runId);
+		if (!run) {
+			throw new HttpError(404, `run not found: ${runId}`);
+		}
+		return run;
 	}
 
 	private async getSandboxOrThrow(

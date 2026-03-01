@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg pnpm
+
+mkdir -p .cache/spec07
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/verify-nasty-corpus.ts \
+	fixtures/ocr/nasty/MANIFEST.json \
+	.cache/spec07/cy10-corpus.verify.json
+
+rg -n "MANIFEST|rotated|table|formula|stamp|lang" \
+	fixtures/ocr testdocs scripts \
+	> .cache/spec07/cy10-corpus.scan.txt
+
+write_mark "test:int:doc-corpus"
+echo "test:int:doc-corpus ok"

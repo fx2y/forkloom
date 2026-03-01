@@ -159,7 +159,7 @@ describe("DocAcquireService", () => {
 		expect(repo.calls).toEqual(["getDoc", "getParse", "resolveAlias"]);
 	});
 
-	it("reserves doc/alias/parse for new acquire", async () => {
+	it("reserves doc/parse for new acquire and defers raw alias until reserve step", async () => {
 		const body = Buffer.from("new bytes");
 		const cfgHash = "d".repeat(64);
 		const store: Store = {
@@ -184,7 +184,8 @@ describe("DocAcquireService", () => {
 
 		expect(result.shortCircuited).toBe(false);
 		expect(result.rawAlias).toBe(`raw/${result.docSha}`);
-		expect(store.aliases.get(result.rawAlias)).toBe(result.docSha);
+		expect(store.aliases.has(result.rawAlias)).toBe(false);
+		expect(store.docs.get(result.docSha)?.rawArtifactSha).toBeNull();
 		expect(store.docs.get(result.docSha)?.status).toBe("queued");
 		expect(store.parses.get(result.parseId)?.status).toBe("queued");
 		expect(repo.calls).toEqual([
@@ -192,7 +193,6 @@ describe("DocAcquireService", () => {
 			"getParse",
 			"resolveAlias",
 			"upsertDoc",
-			"aliasArtifact",
 			"upsertParse",
 		]);
 	});

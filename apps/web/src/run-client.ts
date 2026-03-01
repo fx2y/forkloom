@@ -1,4 +1,11 @@
-import type { RunEvent, RunState, TruthBundle } from "@forkloom/contracts";
+import type {
+	RunDocResolve,
+	RunDocSearch,
+	RunEvent,
+	RunState,
+	SpanRef,
+	TruthBundle,
+} from "@forkloom/contracts";
 import type { AppDeps } from "./actor-client";
 
 type RunCreateInput = {
@@ -75,6 +82,57 @@ export async function postRunCommand(
 		body: JSON.stringify(input),
 	});
 	return readJson(response, `post run command ${runId}`);
+}
+
+export async function postRunDocSearch(
+	deps: AppDeps,
+	runId: string,
+	input: {
+		query: string;
+		scope: string;
+		limit?: number | undefined;
+	},
+): Promise<RunDocSearch> {
+	const response = await deps.fetchImpl(`/runs/${runId}/doc/search`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return readJson(response, `search run docs ${runId}`);
+}
+
+export async function postRunDocIngest(
+	deps: AppDeps,
+	runId: string,
+	input: { mime: string; bodyBase64: string },
+): Promise<{
+	docSha: string;
+	parseId: string;
+	status: "queued" | "rejected" | "deduped";
+	reason?: string | undefined;
+}> {
+	const response = await deps.fetchImpl(`/runs/${runId}/doc/ingest`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return readJson(response, `ingest run doc ${runId}`);
+}
+
+export async function postRunDocResolve(
+	deps: AppDeps,
+	runId: string,
+	span: SpanRef,
+): Promise<RunDocResolve | null> {
+	const response = await deps.fetchImpl(`/runs/${runId}/doc/resolve`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ span }),
+	});
+	if (response.status === 404) {
+		return null;
+	}
+	return readJson(response, `resolve run doc span ${runId}`);
 }
 
 export async function fetchRunFiles(

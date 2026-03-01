@@ -1,4 +1,4 @@
-import type { RunState } from "@forkloom/contracts";
+import type { RunState, SpanRef } from "@forkloom/contracts";
 import {
 	type AppDeps,
 	type EventSourceLike,
@@ -14,6 +14,8 @@ import {
 	fetchRunFiles,
 	fetchRunTruth,
 	parseRunEvent,
+	postRunDocResolve,
+	postRunDocSearch,
 	postRunCommand,
 } from "./run-client";
 import {
@@ -25,10 +27,13 @@ import {
 import {
 	type RunArtifactView,
 	type RunProvenance,
+	hydrateRunDocResolve,
+	hydrateRunDocSearch,
 	hydrateRunState,
 	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
+	toSpanKey,
 } from "./state/run-reducer";
 import { parseStaticFragment } from "./static-html";
 
@@ -88,10 +93,13 @@ export function mountRunSurface(
 	let state = initialRunViewState;
 	let creating = false;
 	let sending = false;
+	let searchingDocs = false;
+	let resolvingSpanKey: string | null = null;
 	let errorMessage = "";
 	let uploaded: UploadedAttachment[] = [];
 	let activeStream: PendingRunStream | null = null;
 	let selectedArtifactSha: string | null = null;
+	let selectedResolvedSpanKey: string | null = null;
 
 	root.replaceChildren(
 		parseStaticFragment(`
@@ -134,25 +142,41 @@ export function mountRunSurface(
 				<div class="upload-list" data-run-uploads></div>
 				<p class="thread-preview" data-run-preview>No WILL-RUN preview yet.</p>
 				<div class="artifact-strip" data-run-artifacts></div>
-					<div class="run-grid">
-						<div class="panel run-subpanel">
-							<p class="section-label">Files</p>
-							<ul class="file-list" data-run-files></ul>
-						</div>
+						<div class="run-grid">
+							<div class="panel run-subpanel">
+								<p class="section-label">Files</p>
+								<ul class="file-list" data-run-files></ul>
+							</div>
 						<div class="panel run-subpanel">
 							<details class="trace-panel" open>
 								<summary data-run-trace-summary>Trace 0</summary>
 								<ol class="trace-list" data-run-trace></ol>
 							</details>
 						</div>
-						<div class="panel run-subpanel">
-							<details class="trace-panel" open>
-								<summary data-run-provenance-summary>Provenance</summary>
-								<ul class="file-list" data-run-provenance></ul>
-							</details>
+							<div class="panel run-subpanel">
+								<details class="trace-panel" open>
+									<summary data-run-provenance-summary>Provenance</summary>
+									<ul class="file-list" data-run-provenance></ul>
+								</details>
+							</div>
+							<div class="panel run-subpanel">
+								<p class="section-label">Citations</p>
+								<form class="field" data-run-doc-search-form>
+									<label class="field">
+										<span>Query</span>
+										<input data-run-doc-query type="text" name="query" placeholder="invoice total" />
+									</label>
+									<label class="field">
+										<span>Scope</span>
+										<input data-run-doc-scope type="text" name="scope" value="*" placeholder="* | doc:&lt;sha&gt; | parse:&lt;id&gt;" />
+									</label>
+									<button type="submit" data-run-doc-search>Search citations</button>
+								</form>
+								<ul class="file-list" data-run-doc-hits></ul>
+								<div class="thread-preview" data-run-doc-resolve>Resolve a span to view exact markdown slice.</div>
+							</div>
 						</div>
-					</div>
-				<form class="composer" data-run-command-form>
+					<form class="composer" data-run-command-form>
 					<label class="field">
 						<span>Control text</span>
 						<textarea data-run-command-input name="commandText" rows="4" placeholder="Use prompt, follow-up, or steer text here."></textarea>
@@ -200,6 +224,20 @@ export function mountRunSurface(
 	const provenanceNode = root.querySelector<HTMLUListElement>(
 		"[data-run-provenance]",
 	);
+	const docSearchForm = root.querySelector<HTMLFormElement>(
+		"[data-run-doc-search-form]",
+	);
+	const docQueryInput = root.querySelector<HTMLInputElement>(
+		"[data-run-doc-query]",
+	);
+	const docScopeInput = root.querySelector<HTMLInputElement>(
+		"[data-run-doc-scope]",
+	);
+	const docSearchButton = root.querySelector<HTMLButtonElement>(
+		"[data-run-doc-search]",
+	);
+	const docHitsNode = root.querySelector<HTMLUListElement>("[data-run-doc-hits]");
+	const docResolveNode = root.querySelector<HTMLElement>("[data-run-doc-resolve]");
 	const commandForm = root.querySelector<HTMLFormElement>(
 		"[data-run-command-form]",
 	);
@@ -230,12 +268,18 @@ export function mountRunSurface(
 			artifactsNode &&
 			filesNode &&
 			traceSummaryNode &&
-			traceNode &&
-			provenanceSummaryNode &&
-			provenanceNode &&
-			commandForm &&
-			commandInput &&
-			createButton &&
+				traceNode &&
+				provenanceSummaryNode &&
+				provenanceNode &&
+				docSearchForm &&
+				docQueryInput &&
+				docScopeInput &&
+				docSearchButton &&
+				docHitsNode &&
+				docResolveNode &&
+				commandForm &&
+				commandInput &&
+				createButton &&
 			sendButton &&
 			steerButton &&
 			approveButton &&
@@ -312,7 +356,7 @@ export function mountRunSurface(
 		provenanceSummaryNode.textContent = `Provenance ${rows.length}`;
 	};
 
-	const renderProvenance = () => {
+		const renderProvenance = () => {
 		clearNode(provenanceNode);
 		if (!selectedArtifactSha) {
 			const empty = document.createElement("li");
@@ -331,8 +375,100 @@ export function mountRunSurface(
 			provenanceSummaryNode.textContent = "Provenance 0";
 			return;
 		}
-		renderProvenanceRows(selectedArtifactSha, rows);
-	};
+			renderProvenanceRows(selectedArtifactSha, rows);
+		};
+
+		const renderResolvedSpan = () => {
+			if (!selectedResolvedSpanKey) {
+				docResolveNode.textContent = "Resolve a span to view exact markdown slice.";
+				return;
+			}
+			const resolved = state.resolvedSpanByKey[selectedResolvedSpanKey];
+			if (!resolved) {
+				docResolveNode.textContent = "Resolved span not found in reducer state.";
+				return;
+			}
+			const bboxTxt = resolved.bbox ? resolved.bbox.join(",") : "null";
+			docResolveNode.textContent = [
+				`chunk ${resolved.span.chunkId}`,
+				`page ${resolved.span.page}`,
+				`bbox ${bboxTxt}`,
+				"",
+				resolved.md,
+			].join("\n");
+		};
+
+		const resolveDocSpan = async (span: SpanRef) => {
+			if (!state.run) {
+				return;
+			}
+			const key = toSpanKey(span);
+			try {
+				resolvingSpanKey = key;
+				errorMessage = "";
+				update();
+				const resolved = await postRunDocResolve(deps, state.run.runId, span);
+				if (!resolved) {
+					errorMessage = "span not found";
+					return;
+				}
+				state = hydrateRunDocResolve(state, resolved);
+				selectedResolvedSpanKey = key;
+			} catch (error) {
+				errorMessage =
+					error instanceof Error ? error.message : "doc span resolve failed";
+			} finally {
+				resolvingSpanKey = null;
+				update();
+			}
+		};
+
+		const renderDocHits = () => {
+			clearNode(docHitsNode);
+			const hits = state.docSearch?.hits ?? [];
+			if (hits.length === 0) {
+				const empty = document.createElement("li");
+				empty.className = "hint";
+				empty.textContent = "No citation hits yet.";
+				docHitsNode.append(empty);
+				return;
+			}
+			for (const hit of hits) {
+				const item = document.createElement("li");
+				item.className = "file-item";
+
+				const summary = document.createElement("div");
+				summary.className = "provenance-main";
+				const chunk = document.createElement("strong");
+				chunk.textContent = hit.chunkId;
+				const snippet = document.createElement("span");
+				snippet.textContent = hit.snippet;
+				const score = document.createElement("code");
+				score.textContent = `score ${hit.score.toFixed(4)}`;
+				summary.append(chunk, snippet, score);
+
+				const spanActions = document.createElement("div");
+				spanActions.className = "provenance-links";
+				for (const span of hit.spans) {
+					const key = toSpanKey(span);
+					const btn = document.createElement("button");
+					btn.type = "button";
+					btn.className = "secondary";
+					btn.textContent =
+						resolvingSpanKey === key
+							? "Resolving..."
+							: `resolve p${span.page}`;
+					btn.disabled = resolvingSpanKey === key || searchingDocs || !state.run;
+					btn.addEventListener("click", () => {
+						void resolveDocSpan(span);
+					});
+					spanActions.append(btn);
+				}
+
+				item.append(summary, spanActions);
+				docHitsNode.append(item);
+			}
+		};
 
 	const renderArtifacts = () => {
 		clearNode(artifactsNode);
@@ -429,14 +565,20 @@ export function mountRunSurface(
 			? prettyPreview(run)
 			: "No WILL-RUN preview yet.";
 		renderArtifacts();
-		renderFiles();
-		renderTrace();
-		renderProvenance();
-		renderUploads();
+			renderFiles();
+			renderTrace();
+			renderProvenance();
+			renderDocHits();
+			renderResolvedSpan();
+			renderUploads();
 
-		createButton.disabled = creating;
-		createButton.textContent = creating ? "Starting..." : "Start run";
-		sendButton.disabled = sending || !canSendRunText(run);
+			createButton.disabled = creating;
+			createButton.textContent = creating ? "Starting..." : "Start run";
+			docSearchButton.disabled = searchingDocs || run == null;
+			docSearchButton.textContent = searchingDocs
+				? "Searching..."
+				: "Search citations";
+			sendButton.disabled = sending || !canSendRunText(run);
 		sendButton.textContent = `Queue ${sendKind}`;
 		steerButton.disabled =
 			sending || !canSendRunText(run) || run?.status !== "running";
@@ -528,7 +670,7 @@ export function mountRunSurface(
 		update();
 	});
 
-	createForm.addEventListener("submit", async (event) => {
+		createForm.addEventListener("submit", async (event) => {
 		event.preventDefault();
 		const runId = runIdInput.value.trim();
 		const prompt = promptInput.value.trim();
@@ -547,15 +689,16 @@ export function mountRunSurface(
 				Array.from(fileInput.files ?? []),
 			);
 			uploaded = uploadedFiles;
-			await createRun(deps, {
+				await createRun(deps, {
 				runId,
 				scope: "team",
 				userMsg: prompt,
 				attachments: uploadedFiles.map(({ sha256 }) => ({ sha256 })),
 				profile: runProfile.value as "safe" | "std" | "priv",
-			});
-			state = hydrateRunState(initialRunViewState, await fetchRun(deps, runId));
-			await refreshRunTruth(runId);
+				});
+				state = hydrateRunState(initialRunViewState, await fetchRun(deps, runId));
+				selectedResolvedSpanKey = null;
+				await refreshRunTruth(runId);
 			connectRun(runId);
 			await refreshRunFiles(runId);
 			fileInput.value = "";
@@ -566,10 +709,44 @@ export function mountRunSurface(
 		} finally {
 			creating = false;
 			update();
-		}
-	});
+			}
+		});
 
-	commandForm.addEventListener("submit", async (event) => {
+		docSearchForm.addEventListener("submit", async (event) => {
+			event.preventDefault();
+			if (!state.run) {
+				errorMessage = "start a run before searching docs";
+				update();
+				return;
+			}
+			const query = docQueryInput.value.trim();
+			const scope = docScopeInput.value.trim() || "*";
+			if (!query) {
+				errorMessage = "doc search query is required";
+				update();
+				return;
+			}
+			try {
+				searchingDocs = true;
+				errorMessage = "";
+				update();
+				const search = await postRunDocSearch(deps, state.run.runId, {
+					query,
+					scope,
+					limit: 20,
+				});
+				state = hydrateRunDocSearch(state, search);
+				selectedResolvedSpanKey = null;
+			} catch (error) {
+				errorMessage =
+					error instanceof Error ? error.message : "doc search failed";
+			} finally {
+				searchingDocs = false;
+				update();
+			}
+		});
+
+		commandForm.addEventListener("submit", async (event) => {
 		event.preventDefault();
 		if (!state.run) {
 			return;

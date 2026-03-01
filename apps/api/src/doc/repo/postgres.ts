@@ -1,6 +1,7 @@
 import pg from "pg";
 import { createPoolCloseOnce } from "../../repo/pool-close";
 import { buildSpanId } from "../ids";
+import { toPgVectorLiteral } from "../search";
 import type {
 	AliasArtifactInput,
 	Bbox,
@@ -98,6 +99,7 @@ type VectorChunkRow = {
 	md: string;
 	plain: string;
 	emb_json: unknown;
+	distance?: string | number | null;
 };
 
 type SpanRow = {
@@ -225,6 +227,20 @@ function toEmbedding(value: unknown): number[] {
 		embedding.push(item);
 	}
 	return embedding;
+}
+
+function isVectorUnsupportedError(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+	const message = error.message.toLowerCase();
+	return (
+		message.includes("type \"vector\" does not exist") ||
+		message.includes("column \"emb\" does not exist") ||
+		message.includes("operator does not exist: vector") ||
+		message.includes("cannot cast type") ||
+		message.includes("dimension")
+	);
 }
 
 function whereScope(
@@ -360,7 +376,48 @@ export class PgDocRepo implements DocRepo {
 		}));
 	}
 
-	async listVectorChunks(input: SearchDocsInput): Promise<VectorChunkModel[]> {
+	async listVectorChunks(
+		input: SearchDocsInput,
+		queryEmbedding?: number[] | undefined,
+	): Promise<VectorChunkModel[]> {
+		if (queryEmbedding && queryEmbedding.length > 0) {
+			try {
+				const scope = whereScope(input.scope, "c", "p", 2);
+				const limitIndex = scope.params.length + 2;
+				const result = await this.pool.query<VectorChunkRow>(
+					`select
+						 c.chunk_id,
+						 c.md,
+						 c.plain,
+						 cv.emb_json,
+						 cv.emb <-> $1::vector as distance
+					 from chunk_vec cv
+					 join chunks c on c.chunk_id = cv.chunk_id
+					 join parses p on p.parse_id = c.parse_id
+					 where cv.emb is not null${scope.sql}
+					 order by cv.emb <-> $1::vector asc, c.chunk_id asc
+					 limit $${limitIndex}`,
+					[toPgVectorLiteral(queryEmbedding), ...scope.params, input.limit * 8],
+				);
+				if (result.rows.length > 0) {
+					return result.rows
+						.map((row) => ({
+							chunkId: row.chunk_id,
+							md: row.md,
+							plain: row.plain,
+							embedding: toEmbedding(row.emb_json),
+							distance:
+								row.distance == null ? undefined : toScore(row.distance),
+						}))
+						.filter((row) => row.embedding.length > 0);
+				}
+			} catch (error) {
+				if (!isVectorUnsupportedError(error)) {
+					throw error;
+				}
+			}
+		}
+
 		const scope = whereScope(input.scope, "c", "p", 1);
 		const limitIndex = scope.params.length + 1;
 		const result = await this.pool.query<VectorChunkRow>(
@@ -863,13 +920,32 @@ export class PgDocRepo implements DocRepo {
 		if (!input.embedding.every((value) => Number.isFinite(value))) {
 			throw new Error("chunk search embedding must be finite");
 		}
-		await queryable.query(
-			`insert into chunk_vec(chunk_id, emb_json, updated_at)
-			 values ($1, $2::jsonb, now())
-			 on conflict (chunk_id) do update
-			 set emb_json = excluded.emb_json,
-				 updated_at = excluded.updated_at`,
-			[input.chunkId, JSON.stringify(input.embedding)],
-		);
+		try {
+			await queryable.query(
+				`insert into chunk_vec(chunk_id, emb_json, emb, updated_at)
+				 values ($1, $2::jsonb, $3::vector, now())
+				 on conflict (chunk_id) do update
+				 set emb_json = excluded.emb_json,
+					 emb = excluded.emb,
+					 updated_at = excluded.updated_at`,
+				[
+					input.chunkId,
+					JSON.stringify(input.embedding),
+					toPgVectorLiteral(input.embedding),
+				],
+			);
+		} catch (error) {
+			if (!isVectorUnsupportedError(error)) {
+				throw error;
+			}
+			await queryable.query(
+				`insert into chunk_vec(chunk_id, emb_json, updated_at)
+				 values ($1, $2::jsonb, now())
+				 on conflict (chunk_id) do update
+				 set emb_json = excluded.emb_json,
+					 updated_at = excluded.updated_at`,
+				[input.chunkId, JSON.stringify(input.embedding)],
+			);
+		}
 	}
 }

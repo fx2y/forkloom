@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg pnpm sqlite3 jq
+
+mkdir -p .cache/spec07
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/run-doc-checklist.ts \
+	.cache/spec07/doc-checklist.report.json
+
+jq -e '.status == "ok"' .cache/spec07/doc-checklist.report.json >/dev/null
+jq -e '.status == "ok"' .cache/spec07/cy10-corpus.verify.json >/dev/null
+jq -e '.status == "ok"' .cache/spec07/cy10-crash.report.json >/dev/null
+
+rg -n "doc-|checklist|ci:force|test:int:force|golden" \
+	.mise.toml scripts/harness mise-tasks \
+	> .cache/spec07/cy10-dag.scan.txt
+
+rg -n "doc ingest|GLM-OCR|nasty docs|kill.*resume|spec-0/07" \
+	README.md docs/adr mise-tasks/check/scope-guard \
+	> .cache/spec07/cy10-docs.scan.txt
+
+req_miss_count="$(sqlite3 spec-0/07-htn.sqlite "select count(*) from req r left join req_cover c on c.req_id=r.id and c.fit='full' where c.req_id is null;")"
+if [[ "$req_miss_count" != "0" ]]; then
+	echo "req full-cover miss count must be zero, got $req_miss_count" >&2
+	exit 1
+fi
+
+{
+	printf 'req_full_cover_miss=0\n'
+	printf 'doc_checklist=.cache/spec07/doc-checklist.report.json\n'
+	printf 'doc_checklist_status=ok\n'
+	printf 'cy9_gate=.cache/spec07/cy9-gate.txt\n'
+	printf 'cy10_corpus=.cache/spec07/cy10-corpus.verify.json\n'
+	printf 'cy10_corpus_status=ok\n'
+	printf 'cy10_crash=.cache/spec07/cy10-crash.report.json\n'
+	printf 'cy10_crash_status=ok\n'
+	printf 'cy10_dag=.cache/spec07/cy10-dag.scan.txt\n'
+	printf 'cy10_docs=.cache/spec07/cy10-docs.scan.txt\n'
+	date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/final-proof-index.txt
+
+write_mark "test:int:doc-checklist"
+echo "test:int:doc-checklist ok"

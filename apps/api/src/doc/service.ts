@@ -37,11 +37,11 @@ export class DocService {
 			scope,
 			limit,
 		};
+		const queryEmbedding = buildDeterministicEmbedding(query);
 		const [lexical, vectors] = await Promise.all([
 			this.deps.repo.searchLexicalChunks(searchInput),
-			this.deps.repo.listVectorChunks(searchInput),
+			this.deps.repo.listVectorChunks(searchInput, queryEmbedding),
 		]);
-		const queryEmbedding = buildDeterministicEmbedding(query);
 		const scoreByChunk = new Map<
 			string,
 			{ score: number; snippet: string; chunkId: string }
@@ -54,7 +54,10 @@ export class DocService {
 			});
 		}
 		for (const candidate of vectors) {
-			const vectorScore = cosineScore(queryEmbedding, candidate.embedding);
+			const vectorScore =
+				candidate.distance == null
+					? cosineScore(queryEmbedding, candidate.embedding)
+					: 1 / (1 + candidate.distance);
 			const current = scoreByChunk.get(candidate.chunkId);
 			const score = (current?.score ?? 0) + vectorScore;
 			scoreByChunk.set(candidate.chunkId, {

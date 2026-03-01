@@ -1,4 +1,5 @@
 import { validateRunByName } from "@forkloom/contracts";
+import type { SpanRef } from "@forkloom/contracts";
 import type { Request } from "express";
 import { HttpError } from "../errors";
 import type { RunProfile, RunScope, RunSpecModel } from "../run/ports";
@@ -117,6 +118,90 @@ export function parseRunFileExportPayload(input: unknown): {
 	}
 	return {
 		paths: record.paths.map((path) => String(path).trim()),
+	};
+}
+
+function parsePositiveIntLimit(input: unknown): number | undefined {
+	if (input == null) {
+		return undefined;
+	}
+	if (typeof input !== "number" || !Number.isInteger(input)) {
+		throw new HttpError(400, "search limit must be an integer");
+	}
+	if (input < 1 || input > 100) {
+		throw new HttpError(400, "search limit must be in [1,100]");
+	}
+	return input;
+}
+
+export function parseRunDocSearchPayload(input: unknown): {
+	query: string;
+	scope: string;
+	limit?: number | undefined;
+} {
+	if (input == null || typeof input !== "object" || Array.isArray(input)) {
+		throw new HttpError(400, "doc search payload must be an object");
+	}
+	const record = input as Record<string, unknown>;
+	if (typeof record.query !== "string" || record.query.trim().length === 0) {
+		throw new HttpError(400, "doc search query is required");
+	}
+	const scope =
+		typeof record.scope === "string" && record.scope.trim().length > 0
+			? record.scope.trim()
+			: "*";
+	return {
+		query: record.query.trim(),
+		scope,
+		limit: parsePositiveIntLimit(record.limit),
+	};
+}
+
+export function parseRunDocResolvePayload(input: unknown): SpanRef {
+	if (input == null || typeof input !== "object" || Array.isArray(input)) {
+		throw new HttpError(400, "doc resolve payload must be an object");
+	}
+	const record = input as Record<string, unknown>;
+	const candidate = record.span;
+	const validation = validateRunByName("SpanRef", candidate);
+	if (!validation.valid) {
+		throw new HttpError(
+			400,
+			`invalid span payload: ${validation.errors.join("; ")}`,
+		);
+	}
+	return candidate as SpanRef;
+}
+
+export function parseRunDocIngestPayload(input: unknown): {
+	mime: string;
+	body: Buffer;
+} {
+	if (input == null || typeof input !== "object" || Array.isArray(input)) {
+		throw new HttpError(400, "doc ingest payload must be an object");
+	}
+	const record = input as Record<string, unknown>;
+	if (typeof record.mime !== "string" || record.mime.trim().length === 0) {
+		throw new HttpError(400, "doc ingest mime is required");
+	}
+	if (
+		typeof record.bodyBase64 !== "string" ||
+		record.bodyBase64.trim().length === 0
+	) {
+		throw new HttpError(400, "doc ingest bodyBase64 is required");
+	}
+	let body: Buffer;
+	try {
+		body = Buffer.from(record.bodyBase64, "base64");
+	} catch {
+		throw new HttpError(400, "doc ingest bodyBase64 is invalid");
+	}
+	if (body.byteLength === 0) {
+		throw new HttpError(400, "doc ingest body is empty");
+	}
+	return {
+		mime: record.mime.trim(),
+		body,
 	};
 }
 

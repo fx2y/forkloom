@@ -299,6 +299,48 @@ describe("PgDocRepo", () => {
 		expect(pool.calls[0]?.sql).toContain("ts_rank");
 	});
 
+	it("queries vector candidates with pgvector ANN ordering when query embedding is provided", async () => {
+		const pool = new StubPool([
+			{
+				rows: [
+					{
+						chunk_id: "chunk-v",
+						md: "vector",
+						plain: "vector",
+						emb_json: [0.1, 0.2, 0.3],
+						distance: 0.25,
+					},
+				],
+				rowCount: 1,
+			},
+		]);
+		const repo = new PgDocRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const hits = await repo.listVectorChunks(
+			{
+				query: "vector",
+				scope: { scope: "all", docSha: null, parseId: null },
+				limit: 3,
+			},
+			[0.1, 0.2, 0.3],
+		);
+
+		expect(hits).toEqual([
+			{
+				chunkId: "chunk-v",
+				md: "vector",
+				plain: "vector",
+				embedding: [0.1, 0.2, 0.3],
+				distance: 0.25,
+			},
+		]);
+		expect(pool.calls[0]?.sql).toContain("cv.emb <-> $1::vector");
+		expect(pool.calls[0]?.sql).toContain("cv.emb is not null");
+	});
+
 	it("marks parse/doc done only after inserting doc_ingested marker", async () => {
 		const pool = new StubPool([
 			{},

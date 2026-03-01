@@ -9,7 +9,7 @@ import {
 	buildActorPromptInput,
 } from "./actor";
 import { loadConfig } from "./config";
-import { PgDocRepo, ZaiLayoutClient } from "./doc";
+import { DocService, PgDocRepo, ZaiLayoutClient } from "./doc";
 import {
 	DbosStepRunner,
 	InlineStepRunner,
@@ -39,6 +39,7 @@ import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
 import {
 	createDocOcrQueue,
+	LazyDbosDocIngestWorkflowLauncher,
 	LazyDbosDocOcrWorkflowLauncher,
 	registerActorTickWorkflow,
 	registerDocOcrWorkflow,
@@ -112,6 +113,9 @@ async function bootstrap() {
 	);
 
 	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
+	const docService = new DocService({ repo: docRepo });
+	const docIngestWorkflowLauncher = new LazyDbosDocIngestWorkflowLauncher();
+	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const workflowSandboxBackend = new DockerBackend({
 		writeSnapshot: async (body, meta) => {
 			const artifact = await workflowArtifactService.putArtifact({
@@ -130,6 +134,11 @@ async function bootstrap() {
 	const runService = new RunService({
 		runRepo,
 		workflowLauncher,
+		docs: {
+			searchDocs: (input) => docService.searchDocs(input),
+			resolveSpan: (span) => docService.resolveSpan(span),
+			ingestDoc: (input) => docIngestWorkflowLauncher.startIngestDoc(input),
+		},
 		sandbox: {
 			sandboxRepo,
 			createRunPlan: (spec) => createRunPlan(spec, config),
@@ -137,7 +146,6 @@ async function bootstrap() {
 		},
 	});
 	const actorWorkflowLauncher = new LazyDbosActorWorkflowLauncher();
-	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const actorService = new ActorService({
 		repo: actorRepo,
 		workflowLauncher: actorWorkflowLauncher,
@@ -223,8 +231,8 @@ async function bootstrap() {
 	workflowLauncher.bindClassic(runWorkflow);
 	workflowLauncher.bindSandbox(runSandboxWorkflow);
 	actorWorkflowLauncher.bind(actorWorkflow);
+	docIngestWorkflowLauncher.bind(ingestDocWorkflow);
 	docOcrWorkflowLauncher.bind(docOcrWorkflow, docOcrQueue);
-	void ingestDocWorkflow;
 	await launchDbos(config.databaseUrl);
 
 	const app = buildApiRouter({

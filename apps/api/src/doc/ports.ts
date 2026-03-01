@@ -128,6 +128,7 @@ export type VectorChunkModel = {
 	md: string;
 	plain: string;
 	embedding: number[];
+	distance?: number | undefined;
 };
 
 export type ResolveSpanModel = {
@@ -195,7 +196,10 @@ export interface DocRepo {
 	resolveAlias(alias: string): Promise<string | null>;
 	recordParseLedger(input: RecordParseLedgerInput): Promise<void>;
 	searchLexicalChunks(input: SearchDocsInput): Promise<LexicalChunkHitModel[]>;
-	listVectorChunks(input: SearchDocsInput): Promise<VectorChunkModel[]>;
+	listVectorChunks(
+		input: SearchDocsInput,
+		queryEmbedding?: number[] | undefined,
+	): Promise<VectorChunkModel[]>;
 	listChunkSpans(chunkIds: string[]): Promise<SpanRef[]>;
 	resolveSpan(span: SpanRef): Promise<ResolveSpanModel | null>;
 	markParseDone(input: MarkParseDoneInput): Promise<void>;

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg pnpm
+
+mkdir -p .cache/spec07
+
+scenario_id="$(date -u +%Y%m%dT%H%M%SZ)"
+
+set +e
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/doc-crash-drill.ts \
+	first ocr "$scenario_id"
+ocr_first_rc=$?
+set -e
+if [[ $ocr_first_rc -eq 0 ]]; then
+	echo "doc crash ocr first pass must terminate via SIGKILL" >&2
+	exit 1
+fi
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/doc-crash-drill.ts \
+	recover ocr "$scenario_id" \
+	.cache/spec07/cy10-crash.ocr.json
+
+set +e
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/doc-crash-drill.ts \
+	first index "$scenario_id"
+index_first_rc=$?
+set -e
+if [[ $index_first_rc -eq 0 ]]; then
+	echo "doc crash index first pass must terminate via SIGKILL" >&2
+	exit 1
+fi
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/doc-crash-drill.ts \
+	recover index "$scenario_id" \
+	.cache/spec07/cy10-crash.index.json
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+	scripts/harness/doc-crash-drill.ts \
+	aggregate \
+	.cache/spec07/cy10-crash.ocr.json \
+	.cache/spec07/cy10-crash.index.json \
+	.cache/spec07/cy10-crash.report.json
+
+rg -n "doc-ocr|doc-index|kill|resume|diff" \
+	mise-tasks/fault scripts/harness tests/int \
+	> .cache/spec07/cy10-crash.scan.txt
+
+write_mark "fault:doc-kill-resume"
+echo "fault:doc-kill-resume ok"

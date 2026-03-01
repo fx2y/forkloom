@@ -7,7 +7,7 @@ require_cmds mise rg pnpm ast-grep
 
 mkdir -p .cache/spec07
 rg -n "IngestDocV1|registerIngestDocWorkflow|executeIngestDoc" \
-  apps/api/src/workflow apps/api/src/server.ts \
+  apps/api/src/workflow apps/api/src/server.ts apps/api/src/http/run-doc-routes.ts \
   > .cache/spec07/cy5-register.scan.txt
 rg -n "WorkflowQueue|doc_ocr_q|rateLimitPerSecond|workerConcurrency" \
   apps/api/src \
@@ -34,6 +34,13 @@ MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
   tests/unit/doc-zai-client.test.ts \
   tests/unit/doc-workflow.test.ts
 
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec tsx \
+  scripts/harness/doc-live-e2e.ts \
+  .cache/spec07/cy6-live-e2e.json
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
+  tests/int/doc-live-e2e.test.ts
+
 {
   printf 'cy5_gate=ok\n'
   date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
@@ -41,6 +48,7 @@ MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
 
 {
   printf 'cy6_gate=ok\n'
+  printf 'cy6_live_e2e=.cache/spec07/cy6-live-e2e.json\n'
   date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
 } > .cache/spec07/cy6-gate.txt
 

@@ -110,6 +110,14 @@ curl -fsS http://localhost:8080/artifacts/$SHA/meta | jq .
 - run lab renders persisted `WILL-RUN` preview, durable files, and live trace for `/runs*`
 - approve only appears while `approval.state=pending`; prompt/followUp/steer/abort map 1:1 onto `POST /runs/:runId/commands`
 - files refresh from `GET /runs/:runId/files` after `workspace_updated`; export calls `POST /runs/:runId/files/export`
+- C5 cite-first APIs are run-owned under `/runs`: `POST /runs/:runId/doc/search` and `POST /runs/:runId/doc/resolve`
+
+## C5 Doc Ingest (spec-0/07)
+
+- GLM-OCR ingest outputs deterministic parse/chunk/span artifacts before search/resolve publication.
+- Nasty docs corpus is versioned in `fixtures/ocr/nasty/MANIFEST.json` (rotated/table/formula/stamp/lang coverage).
+- Kill resume proof (`fault:doc-kill-resume`) diffs doc-ocr/doc-index rows + hashes for replay stability.
+- Operator runbook: [docs/runbook/c5-doc-ingest.md](docs/runbook/c5-doc-ingest.md).
 
 ## Run API Smoke
 
@@ -219,6 +227,11 @@ MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-durability
 MISE_EXPERIMENTAL=1 mise run test:int:actor-durability
 MISE_EXPERIMENTAL=1 mise run test:int:actor-functional
 MISE_EXPERIMENTAL=1 mise run test:int:actor-sse
+MISE_EXPERIMENTAL=1 mise run test:int:doc-surface
+MISE_EXPERIMENTAL=1 mise run test:int:doc-corpus
+MISE_EXPERIMENTAL=1 mise run --force fault:doc-kill-resume
+MISE_EXPERIMENTAL=1 mise run test:int:doc-checklist
+MISE_EXPERIMENTAL=1 mise run --force golden:doc
 MISE_EXPERIMENTAL=1 mise run test:sys
 MISE_EXPERIMENTAL=1 mise run golden
 MISE_EXPERIMENTAL=1 mise run fault

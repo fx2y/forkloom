@@ -34,6 +34,7 @@ export {
 	buildDeterministicEmbedding,
 	cosineScore,
 	parseSearchScope,
+	toPgVectorLiteral,
 	toSnippet,
 } from "./search";
 export { ATOMIC_KINDS, MAX_CHARS, SOFT_CHARS, toChunks } from "./chunker";

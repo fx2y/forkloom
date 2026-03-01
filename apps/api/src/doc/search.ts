@@ -1,7 +1,7 @@
 import type { SearchScopeModel } from "./ports";
 
 const SHA256_RE = /^[a-f0-9]{64}$/;
-const EMBEDDING_DIMS = 64;
+const EMBEDDING_DIMS = 1536;
 
 export function parseSearchScope(scopeRaw: string): SearchScopeModel {
 	const scope = scopeRaw.trim();
@@ -65,6 +65,13 @@ export function cosineScore(a: number[], b: number[]): number {
 		return 0;
 	}
 	return dot / (Math.sqrt(an) * Math.sqrt(bn));
+}
+
+export function toPgVectorLiteral(values: number[]): string {
+	if (values.length === 0) {
+		return "[]";
+	}
+	return `[${values.map((value) => Number(value.toFixed(8))).join(",")}]`;
 }
 
 export function toSnippet(text: string, maxChars = 220): string {

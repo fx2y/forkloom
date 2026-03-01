@@ -4,6 +4,9 @@ export const RUN_API_ENDPOINTS = [
 	"GET /runs/:runId/truth",
 	"GET /runs/:runId/events",
 	"POST /runs/:runId/commands",
+	"POST /runs/:runId/doc/ingest",
+	"POST /runs/:runId/doc/search",
+	"POST /runs/:runId/doc/resolve",
 	"GET /runs/:runId/files",
 	"POST /runs/:runId/files/export",
 ] as const;
@@ -56,7 +59,7 @@ export const RUN_PUBLIC_BANNED_SANDBOX_NOUNS = [
 
 export const RUN_PUBLIC_OWNERSHIP_NOTE = [
 	"run owns public preview/state/commands/files",
-	"future doc search/resolve stays nested under /runs and reuses run-owned contracts",
+	"doc ingest/search/resolve stay nested under /runs and reuse run-owned contracts",
 	"sandbox stays internal and owns compute/workspace/exec",
 	"actor queue and lease law are reuse-only, not public nouns",
 ] as const;

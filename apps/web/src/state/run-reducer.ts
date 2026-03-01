@@ -1,4 +1,11 @@
-import type { RunEvent, RunState, TruthBundle } from "@forkloom/contracts";
+import type {
+	RunDocResolve,
+	RunDocSearch,
+	RunEvent,
+	RunState,
+	SpanRef,
+	TruthBundle,
+} from "@forkloom/contracts";
 
 export type RunArtifactView = {
 	key: string;
@@ -28,6 +35,8 @@ export type RunViewState = {
 	artifacts: RunArtifactView[];
 	trace: RunTraceView[];
 	provenanceByArtifact: Record<string, RunProvenance[]>;
+	docSearch: RunDocSearch | null;
+	resolvedSpanByKey: Record<string, RunDocResolve>;
 };
 
 function appendArtifact(
@@ -104,7 +113,22 @@ export const initialRunViewState: RunViewState = {
 	artifacts: [],
 	trace: [],
 	provenanceByArtifact: {},
+	docSearch: null,
+	resolvedSpanByKey: {},
 };
+
+export function toSpanKey(span: SpanRef): string {
+	return [
+		span.docSha,
+		span.parseId,
+		String(span.page),
+		span.blockPath,
+		span.chunkId,
+		span.charStart == null ? "" : String(span.charStart),
+		span.charEnd == null ? "" : String(span.charEnd),
+		span.bbox == null ? "" : span.bbox.join(","),
+	].join("|");
+}
 
 function appendProvenanceEntry(
 	map: Record<string, RunProvenance[]>,
@@ -173,6 +197,30 @@ export function hydrateRunTruth(
 		...state,
 		artifacts,
 		provenanceByArtifact,
+	};
+}
+
+export function hydrateRunDocSearch(
+	state: RunViewState,
+	search: RunDocSearch,
+): RunViewState {
+	return {
+		...state,
+		docSearch: search,
+	};
+}
+
+export function hydrateRunDocResolve(
+	state: RunViewState,
+	resolved: RunDocResolve,
+): RunViewState {
+	const key = toSpanKey(resolved.span);
+	return {
+		...state,
+		resolvedSpanByKey: {
+			...state.resolvedSpanByKey,
+			[key]: resolved,
+		},
 	};
 }
 
@@ -287,6 +335,8 @@ export function reduceRunEvent(
 		lastEventSeq: event.seq,
 		artifacts,
 		provenanceByArtifact: state.provenanceByArtifact,
+		docSearch: state.docSearch,
+		resolvedSpanByKey: state.resolvedSpanByKey,
 		trace: [
 			...state.trace,
 			{

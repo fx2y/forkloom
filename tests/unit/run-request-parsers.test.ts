@@ -4,6 +4,9 @@ import {
 	parseRunCommandPayload,
 	parseRunCreatePayload,
 	parseRunCursor,
+	parseRunDocIngestPayload,
+	parseRunDocResolvePayload,
+	parseRunDocSearchPayload,
 	parseRunFileExportPayload,
 } from "../../apps/api/src/http/run-request-parsers";
 
@@ -120,5 +123,81 @@ describe("run-request-parsers", () => {
 		expect(() => parseRunFileExportPayload({ paths: ["", 1] })).toThrow(
 			"paths must be a non-empty string array",
 		);
+	});
+
+	it("parses doc search payload and clamps invalid limits", () => {
+		expect(
+			parseRunDocSearchPayload({
+				query: "invoice total",
+				scope: "doc:".concat("a".repeat(64)),
+				limit: 12,
+			}),
+		).toEqual({
+			query: "invoice total",
+			scope: "doc:".concat("a".repeat(64)),
+			limit: 12,
+		});
+		expect(
+			parseRunDocSearchPayload({
+				query: "invoice",
+			}),
+		).toEqual({
+			query: "invoice",
+			scope: "*",
+			limit: undefined,
+		});
+		expect(() => parseRunDocSearchPayload({ query: "", limit: 3 })).toThrow(
+			"doc search query is required",
+		);
+		expect(() => parseRunDocSearchPayload({ query: "q", limit: 0 })).toThrow(
+			"search limit must be in [1,100]",
+		);
+	});
+
+	it("parses doc resolve payload with SpanRef validation", () => {
+		expect(
+			parseRunDocResolvePayload({
+				span: {
+					docSha: "a".repeat(64),
+					parseId: "parse:1",
+					page: 1,
+					bbox: [0, 0, 100, 100],
+					charStart: 0,
+					charEnd: 12,
+					blockPath: "p1/b1",
+					chunkId: "chunk:1",
+				},
+			}),
+		).toEqual({
+			docSha: "a".repeat(64),
+			parseId: "parse:1",
+			page: 1,
+			bbox: [0, 0, 100, 100],
+			charStart: 0,
+			charEnd: 12,
+			blockPath: "p1/b1",
+			chunkId: "chunk:1",
+		});
+		expect(() => parseRunDocResolvePayload({ span: { page: 1 } })).toThrow(
+			"invalid span payload:",
+		);
+	});
+
+	it("parses doc ingest payload and rejects invalid base64 payloads", () => {
+		const payload = parseRunDocIngestPayload({
+			mime: "application/pdf",
+			bodyBase64: Buffer.from("pdf-bytes", "utf8").toString("base64"),
+		});
+		expect(payload.mime).toBe("application/pdf");
+		expect(payload.body.toString("utf8")).toBe("pdf-bytes");
+		expect(() => parseRunDocIngestPayload({ mime: "application/pdf" })).toThrow(
+			"doc ingest bodyBase64 is required",
+		);
+		expect(() =>
+			parseRunDocIngestPayload({
+				mime: "",
+				bodyBase64: "AA==",
+			}),
+		).toThrow("doc ingest mime is required");
 	});
 });

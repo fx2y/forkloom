@@ -24,6 +24,13 @@ begin
 
   if to_regtype('vector') is not null then
     execute 'alter table chunk_vec add column if not exists emb vector(1536)';
+    execute '
+      update chunk_vec
+      set emb = (emb_json::text)::vector
+      where emb is null
+        and jsonb_typeof(emb_json) = ''array''
+        and jsonb_array_length(emb_json) = 1536
+    ';
     if not exists (
       select 1
       from pg_indexes

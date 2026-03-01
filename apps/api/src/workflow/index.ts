@@ -75,6 +75,14 @@ export type {
 	RegisteredIngestDocWorkflow,
 } from "./doc-ingest";
 export {
+	DbosDocIngestWorkflowLauncher,
+	LazyDbosDocIngestWorkflowLauncher,
+} from "./doc-ingest-runtime";
+export type {
+	DocIngestRequest,
+	DocIngestWorkflowLauncher,
+} from "./doc-ingest-runtime";
+export {
 	createDocOcrQueue,
 	DbosDocOcrWorkflowLauncher,
 	LazyDbosDocOcrWorkflowLauncher,

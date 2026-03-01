@@ -190,12 +190,16 @@ export async function executeIngestDoc(
 			},
 			expectedSha256: acquired.docSha,
 		});
+		await deps.repo.aliasArtifact({
+			alias: acquired.rawAlias,
+			sha256: acquired.docSha,
+		});
 		const stamp = now().toISOString();
 		await deps.repo.upsertDoc({
 			docSha: acquired.doc.docSha,
 			mime: acquired.doc.mime,
 			bytes: acquired.doc.bytes,
-			rawArtifactSha: acquired.doc.rawArtifactSha,
+			rawArtifactSha: acquired.docSha,
 			status: acquired.doc.status === "done" ? "done" : "processing",
 			updatedAt: stamp,
 		});

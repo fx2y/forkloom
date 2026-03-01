@@ -99,12 +99,12 @@ export class DocAcquireService {
 			docSha,
 			mime: input.mime,
 			bytes: input.body.byteLength,
-			rawArtifactSha: docSha,
+			// Reserve doc row before blob write; raw SHA is attached in reserve step.
+			rawArtifactSha: existingDoc?.rawArtifactSha ?? null,
 			status: existingDoc?.status ?? "queued",
 			createdAt: existingDoc ? undefined : stamp,
 			updatedAt: stamp,
 		});
-		await this.deps.repo.aliasArtifact({ alias: rawAlias, sha256: docSha });
 
 		const parse = await this.deps.repo.upsertParse({
 			parseId,

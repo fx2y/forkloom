@@ -78,6 +78,19 @@ MISE_EXPERIMENTAL=1 mise run --force test:int:run-sandbox-durability
 jq -e '.status=="ok" and .expectedCount==.replayCount' .cache/golden/replay.truth.json
 ```
 
+### Playbook: C5 Doc Ingest Closure (spec-0/07)
+Doc ingest is now part of the executable gate stack (GLM-OCR parse + cite-first run-owned search/resolve).
+
+```bash
+MISE_EXPERIMENTAL=1 mise run test:int:doc-corpus      # nasty docs manifest gate
+MISE_EXPERIMENTAL=1 mise run test:int:doc-surface     # /runs/:id/doc/search|resolve + web cite UI
+MISE_EXPERIMENTAL=1 mise run --force fault:doc-kill-resume
+MISE_EXPERIMENTAL=1 mise run test:int:doc-checklist   # SQL checklist + final-proof-index
+MISE_EXPERIMENTAL=1 mise run --force golden:doc
+```
+
+Hard latch: kill resume + checklist + docs scan must all be present in `.cache/spec07/final-proof-index.txt`.
+
 ---
 **Status**: CY9 Closed / N940 Green.
 **Req Full-Cover Miss Count**: `0`

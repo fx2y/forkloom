@@ -102,8 +102,8 @@ outputs = [".cache/mise-marks/check__lesson-guard.ok"]
 
 [tasks."check:scope-guard"]
 run = "bash ./mise-tasks/check/scope-guard"
-sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "README.md", "docs/adr/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "mise-tasks/check/scope-guard"]
-outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt"]
+sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "README.md", "docs/adr/**/*.md", "docs/runbook/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "mise-tasks/check/scope-guard"]
+outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt"]
 
 [tasks.check]
 depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard", "check:scope-guard"]
@@ -234,9 +234,9 @@ outputs = [".cache/mise-marks/test__int__doc-storage.ok", ".cache/spec07/cy4-gat
 
 [tasks."test:int:doc-ocr"]
 run = "bash ./mise-tasks/test/int/doc-ocr"
-depends = ["test:int:ocr-doc"]
-sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "apps/api/src/server.ts", "tests/unit/doc-*.test.ts", "src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
-outputs = [".cache/mise-marks/test__int__doc-ocr.ok", ".cache/spec07/cy5-register.scan.txt", ".cache/spec07/cy5-queue.scan.txt", ".cache/spec07/cy5-status.scan.txt", ".cache/spec07/cy5-gate.txt", ".cache/spec07/cy6-ocr-step.scan.txt", ".cache/spec07/cy6-ocr-persist.scan.txt", ".cache/spec07/cy6-ocr-proof.txt", ".cache/spec07/cy6-fetch.ast.txt", ".cache/spec07/cy6-gate.txt"]
+depends = ["svc:health", "test:int:ocr-doc"]
+sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "apps/api/src/server.ts", "apps/api/src/http/run-doc-routes.ts", "tests/unit/doc-*.test.ts", "tests/int/doc-live-e2e.test.ts", "scripts/harness/doc-live-*.ts", "src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
+outputs = [".cache/mise-marks/test__int__doc-ocr.ok", ".cache/spec07/cy5-register.scan.txt", ".cache/spec07/cy5-queue.scan.txt", ".cache/spec07/cy5-status.scan.txt", ".cache/spec07/cy5-gate.txt", ".cache/spec07/cy6-ocr-step.scan.txt", ".cache/spec07/cy6-ocr-persist.scan.txt", ".cache/spec07/cy6-ocr-proof.txt", ".cache/spec07/cy6-fetch.ast.txt", ".cache/spec07/cy6-live-e2e.json", ".cache/spec07/cy6-gate.txt"]
 
 [tasks."test:int:doc-search"]
 run = "bash ./mise-tasks/test/int/doc-search"
@@ -244,12 +244,32 @@ depends = ["test:int:doc-ocr"]
 sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "apps/api/migrations/00*_*.sql", "apps/api/migrations/007_doc_index.sql", "apps/api/migrations/008_doc_publish.sql", "tests/unit/doc-*.test.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-search"]
 outputs = [".cache/mise-marks/test__int__doc-search.ok", ".cache/spec07/cy7-normalize.scan.txt", ".cache/spec07/cy7-blocks.scan.txt", ".cache/spec07/cy7-chunker.scan.txt", ".cache/spec07/cy7-compose.scan.txt", ".cache/spec07/cy7-random.ast.txt", ".cache/spec07/cy7-gate.txt", ".cache/spec07/cy8-index.scan.txt", ".cache/spec07/cy8-search.scan.txt", ".cache/spec07/cy8-resolve.scan.txt", ".cache/spec07/cy8-publish.scan.txt", ".cache/spec07/cy8-gate.txt"]
 
+[tasks."test:int:doc-surface"]
+run = "bash ./mise-tasks/test/int/doc-surface"
+depends = ["test:int:doc-search"]
+sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/**/*.ts", "apps/web/src/**/*.ts", "apps/web/test/**/*.ts", "tests/unit/run-*.test.ts", "tests/contract/contracts-v1.test.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-surface"]
+outputs = [".cache/mise-marks/test__int__doc-surface.ok", ".cache/spec07/cy9-routes.scan.txt", ".cache/spec07/cy9-web.scan.txt", ".cache/spec07/cy9-api-proof.txt", ".cache/spec07/cy9-ui-proof.txt", ".cache/spec07/cy9-gate.txt"]
+
+[tasks."test:int:doc-corpus"]
+run = "bash ./mise-tasks/test/int/doc-corpus"
+sources = ["fixtures/ocr/nasty/**/*.pdf", "fixtures/ocr/nasty/**/*.png", "fixtures/ocr/nasty/**/*.jpg", "fixtures/ocr/nasty/MANIFEST.json", "scripts/harness/verify-nasty-corpus.ts", "mise-tasks/test/int/doc-corpus", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__doc-corpus.ok", ".cache/spec07/cy10-corpus.verify.json", ".cache/spec07/cy10-corpus.scan.txt"]
+
+[tasks."test:int:doc-checklist"]
+run = "bash ./mise-tasks/test/int/doc-checklist"
+depends = ["svc:health", "test:int:doc-surface", "test:int:doc-corpus", "fault:doc-kill-resume"]
+sources = [".mise.toml", "scripts/harness/spec07-sql.ts", "scripts/harness/run-doc-checklist.ts", "tests/unit/spec07-sql.test.ts", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/doc-checklist", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__doc-checklist.ok", ".cache/spec07/doc-checklist.report.json", ".cache/spec07/cy10-dag.scan.txt", ".cache/spec07/cy10-docs.scan.txt", ".cache/spec07/final-proof-index.txt"]
+
 [tasks."test:int:doc-force"]
 run = [
   "mise run --force test:int:doc-config",
   "mise run --force test:int:doc-storage",
   "mise run --force test:int:doc-ocr",
-  "mise run --force test:int:doc-search"
+  "mise run --force test:int:doc-search",
+  "mise run --force test:int:doc-surface",
+  "mise run --force test:int:doc-corpus",
+  "mise run --force test:int:doc-checklist"
 ]
 
 [tasks."test:int"]
@@ -276,7 +296,10 @@ run = [
   "mise run test:int:doc-config",
   "mise run test:int:doc-storage",
   "mise run test:int:doc-ocr",
-  "mise run test:int:doc-search"
+  "mise run test:int:doc-search",
+  "mise run test:int:doc-surface",
+  "mise run test:int:doc-corpus",
+  "mise run test:int:doc-checklist"
 ]
 
 [tasks."test:int:force"]
@@ -303,7 +326,10 @@ run = [
   "mise run --force test:int:doc-config",
   "mise run --force test:int:doc-storage",
   "mise run --force test:int:doc-ocr",
-  "mise run --force test:int:doc-search"
+  "mise run --force test:int:doc-search",
+  "mise run --force test:int:doc-surface",
+  "mise run --force test:int:doc-corpus",
+  "mise run --force test:int:doc-checklist"
 ]
 
 [tasks."golden:canonicalize"]
@@ -322,6 +348,12 @@ run = "bash ./mise-tasks/golden/truth"
 sources = ["scripts/**/*.ts", "tests/int/**/*.ts", "mise-tasks/golden/truth", "apps/**/*.ts", "packages/**/*.ts", "package.json", "pnpm-lock.yaml"]
 outputs = [".cache/mise-marks/golden__truth.ok", ".cache/spec06/replay-cli.assert.json", ".cache/spec06/replay-proof.live-run.json", ".cache/golden/replay.truth.json", ".cache/spec06/golden-truth.scan.txt", ".cache/spec06/golden-truth.artifacts.txt"]
 
+[tasks."golden:doc"]
+run = "bash ./mise-tasks/golden/doc"
+depends = ["test:int:doc-checklist"]
+sources = [".cache/spec07/final-proof-index.txt", "spec-0/07-htn.sqlite", "mise-tasks/golden/doc"]
+outputs = [".cache/mise-marks/golden__doc.ok", ".cache/spec07/final-proof-index.txt"]
+
 [tasks."golden:accept"]
 run = "bash ./mise-tasks/golden/accept"
 depends = ["golden:canonicalize"]
@@ -329,7 +361,7 @@ sources = [".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/accept
 outputs = [".cache/mise-marks/golden__accept.ok", "fixtures/golden/sample.session.canon.jsonl"]
 
 [tasks.golden]
-depends = ["golden:diff", "golden:truth"]
+depends = ["golden:diff", "golden:truth", "golden:doc"]
 
 [tasks."fault:kill-resume"]
 run = "bash ./mise-tasks/fault/kill-resume"
@@ -342,8 +374,14 @@ depends = ["svc:health"]
 sources = ["mise-tasks/fault/once-guard", "docker-compose.yml"]
 outputs = [".cache/mise-marks/fault__once-guard.ok", "/tmp/fault.once.log", "/tmp/fault.once.err"]
 
+[tasks."fault:doc-kill-resume"]
+run = "bash ./mise-tasks/fault/doc-kill-resume"
+depends = ["svc:health"]
+sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "scripts/harness/doc-*.ts", "fixtures/ocr/nasty/**/*.pdf", "fixtures/ocr/nasty/MANIFEST.json", "tests/int/**/*.ts", "mise-tasks/fault/doc-kill-resume", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/fault__doc-kill-resume.ok", ".cache/spec07/cy10-crash.ocr.json", ".cache/spec07/cy10-crash.index.json", ".cache/spec07/cy10-crash.report.json", ".cache/spec07/cy10-crash.scan.txt"]
+
 [tasks.fault]
-depends = ["fault:kill-resume", "fault:once-guard"]
+depends = ["fault:kill-resume", "fault:once-guard", "fault:doc-kill-resume"]
 
 [tasks."bench:latency"]
 run = "bash ./mise-tasks/bench/latency"

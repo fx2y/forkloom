@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg pnpm ast-grep
+
+mkdir -p .cache/spec07
+
+{
+	rg -n "doc/ingest|doc/search|doc/resolve|attachRunDocRoutes|parseRunDoc" \
+		apps/api/src/http apps/api/src/run
+	ast-grep --lang ts --pattern 'new $C($$$ARGS)' apps/api/src/http || true
+} > .cache/spec07/cy9-routes.scan.txt
+
+rg -n "data-run-doc|postRunDoc|hydrateRunDoc|toSpanKey|textContent|resolve" \
+	apps/web/src > .cache/spec07/cy9-web.scan.txt
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
+	tests/contract/contracts-v1.test.ts \
+	tests/unit/run-request-parsers.test.ts \
+	tests/unit/run-public-surface.test.ts \
+	tests/unit/run-doc-routes.test.ts \
+	> .cache/spec07/cy9-api-proof.txt
+
+{
+	rg -n "innerHTML" apps/web/src || true
+	MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
+		--root apps/web \
+		--config vitest.config.ts \
+		src/state/run-reducer.test.ts \
+		src/run-client.test.ts \
+		test/e2e-run-sandbox.test.ts
+} > .cache/spec07/cy9-ui-proof.txt
+
+{
+	printf 'cy9_gate=ok\n'
+	date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/cy9-gate.txt
+
+write_mark "test:int:doc-surface"
+echo "test:int:doc-surface ok"

@@ -25,6 +25,16 @@ for needle in "provenance+retrieval" "skip entity graph"; do
   fi
 done
 
+rg -n "doc ingest|GLM-OCR|nasty docs|kill.*resume|spec-0/07" \
+  README.md docs/adr docs/runbook mise-tasks/check/scope-guard \
+  > .cache/spec07/scope-guard.doc-ops.txt || true
+for needle in "doc ingest" "GLM-OCR" "nasty docs" "kill" "spec-0/07"; do
+  if ! rg -Fq "$needle" .cache/spec07/scope-guard.doc-ops.txt; then
+    echo "scope guard missing C5 operator flow proof phrase: $needle" >&2
+    exit 1
+  fi
+done
+
 rg -n "RunDocSearch|RunDocResolve|SpanRef" \
   contracts/v1 packages/contracts/src/check.ts apps/api/src/run/public-surface.ts \
   > .cache/spec07/scope-guard.doc-wire.txt

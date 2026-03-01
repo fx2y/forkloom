@@ -1,0 +1,16 @@
+{
+  "manifest": "nasty-docs-v1",
+  "version": "2026-03-01-corpus-hard",
+  "docs": [
+    {"id": "rotated-invoice", "path": "fixtures/ocr/nasty/01-rotated-invoice.pdf", "classes": ["rotated", "stamp"]},
+    {"id": "table-merged-cells", "path": "fixtures/ocr/nasty/02-table-merged-cells.pdf", "classes": ["table", "formula"]},
+    {"id": "formula-sheet", "path": "fixtures/ocr/nasty/03-formula-sheet.pdf", "classes": ["formula", "code"]},
+    {"id": "code-review-scan", "path": "fixtures/ocr/nasty/04-code-review-scan.pdf", "classes": ["code", "stamp"]},
+    {"id": "mixed-lang-letter", "path": "fixtures/ocr/nasty/05-mixed-lang-letter.pdf", "classes": ["lang", "rotated"]},
+    {"id": "watermark-contract", "path": "fixtures/ocr/nasty/06-watermark-contract.pdf", "classes": ["stamp", "table"]},
+    {"id": "receipt-multi-table", "path": "fixtures/ocr/nasty/07-receipt-multi-table.pdf", "classes": ["table", "lang"]},
+    {"id": "math-code-appendix", "path": "fixtures/ocr/nasty/08-math-code-appendix.pdf", "classes": ["formula", "code"]},
+    {"id": "rotated-stamp-passport", "path": "fixtures/ocr/nasty/09-rotated-stamp-passport.pdf", "classes": ["rotated", "stamp", "lang"]},
+    {"id": "bilingual-finance", "path": "fixtures/ocr/nasty/10-bilingual-finance.pdf", "classes": ["lang", "table", "formula"]}
+  ]
+}

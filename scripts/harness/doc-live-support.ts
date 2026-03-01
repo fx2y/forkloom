@@ -1,0 +1,394 @@
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import process from "node:process";
+import { Readable } from "node:stream";
+import type { Readable as NodeReadable } from "node:stream";
+import { DBOS } from "@dbos-inc/dbos-sdk";
+import { loadConfig } from "../../apps/api/src/config";
+import { PgDocRepo, type ParseModel, type DocRepo } from "../../apps/api/src/doc";
+import { InlineStepRunner } from "../../apps/api/src/durability";
+import type { ArtifactStore, PutObjectInput } from "../../apps/api/src/ports";
+import { PgArtifactRepo } from "../../apps/api/src/repo/postgres";
+import { ArtifactService } from "../../apps/api/src/service";
+import {
+	LazyDbosDocIngestWorkflowLauncher,
+	LazyDbosDocOcrWorkflowLauncher,
+	createDocOcrQueue,
+	registerDocOcrWorkflow,
+	registerIngestDocWorkflow,
+} from "../../apps/api/src/workflow";
+import { queryRows, sleep } from "./live-support";
+
+type StoredBlob = {
+	body: Buffer;
+	mime: string;
+};
+
+class MemoryArtifactStore implements ArtifactStore {
+	private readonly objects = new Map<string, StoredBlob>();
+
+	async ensureBucket(): Promise<void> {
+		return;
+	}
+
+	async putObject(input: PutObjectInput): Promise<void> {
+		this.objects.set(input.sha256, {
+			body: Buffer.from(input.body),
+			mime: input.mime,
+		});
+	}
+
+	async getObject(
+		sha256: string,
+	): Promise<{ body: NodeReadable; contentType: string | null }> {
+		const found = this.objects.get(sha256);
+		if (!found) {
+			throw new Error(`artifact blob missing in memory store: ${sha256}`);
+		}
+		return {
+			body: Readable.from(found.body) as NodeReadable,
+			contentType: found.mime,
+		};
+	}
+
+	async ping(): Promise<boolean> {
+		return true;
+	}
+}
+
+export type CrashStage = "none" | "ocr" | "index";
+export type CrashMode = "disabled" | "first" | "recover";
+
+type OcrResult = {
+	markdown: string;
+	layoutDetails: Array<
+		Array<{
+			index: number;
+			label: string;
+			bbox2d: [number, number, number, number];
+			content: string;
+			width: number;
+			height: number;
+		}>
+	>;
+	pageCount: number;
+	usage: {
+		inputPages: number;
+		outputTokens: number;
+		costMicros: number;
+		raw: Record<string, unknown>;
+	};
+	raw: Record<string, unknown>;
+};
+
+export type ParseSnapshot = {
+	parseId: string;
+	status: string;
+	usageCount: number;
+	chunkCount: number;
+	spanCount: number;
+	duplicateChunkIds: number;
+	chunkMdHashes: string[];
+};
+
+export type DocLiveContext = {
+	ingestLauncher: LazyDbosDocIngestWorkflowLauncher;
+	docRepo: PgDocRepo;
+	waitForDone(parseId: string, timeoutMs?: number): Promise<ParseModel>;
+	readSnapshot(parseId: string): Promise<ParseSnapshot>;
+	resetParse(parseId: string): Promise<void>;
+	shutdown(): Promise<void>;
+};
+
+function hashText(text: string): string {
+	return createHash("sha256").update(text).digest("hex");
+}
+
+function maybeCrashNow(input: {
+	stage: CrashStage;
+	mode: CrashMode;
+	expectedStage: Exclude<CrashStage, "none">;
+	crashMarkerPath: string | null;
+}): void {
+	if (
+		input.stage !== input.expectedStage ||
+		input.mode !== "first" ||
+		!input.crashMarkerPath
+	) {
+		return;
+	}
+	if (existsSync(input.crashMarkerPath)) {
+		return;
+	}
+	mkdirSync(dirname(input.crashMarkerPath), { recursive: true });
+	writeFileSync(input.crashMarkerPath, `${input.expectedStage}\n`, "utf8");
+	process.kill(process.pid, "SIGKILL");
+}
+
+function sampleLayoutResult(): OcrResult {
+	return {
+		markdown: [
+			"# Invoice 42",
+			"",
+			"Total: $19.99",
+			"",
+			"| Item | Qty | Price |",
+			"| --- | --- | --- |",
+			"| Widget | 2 | 9.995 |",
+			"",
+			"Formula: a^2 + b^2 = c^2",
+		].join("\n"),
+		layoutDetails: [
+			[
+				{
+					index: 0,
+					label: "H1",
+					bbox2d: [0, 0, 420, 32],
+					content: "Invoice 42",
+					width: 420,
+					height: 32,
+				},
+				{
+					index: 1,
+					label: "P",
+					bbox2d: [0, 36, 420, 72],
+					content: "Total: $19.99",
+					width: 420,
+					height: 36,
+				},
+				{
+					index: 2,
+					label: "TABLE",
+					bbox2d: [0, 74, 420, 170],
+					content: "Item Qty Price",
+					width: 420,
+					height: 96,
+				},
+				{
+					index: 3,
+					label: "FORMULA",
+					bbox2d: [0, 172, 420, 212],
+					content: "a^2 + b^2 = c^2",
+					width: 420,
+					height: 40,
+				},
+			],
+		],
+		pageCount: 1,
+		usage: {
+			inputPages: 1,
+			outputTokens: 64,
+			costMicros: 1200,
+			raw: {
+				mock: true,
+				provider: "zai",
+			},
+		},
+		raw: {
+			mock: true,
+			source: "doc-live-support",
+		},
+	};
+}
+
+function createCrashAwareRepo(
+	baseRepo: PgDocRepo,
+	input: {
+		stage: CrashStage;
+		mode: CrashMode;
+		crashMarkerPath: string | null;
+	},
+): Pick<DocRepo, "getParsePayload" | "upsertParse" | "recordParseLedger" | "markParseDone"> {
+	return {
+		getParsePayload: (parseId) => baseRepo.getParsePayload(parseId),
+		upsertParse: (value) => baseRepo.upsertParse(value),
+		recordParseLedger: (value) => baseRepo.recordParseLedger(value),
+		markParseDone: async (value) => {
+			maybeCrashNow({
+				stage: input.stage,
+				mode: input.mode,
+				expectedStage: "index",
+				crashMarkerPath: input.crashMarkerPath,
+			});
+			await baseRepo.markParseDone(value);
+		},
+	};
+}
+
+export function buildSamplePdfBytes(): Buffer {
+	return Buffer.from(
+		[
+			"%PDF-1.7",
+			"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+			"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+			"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> endobj",
+			"4 0 obj << /Length 64 >> stream",
+			"Invoice 42 /Type /Page Total 19.99",
+			"endstream endobj",
+			"%%EOF",
+		].join("\n"),
+		"utf8",
+	);
+}
+
+export function readCrashMarker(path: string): string | null {
+	if (!existsSync(path)) {
+		return null;
+	}
+	return readFileSync(path, "utf8").trim();
+}
+
+export async function createDocLiveContext(input: {
+	parserVersion: string;
+	normVersion: string;
+	crashStage: CrashStage;
+	crashMode: CrashMode;
+	crashMarkerPath?: string | undefined;
+}): Promise<DocLiveContext> {
+	const config = loadConfig();
+	const artifactRepo = new PgArtifactRepo({
+		databaseUrl: config.databaseUrl,
+		migrationsDir: "apps/api/migrations",
+	});
+	const docRepo = new PgDocRepo({
+		databaseUrl: config.databaseUrl,
+	});
+	const store = new MemoryArtifactStore();
+	await artifactRepo.runMigrations();
+
+	const artifactService = new ArtifactService({
+		repo: artifactRepo,
+		store,
+		s3Bucket: config.s3Bucket,
+		stepRunner: new InlineStepRunner(),
+	});
+	const ocrQueue = createDocOcrQueue({
+		workerConcurrency: config.docOcrQueueConcurrency,
+		rateLimitPerSecond: config.docOcrQueueRateLimitPerSecond,
+	});
+	const docOcrLauncher = new LazyDbosDocOcrWorkflowLauncher();
+	const docIngestLauncher = new LazyDbosDocIngestWorkflowLauncher();
+	const crashMarkerPath = input.crashMarkerPath ?? null;
+
+	const ocrWorkflow = registerDocOcrWorkflow({
+		repo: createCrashAwareRepo(docRepo, {
+			stage: input.crashStage,
+			mode: input.crashMode,
+			crashMarkerPath,
+		}),
+		artifactService,
+		zaiClient: {
+			layoutParsing: async () => {
+				maybeCrashNow({
+					stage: input.crashStage,
+					mode: input.crashMode,
+					expectedStage: "ocr",
+					crashMarkerPath,
+				});
+				return sampleLayoutResult();
+			},
+		},
+		config: {
+			model: config.docOcrModel,
+		},
+	});
+	const ingestWorkflow = registerIngestDocWorkflow({
+		repo: docRepo,
+		artifactService,
+		ocrWorkflow: docOcrLauncher,
+		config: {
+			endpoint: config.docOcrEndpoint,
+			model: config.docOcrModel,
+			parserVersion: input.parserVersion,
+			normVersion: input.normVersion,
+			pdfMaxBytes: config.docLimitPdfBytes,
+			pdfMaxPages: config.docLimitPdfPages,
+			imageMaxBytes: config.docLimitImageBytes,
+		},
+	});
+
+	DBOS.setConfig({
+		systemDatabaseUrl: config.databaseUrl,
+		runAdminServer: false,
+	});
+	await DBOS.launch();
+	docOcrLauncher.bind(ocrWorkflow, ocrQueue);
+	docIngestLauncher.bind(ingestWorkflow);
+
+	return {
+		ingestLauncher: docIngestLauncher,
+		docRepo,
+		waitForDone: async (parseId: string, timeoutMs = 90_000) => {
+			const deadline = Date.now() + timeoutMs;
+			while (Date.now() < deadline) {
+				const parse = await docRepo.getParse(parseId);
+				if (!parse) {
+					await sleep(200);
+					continue;
+				}
+				if (parse.status === "done") {
+					return parse;
+				}
+				if (parse.status === "failed") {
+					throw new Error(`parse failed: ${parseId}`);
+				}
+				await sleep(200);
+			}
+			throw new Error(`timed out waiting parse done: ${parseId}`);
+		},
+		readSnapshot: async (parseId: string): Promise<ParseSnapshot> => {
+			const parse = await docRepo.getParse(parseId);
+			if (!parse) {
+				throw new Error(`parse not found for snapshot: ${parseId}`);
+			}
+			const usageRows = await queryRows<{ count: string }>(
+				`select count(*)::text as count from ocr_usage where parse_id = $1`,
+				[parseId],
+			);
+			const chunkRows = await queryRows<{ chunk_id: string; md: string }>(
+				`select chunk_id, md from chunks where parse_id = $1 order by chunk_id`,
+				[parseId],
+			);
+			const spanRows = await queryRows<{ count: string }>(
+				`select count(*)::text as count
+				 from spans s
+				 join chunks c on c.chunk_id = s.chunk_id
+				 where c.parse_id = $1`,
+				[parseId],
+			);
+			const dupRows = await queryRows<{ count: string }>(
+				`select count(*)::text as count
+				 from (
+				 	select chunk_id
+				 	from chunks
+				 	where parse_id = $1
+				 	group by chunk_id
+				 	having count(*) > 1
+				 ) d`,
+				[parseId],
+			);
+			return {
+				parseId,
+				status: parse.status,
+				usageCount: Number(usageRows[0]?.count ?? "0"),
+				chunkCount: chunkRows.length,
+				spanCount: Number(spanRows[0]?.count ?? "0"),
+				duplicateChunkIds: Number(dupRows[0]?.count ?? "0"),
+				chunkMdHashes: chunkRows.map((row) => hashText(row.md)),
+			};
+		},
+		resetParse: async (parseId: string) => {
+			await queryRows(
+				`delete from parses
+				 where parse_id = $1`,
+				[parseId],
+			);
+		},
+		shutdown: async () => {
+			await DBOS.shutdown({ deregister: true });
+			await docRepo.close();
+			await artifactRepo.close();
+		},
+	};
+}

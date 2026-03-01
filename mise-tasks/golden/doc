@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds sqlite3 rg jq
+
+mkdir -p .cache/spec07
+
+if [[ ! -s .cache/spec07/final-proof-index.txt ]]; then
+	echo "missing final proof index: .cache/spec07/final-proof-index.txt" >&2
+	exit 1
+fi
+
+req_miss_count="$(sqlite3 spec-0/07-htn.sqlite "select count(*) from req r left join req_cover c on c.req_id=r.id and c.fit='full' where c.req_id is null;")"
+if [[ "$req_miss_count" != "0" ]]; then
+	echo "req full-cover miss count must be zero, got $req_miss_count" >&2
+	exit 1
+fi
+
+for needle in "req_full_cover_miss=0" "doc_checklist=" "doc_checklist_status=ok" "cy9_gate=" "cy10_corpus=" "cy10_corpus_status=ok" "cy10_crash=" "cy10_crash_status=ok"; do
+	if ! rg -q "$needle" .cache/spec07/final-proof-index.txt; then
+		echo "final-proof-index missing: $needle" >&2
+		exit 1
+	fi
+done
+
+jq -e '.status == "ok"' .cache/spec07/doc-checklist.report.json >/dev/null
+jq -e '.status == "ok"' .cache/spec07/cy10-corpus.verify.json >/dev/null
+jq -e '.status == "ok"' .cache/spec07/cy10-crash.report.json >/dev/null
+
+write_mark "golden:doc"
+echo "golden:doc ok"
