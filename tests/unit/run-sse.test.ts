@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { encodeRunEventFrame } from "../../apps/api/src/http/run-sse";
+import { describe, expect, it, vi } from "vitest";
+import {
+	encodeRunEventFrame,
+	streamRunEvents,
+} from "../../apps/api/src/http/run-sse";
 import { BufferedSseStream } from "../../apps/api/src/http/sse-buffer";
 
 class StubWritable {
@@ -32,6 +35,49 @@ class StubWritable {
 		for (const listener of listeners) {
 			listener();
 		}
+	}
+}
+
+class StubSseRequest {
+	private onClose: (() => void) | null = null;
+
+	on(_event: "close", listener: () => void): void {
+		this.onClose = listener;
+	}
+
+	emitClose(): void {
+		this.onClose?.();
+	}
+}
+
+class StubSseResponse {
+	public readonly headers = new Map<string, string>();
+	public readonly chunks: string[] = [];
+	public ended = false;
+
+	status(_code: number): this {
+		return this;
+	}
+
+	setHeader(name: string, value: string): void {
+		this.headers.set(name, value);
+	}
+
+	flushHeaders(): void {
+		return;
+	}
+
+	write(chunk: string): boolean {
+		this.chunks.push(chunk);
+		return true;
+	}
+
+	once(_event: "drain", _listener: () => void): void {
+		return;
+	}
+
+	end(): void {
+		this.ended = true;
 	}
 }
 
@@ -82,5 +128,48 @@ describe("run SSE helpers", () => {
 		expect(writable.chunks[1]).toContain('"reconnectFrom":0');
 		expect(writable.ended).toBe(true);
 		expect(stream.lastDeliveredSeq).toBe(1);
+	});
+
+	it("keeps polling after terminal events and advances cursor", async () => {
+		vi.useFakeTimers();
+		try {
+			const req = new StubSseRequest();
+			const res = new StubSseResponse();
+			const calls: number[] = [];
+			let pollCount = 0;
+
+			await streamRunEvents(req as never, res as never, {
+				sinceEventId: 0,
+				limit: 10,
+				listEvents: async (sinceEventId) => {
+					calls.push(sinceEventId);
+					pollCount += 1;
+					if (pollCount === 1) {
+						return [
+							{
+								runId: "run-1",
+								seq: 4,
+								t: "2026-03-01T00:00:00.000Z",
+								kind: "run_done",
+								payload: { resultText: "ok", stats: {}, artifacts: [] },
+							},
+						];
+					}
+					return [];
+				},
+			});
+
+			expect(calls).toEqual([0]);
+			expect(res.ended).toBe(false);
+
+			await vi.advanceTimersByTimeAsync(250);
+			expect(calls).toEqual([0, 4]);
+			expect(res.ended).toBe(false);
+
+			req.emitClose();
+			expect(res.ended).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

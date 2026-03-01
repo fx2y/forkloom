@@ -9,7 +9,11 @@ import {
 	parseSessionJsonl,
 } from "../pi";
 import type { RunModel, RunRepo } from "../run/ports";
-import type { RegisteredRunWorkflow, RunService } from "../run/service";
+import type {
+	RegisteredRunWorkflow,
+	RunService,
+	RunStepLedgerInput,
+} from "../run/service";
 import { WORKSPACE_SNAPSHOT_RULE, materializeSandboxInputs } from "../sandbox";
 import type {
 	ExecResult,
@@ -228,6 +232,67 @@ function toLedgerArtifactShas(exec: ExecResult): string[] {
 		unique.add(write.sha256);
 	}
 	return [...unique].sort((a, b) => a.localeCompare(b));
+}
+
+function buildFailureStepName(transient: boolean): string {
+	return transient ? "run_command_requeue" : "run_command_dead";
+}
+
+function buildFailedCommandLedger(input: {
+	run: RunModel;
+	sandbox: SandboxModel;
+	command: RunCommandModel;
+	runId: string;
+	startedAt?: string | undefined;
+	errorMessage: string;
+	transient: boolean;
+}): RunStepLedgerInput {
+	const endedAt = clockIso();
+	const exec: ExecResult = {
+		exitCode: -1,
+		status: "failed",
+		cmdList: toCommandList(input.command),
+		artifactReads: toArtifactReads(input.run),
+		artifactWrites: [],
+		stdoutTail: "",
+		stderrTail: "",
+		stdoutBytes: 0,
+		stderrBytes: 0,
+		timeoutSec: input.sandbox.spec.timeoutSec,
+		maxBytesOut: input.sandbox.spec.maxBytesOut,
+		startedAt: input.startedAt ?? endedAt,
+		endedAt,
+	};
+	const stepName = buildFailureStepName(input.transient);
+	const { stepKey, inHash, outHash } = buildStepHashes({
+		runId: input.runId,
+		stepName,
+		attempt: input.command.seq,
+		command: input.command,
+		exec,
+		sessionEntryIds: [],
+	});
+	return {
+		runId: input.runId,
+		stepName,
+		attempt: input.command.seq,
+		stepKey,
+		inHash,
+		outHash,
+		startedAt: exec.startedAt,
+		endedAt: exec.endedAt,
+		sessionEntryIds: [],
+		artifactShas: toLedgerArtifactShas(exec),
+		note: `step=${stepName} kind=${input.command.kind} status=failed`,
+		payload: {
+			commandSeq: input.command.seq,
+			commandKind: input.command.kind,
+			commandPayload: input.command.payload,
+			transient: input.transient,
+			error: input.errorMessage,
+			note: input.errorMessage,
+		},
+	};
 }
 
 function toReplayCommandKind(kind: string): RunCommandModel["kind"] {
@@ -793,24 +858,36 @@ export async function executeRunSandbox(
 			if (loadedPlan) {
 				if (!replayPayload && !isClaimOrLeaseLost(error)) {
 					const command = loadedPlan.command;
-					nextPendingSeq =
-						error instanceof RunTransientError
-							? await deps.sandboxRepo.requeueCommand({
-									runId,
-									workflowId,
-									commandSeq: command.seq,
-									error: normalizeErrorMessage(error),
-								})
-							: await deps.sandboxRepo.markCommandDead({
-									runId,
-									workflowId,
-									commandSeq: command.seq,
-									error: normalizeErrorMessage(error),
-								});
-					if (!(error instanceof RunTransientError)) {
+					const errorMessage = normalizeErrorMessage(error);
+					const transient = error instanceof RunTransientError;
+					nextPendingSeq = transient
+						? await deps.sandboxRepo.requeueCommand({
+								runId,
+								workflowId,
+								commandSeq: command.seq,
+								error: errorMessage,
+							})
+						: await deps.sandboxRepo.markCommandDead({
+								runId,
+								workflowId,
+								commandSeq: command.seq,
+								error: errorMessage,
+							});
+					await deps.runService.recordStepLedger(
+						buildFailedCommandLedger({
+							run: loadedPlan.run,
+							sandbox: loadedPlan.sandbox,
+							command,
+							runId,
+							startedAt: startedAt ?? undefined,
+							errorMessage,
+							transient,
+						}),
+					);
+					if (!transient) {
 						await deps.runService.failRun(runId, error);
 					}
-					if (nextPendingSeq != null && error instanceof RunTransientError) {
+					if (nextPendingSeq != null && transient) {
 						retryWorkflowId = toRunSandboxWorkflowId(runId, nextPendingSeq);
 					}
 				}

@@ -11,6 +11,18 @@ function toSeqList(events: RunEvent[]): number[] {
 	return events.map((event) => event.seq);
 }
 
+async function probeAutoClose(
+	stream: RunEventStream,
+	waitMs = 200,
+): Promise<boolean> {
+	return Promise.race([
+		stream.waitClosed().then(() => true),
+		new Promise<boolean>((resolve) => {
+			setTimeout(() => resolve(false), waitMs);
+		}),
+	]);
+}
+
 async function main(): Promise<void> {
 	const attachment = await uploadArtifactFile("README.md");
 	const spec = makeRunSpec({
@@ -67,8 +79,8 @@ async function main(): Promise<void> {
 			) {
 				throw new Error("live SSE replay emitted unexpected gap control frame");
 			}
-			await replay.waitClosed();
-			await secondTab.waitClosed();
+			const replayAutoClosed = await probeAutoClose(replay);
+			const secondTabAutoClosed = await probeAutoClose(secondTab);
 
 			await writeJson(".cache/test-int/run-sse.json", {
 				runId: spec.runId,
@@ -77,8 +89,8 @@ async function main(): Promise<void> {
 				replaySeqs: toSeqList(replayTail.events),
 				secondTabSeqs: toSeqList(secondEvents),
 				runState: await fetchRunState(spec.runId),
-				replayClosed: true,
-				secondTabClosed: true,
+				replayAutoClosed,
+				secondTabAutoClosed,
 			});
 		} finally {
 			replay.close();

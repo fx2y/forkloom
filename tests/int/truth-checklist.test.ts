@@ -27,8 +27,10 @@ describe("truth checklist gate", () => {
 		expect(parsed.issues.map((issue) => issue.key)).toEqual([
 			"missing_step_hashes",
 			"missing_step_links",
+			"missing_step_payloads",
 			"missing_artifacts",
 			"leaf_without_link",
+			"dead_command_without_step",
 		]);
 		expect(parsed.issues.every((issue) => issue.count === 0)).toBe(true);
 	});

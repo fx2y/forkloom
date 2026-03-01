@@ -145,6 +145,10 @@ class InMemoryRunRepo implements RunRepo {
 		throw new Error("unused");
 	}
 
+	async recordStepLedger(): Promise<void> {
+		throw new Error("unused");
+	}
+
 	async listSteps(): Promise<[]> {
 		return [];
 	}
@@ -446,8 +450,17 @@ describe("run SSE two-tab replay", () => {
 			"artifact_written",
 			"run_done",
 		]);
-		await expect(tab1.waitClosed()).resolves.toBeUndefined();
-		await expect(replay.waitClosed()).resolves.toBeUndefined();
+		const closureProbe = async (
+			stream: SseStream,
+		): Promise<"closed" | "open"> =>
+			Promise.race([
+				stream.waitClosed().then(() => "closed" as const),
+				new Promise<"open">((resolve) => {
+					setTimeout(() => resolve("open"), 150);
+				}),
+			]);
+		await expect(closureProbe(tab1)).resolves.toBe("open");
+		await expect(closureProbe(replay)).resolves.toBe("open");
 
 		const runStateResponse = await fetch(`${base}/runs/${RUN_ID}`);
 		expect(runStateResponse.status).toBe(200);

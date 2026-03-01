@@ -4,8 +4,10 @@ import { queryRows } from "./live-support";
 export type TruthChecklistIssueKey =
 	| "missing_step_hashes"
 	| "missing_step_links"
+	| "missing_step_payloads"
 	| "missing_artifacts"
-	| "leaf_without_link";
+	| "leaf_without_link"
+	| "dead_command_without_step";
 
 export type TruthChecklistIssue = {
 	key: TruthChecklistIssueKey;
@@ -61,6 +63,23 @@ const CHECKLIST_QUERIES: readonly QueryDef[] = [
 		`,
 	},
 	{
+		key: "missing_step_payloads",
+		text: `
+			select
+				s.run_id,
+				s.step_name,
+				s.attempt
+			from steps s
+			left join step_payloads sp
+			  on sp.run_id = s.run_id
+			 and sp.step_name = s.step_name
+			 and sp.attempt = s.attempt
+			where s.ended_at is not null
+			  and sp.run_id is null
+			order by s.run_id, s.step_name, s.attempt
+		`,
+	},
+	{
 		key: "missing_artifacts",
 		text: `
 			select
@@ -91,6 +110,24 @@ const CHECKLIST_QUERIES: readonly QueryDef[] = [
 			  	  and si.leaf_id = any(l.session_entry_ids)
 			  )
 			order by si.run_id
+		`,
+	},
+	{
+		key: "dead_command_without_step",
+		text: `
+			select
+				rc.run_id,
+				rc.seq as command_seq
+			from run_command rc
+			where rc.state = 'dead'
+			  and not exists (
+			  	select 1
+			  	from steps s
+			  	where s.run_id = rc.run_id
+			  	  and s.attempt = rc.seq
+			  	  and s.step_name = 'run_command_dead'
+			  )
+			order by rc.run_id, rc.seq
 		`,
 	},
 ];

@@ -20,7 +20,14 @@ import type { ArtifactService } from "../service";
 import { toRunSandboxWorkflowId } from "../workflow/run-sandbox";
 import type { RunEventKind, RunEventPayloadMap } from "./event";
 import type { RunPlan } from "./plan";
-import type { RunEventModel, RunModel, RunRepo, RunSpecModel } from "./ports";
+import type {
+	RecordStepLedgerInput,
+	RunEventModel,
+	RunModel,
+	RunRepo,
+	RunSpecModel,
+	RunStatus,
+} from "./ports";
 import { toRunEventContract, toRunStateContract } from "./projection";
 
 export type CompleteRunInput = {
@@ -31,28 +38,7 @@ export type CompleteRunInput = {
 	piSessionFile: string;
 };
 
-export type RunStepLedgerInput = {
-	runId: string;
-	stepName: string;
-	attempt: number;
-	stepKey: string;
-	inHash: string;
-	outHash?: string | undefined;
-	startedAt?: string | undefined;
-	endedAt?: string | undefined;
-	sessionEntryIds: string[];
-	artifactShas: string[];
-	note?: string | undefined;
-	payload?: Record<string, unknown> | undefined;
-	sessionIndex?:
-		| {
-				entryCount: number;
-				rootId?: string | undefined;
-				leafId?: string | undefined;
-				summaryEntryCount?: number | undefined;
-		  }
-		| undefined;
-};
+export type RunStepLedgerInput = RecordStepLedgerInput;
 
 export interface RunWorkflowLauncher {
 	startRunOnce(runId: string, opts: { workflowID: string }): Promise<void>;
@@ -147,6 +133,10 @@ function usesSandbox(spec: RunSpecModel, deps: RunServiceDeps): boolean {
 	return spec.profile != null && deps.sandbox != null;
 }
 
+function isTerminalStatus(status: RunStatus): boolean {
+	return status === "done" || status === "failed";
+}
+
 export class RunService {
 	constructor(private readonly deps: RunServiceDeps) {}
 
@@ -225,6 +215,16 @@ export class RunService {
 		dedupeKey?: string | undefined;
 	}): Promise<{ command: RunCommandModel; created: boolean }> {
 		const sandboxDeps = this.requireSandboxDeps();
+		const run = await this.deps.runRepo.getRun(input.runId);
+		if (!run) {
+			throw new HttpError(404, `run not found: ${input.runId}`);
+		}
+		if (isTerminalStatus(run.status)) {
+			throw new HttpError(
+				409,
+				`run is terminal (${run.status}); command queue is closed`,
+			);
+		}
 		const sandbox = await this.getSandboxOrThrow(input.runId, sandboxDeps);
 		if (sandbox.approvalState === "pending" && input.kind !== "approve") {
 			throw new HttpError(
@@ -449,41 +449,7 @@ export class RunService {
 	}
 
 	async recordStepLedger(input: RunStepLedgerInput): Promise<void> {
-		await this.deps.runRepo.createStep({
-			runId: input.runId,
-			stepName: input.stepName,
-			attempt: input.attempt,
-			stepKey: input.stepKey,
-			inHash: input.inHash,
-			outHash: input.outHash,
-			startedAt: input.startedAt,
-			endedAt: input.endedAt,
-		});
-		if (input.payload) {
-			await this.deps.runRepo.upsertStepPayload({
-				runId: input.runId,
-				stepName: input.stepName,
-				attempt: input.attempt,
-				payload: input.payload,
-			});
-		}
-		await this.deps.runRepo.upsertLink({
-			runId: input.runId,
-			stepName: input.stepName,
-			attempt: input.attempt,
-			sessionEntryIds: input.sessionEntryIds,
-			artifactShas: input.artifactShas,
-			note: input.note,
-		});
-		if (input.sessionIndex) {
-			await this.deps.runRepo.upsertSessionIndex({
-				runId: input.runId,
-				entryCount: input.sessionIndex.entryCount,
-				rootId: input.sessionIndex.rootId,
-				leafId: input.sessionIndex.leafId,
-				summaryEntryCount: input.sessionIndex.summaryEntryCount ?? 0,
-			});
-		}
+		await this.deps.runRepo.recordStepLedger(input);
 	}
 
 	private requireSandboxDeps(): SandboxDeps {

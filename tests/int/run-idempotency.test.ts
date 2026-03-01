@@ -116,6 +116,10 @@ class InMemoryRunRepo implements RunRepo {
 		throw new Error("unused");
 	}
 
+	async recordStepLedger(): Promise<void> {
+		throw new Error("unused");
+	}
+
 	async listSteps(): Promise<[]> {
 		return [];
 	}

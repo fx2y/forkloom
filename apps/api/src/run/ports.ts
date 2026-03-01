@@ -152,6 +152,29 @@ export type UpsertStepPayloadInput = {
 	payload: Record<string, unknown>;
 };
 
+export type RecordStepLedgerInput = {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	stepKey: string;
+	inHash: string;
+	outHash?: string | undefined;
+	startedAt?: string | undefined;
+	endedAt?: string | undefined;
+	sessionEntryIds: string[];
+	artifactShas: string[];
+	note?: string | undefined;
+	payload?: Record<string, unknown> | undefined;
+	sessionIndex?:
+		| {
+				entryCount: number;
+				rootId?: string | undefined;
+				leafId?: string | undefined;
+				summaryEntryCount?: number | undefined;
+		  }
+		| undefined;
+};
+
 export interface RunRepo {
 	createRun(
 		input: CreateRunInput,
@@ -179,6 +202,7 @@ export interface RunRepo {
 		input: UpsertSessionIndexInput,
 	): Promise<SessionIndexModel>;
 	upsertStepPayload(input: UpsertStepPayloadInput): Promise<StepPayloadModel>;
+	recordStepLedger(input: RecordStepLedgerInput): Promise<void>;
 	listSteps(runId: string): Promise<StepModel[]>;
 	listLinks(runId: string): Promise<LinkModel[]>;
 	listStepPayloads(runId: string): Promise<StepPayloadModel[]>;

@@ -1,6 +1,5 @@
 import type { RunEvent } from "@forkloom/contracts";
 import type { Request, Response } from "express";
-import { isTerminalRunEventKind } from "../run";
 import { streamBufferedEvents } from "./sse";
 
 export function encodeRunEventFrame(event: RunEvent): string {
@@ -24,6 +23,5 @@ export async function streamRunEvents(
 			chunk: encodeRunEventFrame(event),
 			deliveredSeq: event.seq,
 		}),
-		shouldClose: (event) => isTerminalRunEventKind(event.kind),
 	});
 }

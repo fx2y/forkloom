@@ -188,6 +188,8 @@ describe("executeRunSandbox", () => {
 
 	it("requeues transient command failures instead of dead-lettering them", async () => {
 		let requeued = 0;
+		let failedRunCount = 0;
+		const failureStepNames: string[] = [];
 		await expect(
 			executeRunSandbox(
 				RUN_ID,
@@ -227,9 +229,14 @@ describe("executeRunSandbox", () => {
 						beginRun: async () => {
 							throw new Error("not used");
 						},
-						failRun: async () => null,
+						failRun: async () => {
+							failedRunCount += 1;
+							return null;
+						},
 						linkArtifact: async () => undefined,
-						recordStepLedger: async () => undefined,
+						recordStepLedger: async (input) => {
+							failureStepNames.push(input.stepName);
+						},
 					},
 					artifactService: {
 						getArtifactBytes: async () => {
@@ -294,6 +301,138 @@ describe("executeRunSandbox", () => {
 		).rejects.toThrow("retry");
 
 		expect(requeued).toBe(1);
+		expect(failedRunCount).toBe(0);
+		expect(failureStepNames).toEqual(["run_command_requeue"]);
+	});
+
+	it("dead-letters permanent command failures with failed-step ledger evidence", async () => {
+		let dead = 0;
+		let failedRunCount = 0;
+		const failedSteps: Array<{
+			stepName: string;
+			attempt: number;
+			payload: Record<string, unknown> | undefined;
+		}> = [];
+		await expect(
+			executeRunSandbox(
+				RUN_ID,
+				{
+					runRepo: {
+						getRun: async () => ({
+							runId: RUN_ID,
+							status: "running",
+							spec: {
+								runId: RUN_ID,
+								scope: "team",
+								userMsg: "hi",
+								attachments: [],
+								profile: "safe",
+							},
+							createdAt: ISO,
+							updatedAt: ISO,
+							dbosWorkflowId: null,
+							piSessionId: null,
+							piSessionFile: null,
+							resultText: null,
+							resultStats: null,
+							error: null,
+						}),
+						listStepPayloads: async () => [],
+					},
+					runService: {
+						appendArtifactWritten: async () => {
+							throw new Error("not used");
+						},
+						appendPiEvent: async () => {
+							throw new Error("not used");
+						},
+						appendRunEvent: async () => {
+							throw new Error("not used");
+						},
+						beginRun: async () => {
+							throw new Error("not used");
+						},
+						failRun: async () => {
+							failedRunCount += 1;
+							return null;
+						},
+						linkArtifact: async () => undefined,
+						recordStepLedger: async (input) => {
+							failedSteps.push({
+								stepName: input.stepName,
+								attempt: input.attempt,
+								payload: input.payload,
+							});
+						},
+					},
+					artifactService: {
+						getArtifactBytes: async () => {
+							throw new Error("not used");
+						},
+						getArtifactMeta: async () => {
+							throw new Error("not used");
+						},
+						putArtifact: async () => {
+							throw new Error("not used");
+						},
+					},
+					sandboxRepo: {
+						acquireLease: async () => true,
+						claimNextCommand: async () => ({
+							runId: RUN_ID,
+							seq: 2,
+							kind: "prompt",
+							payload: { text: "hi" },
+							dedupeKey: null,
+							state: "claimed",
+							claimedBy: "wf",
+							claimedAt: ISO,
+							leaseExpiresAt: ISO,
+							doneAt: null,
+							error: null,
+							createdAt: ISO,
+						}),
+						getSandbox: async () => makeSandbox(),
+						getCurrentCommand: async () => null,
+						markApproved: async () => makeSandbox(),
+						markCommandDead: async () => {
+							dead += 1;
+							return null;
+						},
+						persistExec: async () => {
+							throw new Error("not used");
+						},
+						requeueCommand: async () => null,
+						releaseLease: async () => undefined,
+					},
+					backend: {
+						ensure: async () => makeSandbox(),
+						exec: async () => {
+							throw new Error("not used");
+						},
+						snapshot: async () => {
+							throw new Error("not used");
+						},
+						destroy: async () => null,
+					},
+					workflowLauncher: {
+						startRunOnce: async () => undefined,
+					},
+					createPiSession: async () => {
+						throw new Error("boom");
+					},
+					workflowId: "wf",
+				},
+				stepRunner,
+			),
+		).rejects.toThrow("boom");
+
+		expect(dead).toBe(1);
+		expect(failedRunCount).toBe(1);
+		expect(failedSteps).toHaveLength(1);
+		expect(failedSteps[0]?.stepName).toBe("run_command_dead");
+		expect(failedSteps[0]?.attempt).toBe(2);
+		expect(failedSteps[0]?.payload?.note).toBe("boom");
 	});
 
 	it("does not dead-letter commands when claim ownership is already lost", async () => {

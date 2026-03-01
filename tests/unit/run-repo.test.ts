@@ -5,6 +5,7 @@ import { PgRunRepo } from "../../apps/api/src/run/repo/postgres";
 type StubResult = {
 	rows?: unknown[] | undefined;
 	rowCount?: number | null | undefined;
+	error?: Error | undefined;
 };
 
 type Call = {
@@ -23,6 +24,9 @@ class StubClient {
 	): Promise<{ rows: TRow[]; rowCount: number | null }> {
 		this.calls.push({ sql, params });
 		const next = this.queue.shift() ?? {};
+		if (next.error) {
+			throw next.error;
+		}
 		return {
 			rows: (next.rows ?? []) as TRow[],
 			rowCount: next.rowCount ?? ((next.rows?.length ?? 0) > 0 ? 1 : 0),
@@ -311,6 +315,99 @@ describe("PgRunRepo", () => {
 		expect(pool.calls[2]?.params?.[3]).toBe(
 			JSON.stringify({ command: "prompt", seq: 1 }),
 		);
+	});
+
+	it("records step ledger rows atomically in one transaction", async () => {
+		const pool = new StubPool([
+			{},
+			{ rows: [stepRow()], rowCount: 1 },
+			{ rows: [stepPayloadRow()], rowCount: 1 },
+			{ rows: [linkRow()], rowCount: 1 },
+			{
+				rows: [
+					{
+						run_id: RUN_ID,
+						entry_count: 4,
+						root_id: "root",
+						leaf_id: "leaf",
+						summary_entry_count: 1,
+						updated_at: ISO,
+					},
+				],
+				rowCount: 1,
+			},
+			{},
+		]);
+		const repo = new PgRunRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		await repo.recordStepLedger({
+			runId: RUN_ID,
+			stepName: "run_command",
+			attempt: 1,
+			stepKey: "prompt:1",
+			inHash: "in",
+			outHash: "out",
+			startedAt: ISO,
+			endedAt: ISO,
+			sessionEntryIds: ["entry-1"],
+			artifactShas: ["a".repeat(64)],
+			note: "ok",
+			payload: { commandSeq: 1 },
+			sessionIndex: {
+				entryCount: 4,
+				rootId: "root",
+				leafId: "leaf",
+				summaryEntryCount: 1,
+			},
+		});
+
+		expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
+			"begin",
+			expect.stringContaining("insert into steps"),
+			expect.stringContaining("insert into step_payloads"),
+			expect.stringContaining("insert into links"),
+			expect.stringContaining("insert into sessions_index"),
+			"commit",
+		]);
+	});
+
+	it("rolls back step ledger write when any write in txn fails", async () => {
+		const pool = new StubPool([
+			{},
+			{ rows: [stepRow()], rowCount: 1 },
+			{ error: new Error("link write failed") },
+			{},
+		]);
+		const repo = new PgRunRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		await expect(
+			repo.recordStepLedger({
+				runId: RUN_ID,
+				stepName: "run_command_dead",
+				attempt: 2,
+				stepKey: "dead:2",
+				inHash: "in",
+				outHash: "out",
+				startedAt: ISO,
+				endedAt: ISO,
+				sessionEntryIds: [],
+				artifactShas: [],
+				note: "failed",
+			}),
+		).rejects.toThrow("link write failed");
+
+		expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
+			"begin",
+			expect.stringContaining("insert into steps"),
+			expect.stringContaining("insert into links"),
+			"rollback",
+		]);
 	});
 
 	it("assembles truth bundle from run + ledger tables", async () => {

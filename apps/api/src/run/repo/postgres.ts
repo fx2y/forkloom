@@ -5,6 +5,7 @@ import type {
 	CreateRunInput,
 	CreateStepInput,
 	LinkModel,
+	RecordStepLedgerInput,
 	RunArtifactLinkModel,
 	RunEventModel,
 	RunModel,
@@ -124,6 +125,18 @@ function requireRow<TRow>(
 		throw new Error(`${errPrefix}: missing row`);
 	}
 	return row;
+}
+
+function requireSingleRow<TRow>(
+	result: QueryResultLike<TRow>,
+	errPrefix: string,
+): TRow {
+	if (result.rowCount !== 1) {
+		throw new Error(
+			`${errPrefix}: expected 1 row, got ${String(result.rowCount)}`,
+		);
+	}
+	return requireRow(result, errPrefix);
 }
 
 function toRunModel(row: RunRow): RunModel {
@@ -380,7 +393,78 @@ export class PgRunRepo implements RunRepo {
 	}
 
 	async createStep(input: CreateStepInput): Promise<StepModel> {
-		const result = await this.pool.query<StepRow>(
+		return this.createStepFrom(this.pool, input);
+	}
+
+	async upsertLink(input: UpsertLinkInput): Promise<LinkModel> {
+		return this.upsertLinkFrom(this.pool, input);
+	}
+
+	async upsertSessionIndex(
+		input: UpsertSessionIndexInput,
+	): Promise<SessionIndexModel> {
+		return this.upsertSessionIndexFrom(this.pool, input);
+	}
+
+	async upsertStepPayload(
+		input: UpsertStepPayloadInput,
+	): Promise<StepPayloadModel> {
+		return this.upsertStepPayloadFrom(this.pool, input);
+	}
+
+	async recordStepLedger(input: RecordStepLedgerInput): Promise<void> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			await this.createStepFrom(client, {
+				runId: input.runId,
+				stepName: input.stepName,
+				attempt: input.attempt,
+				stepKey: input.stepKey,
+				inHash: input.inHash,
+				outHash: input.outHash,
+				startedAt: input.startedAt,
+				endedAt: input.endedAt,
+			});
+			if (input.payload) {
+				await this.upsertStepPayloadFrom(client, {
+					runId: input.runId,
+					stepName: input.stepName,
+					attempt: input.attempt,
+					payload: input.payload,
+				});
+			}
+			await this.upsertLinkFrom(client, {
+				runId: input.runId,
+				stepName: input.stepName,
+				attempt: input.attempt,
+				sessionEntryIds: input.sessionEntryIds,
+				artifactShas: input.artifactShas,
+				note: input.note,
+			});
+			if (input.sessionIndex) {
+				await this.upsertSessionIndexFrom(client, {
+					runId: input.runId,
+					entryCount: input.sessionIndex.entryCount,
+					rootId: input.sessionIndex.rootId,
+					leafId: input.sessionIndex.leafId,
+					summaryEntryCount: input.sessionIndex.summaryEntryCount ?? 0,
+				});
+			}
+			await client.query("commit");
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
+		}
+	}
+
+	private async createStepFrom(
+		queryable: Queryable,
+		input: CreateStepInput,
+	): Promise<StepModel> {
+		const result = await queryable.query<StepRow>(
 			`insert into steps(
 				 run_id, step_name, attempt, step_key, in_hash, out_hash, started_at, ended_at
 			 )
@@ -406,11 +490,14 @@ export class PgRunRepo implements RunRepo {
 				input.endedAt ?? null,
 			],
 		);
-		return toStepModel(requireRow(result, "create step"));
+		return toStepModel(requireSingleRow(result, "create step"));
 	}
 
-	async upsertLink(input: UpsertLinkInput): Promise<LinkModel> {
-		const result = await this.pool.query<LinkRow>(
+	private async upsertLinkFrom(
+		queryable: Queryable,
+		input: UpsertLinkInput,
+	): Promise<LinkModel> {
+		const result = await queryable.query<LinkRow>(
 			`insert into links(
 				 run_id, step_name, attempt, session_entry_ids, artifact_shas, note
 			 )
@@ -431,13 +518,14 @@ export class PgRunRepo implements RunRepo {
 				input.note ?? null,
 			],
 		);
-		return toLinkModel(requireRow(result, "upsert link"));
+		return toLinkModel(requireSingleRow(result, "upsert link"));
 	}
 
-	async upsertSessionIndex(
+	private async upsertSessionIndexFrom(
+		queryable: Queryable,
 		input: UpsertSessionIndexInput,
 	): Promise<SessionIndexModel> {
-		const result = await this.pool.query<SessionIndexRow>(
+		const result = await queryable.query<SessionIndexRow>(
 			`insert into sessions_index(
 				 run_id, entry_count, root_id, leaf_id, summary_entry_count
 			 )
@@ -458,13 +546,16 @@ export class PgRunRepo implements RunRepo {
 				input.summaryEntryCount ?? 0,
 			],
 		);
-		return toSessionIndexModel(requireRow(result, "upsert session index"));
+		return toSessionIndexModel(
+			requireSingleRow(result, "upsert session index"),
+		);
 	}
 
-	async upsertStepPayload(
+	private async upsertStepPayloadFrom(
+		queryable: Queryable,
 		input: UpsertStepPayloadInput,
 	): Promise<StepPayloadModel> {
-		const result = await this.pool.query<StepPayloadRow>(
+		const result = await queryable.query<StepPayloadRow>(
 			`insert into step_payloads(run_id, step_name, attempt, payload)
 			 values ($1, $2, $3, $4::jsonb)
 			 on conflict (run_id, step_name, attempt) do update
@@ -477,7 +568,7 @@ export class PgRunRepo implements RunRepo {
 				JSON.stringify(input.payload),
 			],
 		);
-		return toStepPayloadModel(requireRow(result, "upsert step payload"));
+		return toStepPayloadModel(requireSingleRow(result, "upsert step payload"));
 	}
 
 	async listSteps(runId: string): Promise<StepModel[]> {
