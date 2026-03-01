@@ -100,6 +100,24 @@ function ocrUsageRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe("PgDocRepo", () => {
+	it("loads parse payload with joined doc and optional usage", async () => {
+		const pool = new StubPool([
+			{ rows: [parseRow()], rowCount: 1 },
+			{ rows: [docRow()], rowCount: 1 },
+			{ rows: [ocrUsageRow()], rowCount: 1 },
+		]);
+		const repo = new PgDocRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const payload = await repo.getParsePayload(PARSE_ID);
+		expect(payload).not.toBeNull();
+		expect(payload?.parse.parseId).toBe(PARSE_ID);
+		expect(payload?.doc.docSha).toBe(DOC_SHA);
+		expect(payload?.usage?.vendor).toBe("zai");
+	});
+
 	it("records doc, alias, layout, and search rows in one transaction", async () => {
 		const pool = new StubPool([
 			{},

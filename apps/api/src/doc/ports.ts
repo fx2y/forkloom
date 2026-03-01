@@ -5,6 +5,8 @@ export type ParseStatus =
 	| "queued"
 	| "ocr_running"
 	| "ocr_done"
+	| "norm_done"
+	| "indexed"
 	| "indexing"
 	| "done"
 	| "failed";
@@ -91,6 +93,12 @@ export type OcrUsageModel = {
 	updatedAt: string;
 };
 
+export type ParsePayloadModel = {
+	doc: DocModel;
+	parse: ParseModel;
+	usage: OcrUsageModel | null;
+};
+
 export type ChunkSearchModel = {
 	chunkId: string;
 	embedding: number[] | null;
@@ -142,6 +150,7 @@ export type RecordParseLedgerInput = {
 export interface DocRepo {
 	getDoc(docSha: string): Promise<DocModel | null>;
 	getParse(parseId: string): Promise<ParseModel | null>;
+	getParsePayload(parseId: string): Promise<ParsePayloadModel | null>;
 	upsertDoc(input: UpsertDocInput): Promise<DocModel>;
 	upsertParse(input: UpsertParseInput): Promise<ParseModel>;
 	aliasArtifact(input: AliasArtifactInput): Promise<void>;

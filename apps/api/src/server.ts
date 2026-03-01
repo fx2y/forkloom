@@ -9,6 +9,7 @@ import {
 	buildActorPromptInput,
 } from "./actor";
 import { loadConfig } from "./config";
+import { PgDocRepo, ZaiLayoutClient } from "./doc";
 import {
 	DbosStepRunner,
 	InlineStepRunner,
@@ -37,7 +38,11 @@ import {
 import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
 import {
+	createDocOcrQueue,
+	LazyDbosDocOcrWorkflowLauncher,
 	registerActorTickWorkflow,
+	registerDocOcrWorkflow,
+	registerIngestDocWorkflow,
 	registerRunOnceWorkflow,
 	registerRunSandboxWorkflow,
 } from "./workflow";
@@ -60,6 +65,9 @@ async function bootstrap() {
 		databaseUrl: config.databaseUrl,
 	});
 	const actorRepo = new PgActorRepo({
+		databaseUrl: config.databaseUrl,
+	});
+	const docRepo = new PgDocRepo({
 		databaseUrl: config.databaseUrl,
 	});
 	const store = new S3ArtifactStore({
@@ -129,6 +137,7 @@ async function bootstrap() {
 		},
 	});
 	const actorWorkflowLauncher = new LazyDbosActorWorkflowLauncher();
+	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const actorService = new ActorService({
 		repo: actorRepo,
 		workflowLauncher: actorWorkflowLauncher,
@@ -181,9 +190,41 @@ async function bootstrap() {
 		processor: actorProcessor,
 		workflowLauncher: actorWorkflowLauncher,
 	});
+	const docOcrQueue = createDocOcrQueue({
+		workerConcurrency: config.docOcrQueueConcurrency,
+		rateLimitPerSecond: config.docOcrQueueRateLimitPerSecond,
+	});
+	const docOcrWorkflow = registerDocOcrWorkflow({
+		repo: docRepo,
+		artifactService: workflowArtifactService,
+		zaiClient: new ZaiLayoutClient({
+			endpoint: config.docOcrEndpoint,
+			apiKey: config.docOcrApiKey,
+			model: config.docOcrModel,
+		}),
+		config: {
+			model: config.docOcrModel,
+		},
+	});
+	const ingestDocWorkflow = registerIngestDocWorkflow({
+		repo: docRepo,
+		artifactService: workflowArtifactService,
+		ocrWorkflow: docOcrWorkflowLauncher,
+		config: {
+			endpoint: config.docOcrEndpoint,
+			model: config.docOcrModel,
+			parserVersion: config.docParserVersion,
+			normVersion: config.docNormVersion,
+			pdfMaxBytes: config.docLimitPdfBytes,
+			pdfMaxPages: config.docLimitPdfPages,
+			imageMaxBytes: config.docLimitImageBytes,
+		},
+	});
 	workflowLauncher.bindClassic(runWorkflow);
 	workflowLauncher.bindSandbox(runSandboxWorkflow);
 	actorWorkflowLauncher.bind(actorWorkflow);
+	docOcrWorkflowLauncher.bind(docOcrWorkflow, docOcrQueue);
+	void ingestDocWorkflow;
 	await launchDbos(config.databaseUrl);
 
 	const app = buildApiRouter({
@@ -203,12 +244,29 @@ async function bootstrap() {
 		}),
 	);
 
-	return { app, config, repo, runRepo, sandboxRepo, actorRepo, actorProcessor };
+	return {
+		app,
+		config,
+		repo,
+		runRepo,
+		sandboxRepo,
+		actorRepo,
+		docRepo,
+		actorProcessor,
+	};
 }
 
 async function main(): Promise<void> {
-	const { app, config, repo, runRepo, sandboxRepo, actorRepo, actorProcessor } =
-		await bootstrap();
+	const {
+		app,
+		config,
+		repo,
+		runRepo,
+		sandboxRepo,
+		actorRepo,
+		docRepo,
+		actorProcessor,
+	} = await bootstrap();
 
 	const server = app.listen(config.port, () => {
 		const payload = {
@@ -236,6 +294,7 @@ async function main(): Promise<void> {
 			await runRepo.close();
 			await sandboxRepo.close();
 			await actorRepo.close();
+			await docRepo.close();
 			await actorProcessor.closeAll();
 			await shutdownDbos();
 		})();

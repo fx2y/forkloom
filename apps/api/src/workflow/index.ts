@@ -24,6 +24,24 @@ export const ACTOR_TICK_WORKFLOW_STEPS = [
 
 export type ActorTickWorkflowStep = (typeof ACTOR_TICK_WORKFLOW_STEPS)[number];
 
+export const DOC_INGEST_WORKFLOW_STEPS = [
+	"acquire",
+	"classify",
+	"reserve",
+	"enqueue",
+] as const;
+
+export type DocIngestWorkflowStep = (typeof DOC_INGEST_WORKFLOW_STEPS)[number];
+
+export const DOC_OCR_WORKFLOW_STEPS = [
+	"loadParsePayload",
+	"markRunning",
+	"callLayoutParsing",
+	"persistOcr",
+] as const;
+
+export type DocOcrWorkflowStep = (typeof DOC_OCR_WORKFLOW_STEPS)[number];
+
 export { executeRunOnce, registerRunOnceWorkflow } from "./runonce";
 export type { RunOnceDeps } from "./runonce";
 export const RUN_SANDBOX_WORKFLOW_STEPS = [
@@ -46,3 +64,28 @@ export type {
 	ActorTickDeps,
 	RegisteredActorWorkflow,
 } from "./actor-tick";
+export { executeIngestDoc, registerIngestDocWorkflow } from "./doc-ingest";
+export type {
+	ExecuteIngestDocInput,
+	IngestDocDeps,
+	IngestDocOutput,
+	IngestDocWorkflowInput,
+	RegisteredIngestDocWorkflow,
+} from "./doc-ingest";
+export {
+	createDocOcrQueue,
+	DbosDocOcrWorkflowLauncher,
+	LazyDbosDocOcrWorkflowLauncher,
+	toDocOcrWorkflowId,
+} from "./doc-ocr-runtime";
+export type {
+	DocOcrQueueConfig,
+	DocOcrRequest,
+	DocOcrWorkflowLauncher,
+} from "./doc-ocr-runtime";
+export { executeDocOcr, registerDocOcrWorkflow } from "./doc-ocr";
+export type {
+	DocOcrDeps,
+	DocOcrOutput,
+	RegisteredDocOcrWorkflow,
+} from "./doc-ocr";

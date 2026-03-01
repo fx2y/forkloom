@@ -235,8 +235,8 @@ outputs = [".cache/mise-marks/test__int__doc-storage.ok", ".cache/spec07/cy4-gat
 [tasks."test:int:doc-ocr"]
 run = "bash ./mise-tasks/test/int/doc-ocr"
 depends = ["test:int:ocr-doc"]
-sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
-outputs = [".cache/mise-marks/test__int__doc-ocr.ok", ".cache/spec07/cy6-gate.txt"]
+sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "apps/api/src/server.ts", "tests/unit/doc-*.test.ts", "src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
+outputs = [".cache/mise-marks/test__int__doc-ocr.ok", ".cache/spec07/cy5-register.scan.txt", ".cache/spec07/cy5-queue.scan.txt", ".cache/spec07/cy5-status.scan.txt", ".cache/spec07/cy5-gate.txt", ".cache/spec07/cy6-ocr-step.scan.txt", ".cache/spec07/cy6-ocr-persist.scan.txt", ".cache/spec07/cy6-ocr-proof.txt", ".cache/spec07/cy6-fetch.ast.txt", ".cache/spec07/cy6-gate.txt"]
 
 [tasks."test:int:doc-force"]
 run = [

@@ -7,6 +7,8 @@ export {
 	buildChunkMdAlias,
 	buildParseJsonAlias,
 	buildParseMdAlias,
+	buildParseRawJsonAlias,
+	buildParseRawMdAlias,
 	buildRawAlias,
 } from "./alias";
 export {
@@ -20,3 +22,13 @@ export {
 export { classifyDoc, countPdfPages } from "./classify";
 export { DocAcquireService } from "./acquire";
 export type { AcquireDocInput, AcquireDocResult } from "./acquire";
+export {
+	canonicalParseStatus,
+	canTransitionParseStatus,
+	isOcrDoneStatus,
+	transitionParseStatus,
+} from "./status";
+export type { ParseStatusState } from "./status";
+export { normalizeJsonValue, normalizeMarkdown } from "./normalize";
+export { ZaiLayoutClient } from "./zai-client";
+export type { ZaiLayoutResult } from "./zai-client";

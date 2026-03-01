@@ -26,6 +26,14 @@ export function buildParseJsonAlias(parseId: string): string {
 	return `parse/${requireSha("parseId", parseId)}.json`;
 }
 
+export function buildParseRawMdAlias(parseId: string): string {
+	return `parse/${requireSha("parseId", parseId)}.md.raw`;
+}
+
+export function buildParseRawJsonAlias(parseId: string): string {
+	return `parse/${requireSha("parseId", parseId)}.json.raw`;
+}
+
 export function buildChunkMdAlias(chunkId: string): string {
 	return `chunks/${requireNonEmpty("chunkId", chunkId)}.md`;
 }

@@ -7,6 +7,7 @@ import type {
 	DocModel,
 	DocRepo,
 	OcrUsageModel,
+	ParsePayloadModel,
 	ParseModel,
 	RecordParseLedgerInput,
 	UpsertBlockInput,
@@ -146,6 +147,21 @@ function toParseModel(row: ParseRow): ParseModel {
 	};
 }
 
+function toOcrUsageModel(row: OcrUsageRow): OcrUsageModel {
+	return {
+		parseId: row.parse_id,
+		vendor: row.vendor,
+		model: row.model,
+		inputPages: row.input_pages,
+		inputBytes: Number(row.input_bytes),
+		outputTokens: row.output_tokens,
+		costMicros: Number(row.cost_micros),
+		payload: row.payload ?? {},
+		createdAt: asIsoString(row.created_at),
+		updatedAt: asIsoString(row.updated_at),
+	};
+}
+
 export class PgDocRepo implements DocRepo {
 	private readonly pool: PoolLike;
 	private readonly closePool: () => Promise<void>;
@@ -181,6 +197,29 @@ export class PgDocRepo implements DocRepo {
 		);
 		const row = result.rows[0];
 		return row ? toParseModel(row) : null;
+	}
+
+	async getParsePayload(parseId: string): Promise<ParsePayloadModel | null> {
+		const parse = await this.getParse(parseId);
+		if (!parse) {
+			return null;
+		}
+		const doc = await this.getDoc(parse.docSha);
+		if (!doc) {
+			throw new Error(`parse payload missing doc: ${parse.docSha}`);
+		}
+		const usageResult = await this.pool.query<OcrUsageRow>(
+			`select parse_id, vendor, model, input_pages, input_bytes, output_tokens,
+			        cost_micros, payload, created_at, updated_at
+			 from ocr_usage
+			 where parse_id = $1`,
+			[parseId],
+		);
+		return {
+			doc,
+			parse,
+			usage: usageResult.rows[0] ? toOcrUsageModel(usageResult.rows[0]) : null,
+		};
 	}
 
 	async upsertDoc(input: UpsertDocInput): Promise<DocModel> {
@@ -513,18 +552,7 @@ export class PgDocRepo implements DocRepo {
 			],
 		);
 		const row = requireSingleRow(result, "upsert ocr usage");
-		return {
-			parseId: row.parse_id,
-			vendor: row.vendor,
-			model: row.model,
-			inputPages: row.input_pages,
-			inputBytes: Number(row.input_bytes),
-			outputTokens: row.output_tokens,
-			costMicros: Number(row.cost_micros),
-			payload: row.payload ?? {},
-			createdAt: asIsoString(row.created_at),
-			updatedAt: asIsoString(row.updated_at),
-		};
+		return toOcrUsageModel(row);
 	}
 
 	private async upsertChunkSearchFrom(
