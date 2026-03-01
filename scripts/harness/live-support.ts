@@ -13,6 +13,23 @@ export type SseReadResult<TEvent> = {
 	controlFrames: SseFrame[];
 };
 
+type RetryFetchInput = {
+	url: string | URL;
+	label: string;
+	init?: RequestInit | undefined;
+	maxAttempts?: number | undefined;
+	retryDelayMs?: number | undefined;
+	retryOnStatuses?: readonly number[] | undefined;
+	retryOnAny5xx?: boolean | undefined;
+};
+
+type ApiHealthStableInput = {
+	timeoutMs?: number | undefined;
+	pollIntervalMs?: number | undefined;
+	consecutiveSuccesses?: number | undefined;
+	requireDeps?: boolean | undefined;
+};
+
 type JsonEventStreamOptions = {
 	sinceEventId?: number | undefined;
 	lastEventId?: number | undefined;
@@ -23,6 +40,12 @@ const DEFAULT_API_ORIGIN = "http://127.0.0.1:8080";
 const DEFAULT_DATABASE_URL =
 	"postgresql://postgres:postgres@127.0.0.1:5432/agentos";
 const DEFAULT_SSE_IDLE_TIMEOUT_MS = 15_000;
+const DEFAULT_RETRY_ATTEMPTS = 8;
+const DEFAULT_RETRY_DELAY_MS = 350;
+const DEFAULT_RETRYABLE_STATUSES = [502, 503, 504] as const;
+const DEFAULT_HEALTH_TIMEOUT_MS = 90_000;
+const DEFAULT_HEALTH_INTERVAL_MS = 500;
+const DEFAULT_HEALTH_CONSECUTIVE_SUCCESSES = 3;
 
 function databaseUrl(): string {
 	return (
@@ -38,6 +61,10 @@ export function apiOrigin(): string {
 
 export function asErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+export function sleep(delayMs: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 export async function writeJson(
@@ -68,6 +95,114 @@ export async function readArrayBuffer(
 		throw new Error(`${label} failed (${response.status}): ${body}`);
 	}
 	return response.arrayBuffer();
+}
+
+function isRetryableStatus(status: number, input: RetryFetchInput): boolean {
+	if (input.retryOnAny5xx !== false && status >= 500) {
+		return true;
+	}
+	const retryOnStatuses = input.retryOnStatuses ?? DEFAULT_RETRYABLE_STATUSES;
+	return retryOnStatuses.includes(status);
+}
+
+export async function fetchWithRetry(
+	input: RetryFetchInput,
+): Promise<Response> {
+	const maxAttempts = Math.max(1, input.maxAttempts ?? DEFAULT_RETRY_ATTEMPTS);
+	const retryDelayMs = Math.max(
+		1,
+		input.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
+	);
+	let lastError: unknown = null;
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		try {
+			const response = await fetch(input.url, input.init);
+			if (!isRetryableStatus(response.status, input)) {
+				return response;
+			}
+			lastError = new Error(
+				`${input.label} retryable status ${response.status} (attempt ${attempt}/${maxAttempts})`,
+			);
+		} catch (error: unknown) {
+			lastError = error;
+		}
+		if (attempt < maxAttempts) {
+			await sleep(retryDelayMs);
+		}
+	}
+	throw new Error(
+		`${input.label} failed after ${maxAttempts} attempts: ${asErrorMessage(lastError)}`,
+	);
+}
+
+export async function fetchJsonWithRetry<T>(
+	input: RetryFetchInput,
+): Promise<T> {
+	const response = await fetchWithRetry(input);
+	return readJson<T>(response, input.label);
+}
+
+export async function waitForApiHealthyStable(
+	input: ApiHealthStableInput = {},
+): Promise<void> {
+	const timeoutMs = Math.max(
+		1_000,
+		input.timeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS,
+	);
+	const pollIntervalMs = Math.max(
+		100,
+		input.pollIntervalMs ?? DEFAULT_HEALTH_INTERVAL_MS,
+	);
+	const consecutiveSuccesses = Math.max(
+		1,
+		input.consecutiveSuccesses ?? DEFAULT_HEALTH_CONSECUTIVE_SUCCESSES,
+	);
+	const requireDeps = input.requireDeps ?? false;
+	const deadline = Date.now() + timeoutMs;
+	let attempts = 0;
+	let healthyStreak = 0;
+	let lastFailure = "none";
+	while (Date.now() < deadline) {
+		attempts += 1;
+		try {
+			const response = await fetch(new URL("/health", apiOrigin()));
+			if (!response.ok) {
+				healthyStreak = 0;
+				lastFailure = `status=${response.status}`;
+			} else if (requireDeps) {
+				const payload = (await response.json()) as {
+					deps?: Record<string, unknown> | undefined;
+				};
+				const depsOk =
+					typeof payload.deps?.pg === "boolean" &&
+					payload.deps.pg === true &&
+					typeof payload.deps.s3 === "boolean" &&
+					payload.deps.s3 === true &&
+					typeof payload.deps.pi === "boolean" &&
+					payload.deps.pi === true &&
+					typeof payload.deps.api === "boolean" &&
+					payload.deps.api === true;
+				if (!depsOk) {
+					healthyStreak = 0;
+					lastFailure = "deps_not_ready";
+				} else {
+					healthyStreak += 1;
+				}
+			} else {
+				healthyStreak += 1;
+			}
+			if (healthyStreak >= consecutiveSuccesses) {
+				return;
+			}
+		} catch (error: unknown) {
+			healthyStreak = 0;
+			lastFailure = asErrorMessage(error);
+		}
+		await sleep(pollIntervalMs);
+	}
+	throw new Error(
+		`api health quorum not reached after ${attempts} probes (need ${consecutiveSuccesses} consecutive successes; last failure: ${lastFailure})`,
+	);
 }
 
 export function parseSseFrame(block: string): SseFrame | null {

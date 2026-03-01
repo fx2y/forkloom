@@ -1,9 +1,9 @@
 ---
 paths: ["**/*"]
 ---
-# Global Invariants
-- Runner: `mise` ONLY. `MISE_EXPERIMENTAL=1`. Zero npm/make/shell orchestration.
-- Config: `fnox` ONLY. `.env*` BANNED. Hydrated via `bootstrap:secrets`.
-- Repro: `mise.lock` strictness. State: Immutable CAS. TS determinism > opaque shell scripts.
-- PI Auth: `PI_RPC_STRICT_REAL=1` needs host `~/.pi` writable. Blank PI output is valid.
-- Guard: `check:lesson-guard` enforces rules. Rule deltas MANDATORY for operation script edits. CI=range; local=tree+staged.
+# Global
+- **Runner**: `mise` ONLY. Zero npm/make orchestration.
+- **Config**: `fnox` ONLY. `.env*` BANNED. Hydrate via `bootstrap:secrets`.
+- **State**: Immutable CAS. TS determinism over opaque shell scripts.
+- **Auth**: `PI_RPC_STRICT_REAL=1` needs writable host `~/.pi`. Blank PI output valid.
+- **Guards**: `check:lesson-guard` enforces rules on code change. Rule deltas MANDATORY for operation script edits.

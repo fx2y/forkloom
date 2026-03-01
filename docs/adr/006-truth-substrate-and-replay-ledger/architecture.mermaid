@@ -1,0 +1,49 @@
+%% Architecture of Truth Substrate & Canonical Joins
+graph TD
+    subgraph Truth_Triple[Truth Triple Substrate]
+        DB[(Postgres Ledger)]
+        CAS[(CAS Blobs)]
+        JL[(PI Session JSONL)]
+    end
+
+    subgraph DB_Schema[Ledger Schema]
+        runs
+        steps
+        links
+        sessions_index
+        step_payloads
+    end
+
+    DB --- DB_Schema
+
+    subgraph Workflow_Boundaries[DBOS Execution Seam]
+        W[DBOS Workflow Steps]
+        RSL[runRepo.recordStepLedger Txn]
+        RSL -->|Atomic Writes| DB_Schema
+        W --> RSL
+        W -->|Strict C14N in/out hashes| RSL
+        W -->|Reserve-first metadata| CAS
+        W -->|Tree Adjacency Laws| JL
+    end
+
+    subgraph Output_Seams[Canonical Read Interfaces]
+        API[/runs/:runId/truth]
+        API -->|1. TruthBundle Join| DB_Schema
+        API -->|2. Artifact Pointers| CAS
+        API -->|3. Leaf/Root Refs| JL
+
+        SSE[Infinite SSE Buffer]
+        SSE -.->|reconnectFrom Cursor| API
+    end
+
+    subgraph Clients[Consumers]
+        UI[Web Provenance UX]
+        UI -->|Fetch & Hydrate| API
+        UI -.->|Zero Heuristics / Text Node Only| UI
+        Replay[R0 / R-Debug Replay]
+        Replay -->|Read step_payloads| API
+        Ops[Operator SQL Pack] -->|Drift Query RCA| DB_Schema
+    end
+
+    classDef strict stroke:#ff0000,stroke-width:2px;
+    class W,API,RSL strict;

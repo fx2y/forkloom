@@ -1,8 +1,8 @@
 ---
 paths: ["src/**/*.tsx", "src/**/*.css", "web/**", "apps/**/src/**/*.tsx"]
 ---
-# UI & State Rules
-- Security: NO dynamic `innerHTML`. Render DOM text nodes/attributes ONLY.
-- Truth: Durable projections (WILL-RUN, files, approval) + append-only `ActorEvent` source-of-truth. NO runtime guesses.
-- SSE: Infinite stream. Client owns disconnect + cursor replay via `Last-Event-ID`. NO auto-close.
-- Controls: Export valid ONLY after `workspaceRef` snapshot. Pre-approve priv commands reject HTTP 409.
+# UI/State
+- **Security**: NO `innerHTML`. DOM text nodes/attributes ONLY.
+- **Truth**: Strict derivation from durable projections. No heuristic edge invention.
+- **SSE**: Infinite stream. Client manages disconnect/reconnect via `Last-Event-ID`. NO auto-close on terminal events.
+- **Controls**: Export needs `workspaceRef` snapshot. Pre-approve priv commands reject HTTP 409. Terminal runs reject 409 on command queue.

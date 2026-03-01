@@ -10,8 +10,9 @@ import {
 	JsonEventStream as SharedJsonEventStream,
 	type SseReadResult,
 	apiOrigin,
+	fetchJsonWithRetry,
 	queryRows,
-	readJson,
+	waitForApiHealthyStable,
 	writeJson,
 } from "./live-support";
 
@@ -25,29 +26,43 @@ export function makeActorSpec(actorId: string, name = "ops"): ActorSpec {
 }
 
 export async function createActor(spec: ActorSpec): Promise<ActorState> {
-	const response = await fetch(`${apiOrigin()}/actors`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(spec),
+	return fetchJsonWithRetry<ActorState>({
+		url: `${apiOrigin()}/actors`,
+		label: `create actor ${spec.actorId}`,
+		init: {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(spec),
+		},
+		maxAttempts: 10,
+		retryDelayMs: 400,
 	});
-	return readJson<ActorState>(response, `create actor ${spec.actorId}`);
 }
 
 export async function fetchActorState(actorId: string): Promise<ActorState> {
-	const response = await fetch(`${apiOrigin()}/actors/${actorId}`);
-	return readJson<ActorState>(response, `fetch actor ${actorId}`);
+	return fetchJsonWithRetry<ActorState>({
+		url: `${apiOrigin()}/actors/${actorId}`,
+		label: `fetch actor ${actorId}`,
+		maxAttempts: 8,
+		retryDelayMs: 300,
+	});
 }
 
 export async function postActorMessage(
 	actorId: string,
 	payload: MailboxPost,
 ): Promise<ActorEvent> {
-	const response = await fetch(`${apiOrigin()}/actors/${actorId}/messages`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(payload),
+	return fetchJsonWithRetry<ActorEvent>({
+		url: `${apiOrigin()}/actors/${actorId}/messages`,
+		label: `post actor message ${actorId}`,
+		init: {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(payload),
+		},
+		maxAttempts: 10,
+		retryDelayMs: 350,
 	});
-	return readJson<ActorEvent>(response, `post actor message ${actorId}`);
 }
 
 export async function uploadArtifact(input: {
@@ -61,32 +76,26 @@ export async function uploadArtifact(input: {
 		new Blob([input.body], { type: input.mime ?? "text/plain" }),
 		input.filename,
 	);
-	const response = await fetch(`${apiOrigin()}/artifacts`, {
-		method: "POST",
-		body: form,
+	return fetchJsonWithRetry<{ sha256: string }>({
+		url: `${apiOrigin()}/artifacts`,
+		label: `upload ${input.filename}`,
+		init: {
+			method: "POST",
+			body: form,
+		},
+		maxAttempts: 8,
+		retryDelayMs: 300,
 	});
-	return readJson<{ sha256: string }>(response, `upload ${input.filename}`);
-}
-
-export async function waitForApiReady(timeoutMs = 30_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		try {
-			const response = await fetch(`${apiOrigin()}/health`);
-			if (response.ok) {
-				return;
-			}
-		} catch {
-			// keep polling until the deadline
-		}
-		await new Promise((resolve) => setTimeout(resolve, 250));
-	}
-	throw new Error("api did not become healthy after restart");
 }
 
 export async function restartApi(): Promise<void> {
 	await execFileAsync("docker", ["compose", "restart", "api"]);
-	await waitForApiReady();
+	await waitForApiHealthyStable({
+		timeoutMs: 120_000,
+		consecutiveSuccesses: 3,
+		pollIntervalMs: 500,
+		requireDeps: true,
+	});
 }
 
 type ActorEventRow = {

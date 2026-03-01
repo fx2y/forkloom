@@ -200,8 +200,9 @@ outputs = [".cache/mise-marks/test__int__run-sandbox-durability.ok", ".cache/tes
 
 [tasks."test:int:run-replay"]
 run = "bash ./mise-tasks/test/int/run-replay"
+depends = ["svc:health"]
 sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-replay"]
-outputs = [".cache/mise-marks/test__int__run-replay.ok", ".cache/spec06/replay-cli.assert.json"]
+outputs = [".cache/mise-marks/test__int__run-replay.ok", ".cache/spec06/replay-cli.assert.json", ".cache/spec06/replay-proof.live-run.json"]
 
 [tasks."test:int:truth-checklist"]
 run = "bash ./mise-tasks/test/int/truth-checklist"
@@ -282,7 +283,7 @@ outputs = [".cache/mise-marks/golden__diff.ok"]
 [tasks."golden:truth"]
 run = "bash ./mise-tasks/golden/truth"
 sources = ["scripts/**/*.ts", "tests/int/**/*.ts", "mise-tasks/golden/truth", "apps/**/*.ts", "packages/**/*.ts", "package.json", "pnpm-lock.yaml"]
-outputs = [".cache/mise-marks/golden__truth.ok", ".cache/spec06/replay-cli.assert.json", ".cache/golden/replay.truth.json", ".cache/spec06/golden-truth.scan.txt", ".cache/spec06/golden-truth.artifacts.txt"]
+outputs = [".cache/mise-marks/golden__truth.ok", ".cache/spec06/replay-cli.assert.json", ".cache/spec06/replay-proof.live-run.json", ".cache/golden/replay.truth.json", ".cache/spec06/golden-truth.scan.txt", ".cache/spec06/golden-truth.artifacts.txt"]
 
 [tasks."golden:accept"]
 run = "bash ./mise-tasks/golden/accept"

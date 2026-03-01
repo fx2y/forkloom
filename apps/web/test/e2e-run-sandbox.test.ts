@@ -167,6 +167,43 @@ function createApiFetch(apiOrigin: string): typeof fetch {
 	};
 }
 
+async function waitForLiveApiHealth(
+	apiOrigin: string,
+	input: {
+		timeoutMs?: number;
+		pollIntervalMs?: number;
+		consecutiveSuccesses?: number;
+	} = {},
+): Promise<void> {
+	const timeoutMs = input.timeoutMs ?? 90_000;
+	const pollIntervalMs = input.pollIntervalMs ?? 500;
+	const consecutiveSuccesses = input.consecutiveSuccesses ?? 3;
+	const deadline = Date.now() + timeoutMs;
+	let streak = 0;
+	let lastFailure = "none";
+	while (Date.now() < deadline) {
+		try {
+			const health = await fetch(new URL("/health", apiOrigin));
+			if (health.ok) {
+				streak += 1;
+				if (streak >= consecutiveSuccesses) {
+					return;
+				}
+			} else {
+				streak = 0;
+				lastFailure = `status=${health.status}`;
+			}
+		} catch (error: unknown) {
+			streak = 0;
+			lastFailure = error instanceof Error ? error.message : String(error);
+		}
+		await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+	}
+	throw new Error(
+		`api health stability failed: need ${consecutiveSuccesses} consecutive successes, last=${lastFailure}`,
+	);
+}
+
 describe("web run sandbox flow", () => {
 	afterEach(() => {
 		document.body.innerHTML = "";
@@ -403,10 +440,7 @@ describe("web run sandbox flow", () => {
 		async () => {
 			const apiOrigin =
 				process.env.FORKLOOM_API_ORIGIN ?? "http://localhost:8080";
-			const health = await fetch(new URL("/health", apiOrigin));
-			if (!health.ok) {
-				throw new Error(`api health failed (${health.status})`);
-			}
+			await waitForLiveApiHealth(apiOrigin);
 
 			const runId = createRunId();
 			const root = document.createElement("div");

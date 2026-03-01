@@ -7,8 +7,13 @@ async function main(): Promise<void> {
 	const report = await collectOpsSqlPack(runIdArg ? { runId: runIdArg } : {});
 	const outputPath = outputArg ?? ".cache/spec06/ops-sql-pack.json";
 	await writeJson(outputPath, report as Record<string, unknown>);
+	if (report.status !== "ok") {
+		throw new Error(
+			`ops-sql-pack fail: ${report.failures.map((failure) => failure.code).join(",")}`,
+		);
+	}
 	console.log(
-		`ops-sql-pack ok: targetRunId=${report.targetRunId ?? "none"} recentRuns=${report.recentRuns.length} driftRows=${report.driftRows.length}`,
+		`ops-sql-pack ${report.status}: targetRunId=${report.targetRunId ?? "none"} recentRuns=${report.recentRuns.length} driftRows=${report.driftRows.length}`,
 	);
 }
 

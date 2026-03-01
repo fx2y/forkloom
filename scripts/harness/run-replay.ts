@@ -1,11 +1,12 @@
 import { pathToFileURL } from "node:url";
 import type { TruthBundle } from "@forkloom/contracts";
 import {
+	type ReplayStepPayload,
 	assertEqualShaSets,
 	listReplayStepPayloads,
 	readReplayConfig,
 } from "../../apps/api/src/workflow/replay";
-import { apiOrigin, readJson, writeJson } from "./live-support";
+import { apiOrigin, fetchJsonWithRetry, writeJson } from "./live-support";
 
 function usage(): never {
 	throw new Error(
@@ -15,11 +16,14 @@ function usage(): never {
 
 function toStepArtifactSet(
 	truth: TruthBundle,
-	attempts: Set<number>,
+	replaySteps: ReplayStepPayload[],
 ): Set<string> {
+	const replayKeys = new Set(
+		replaySteps.map((step) => `${step.stepName}#${step.attempt}`),
+	);
 	const set = new Set<string>();
 	for (const link of truth.links) {
-		if (link.stepName !== "run_command" || !attempts.has(link.attempt)) {
+		if (!replayKeys.has(`${link.stepName}#${link.attempt}`)) {
 			continue;
 		}
 		for (const sha256 of link.artifactShas) {
@@ -30,8 +34,13 @@ function toStepArtifactSet(
 }
 
 async function fetchTruth(runId: string): Promise<TruthBundle> {
-	const response = await fetch(`${apiOrigin()}/runs/${runId}/truth`);
-	return readJson<TruthBundle>(response, `fetch truth ${runId}`);
+	return fetchJsonWithRetry<TruthBundle>({
+		url: `${apiOrigin()}/runs/${runId}/truth`,
+		label: `fetch truth ${runId}`,
+		maxAttempts: 10,
+		retryDelayMs: 350,
+		retryOnStatuses: [404, 502, 503, 504],
+	});
 }
 
 export async function runReplayCheck(input: {
@@ -50,7 +59,7 @@ export async function runReplayCheck(input: {
 	}
 
 	const replayAttempts = new Set(replaySteps.map((entry) => entry.attempt));
-	const expectedSet = toStepArtifactSet(truth, replayAttempts);
+	const expectedSet = toStepArtifactSet(truth, replaySteps);
 	const replaySet = new Set<string>();
 	for (const step of replaySteps) {
 		for (const pointer of step.exec.artifactReads) {

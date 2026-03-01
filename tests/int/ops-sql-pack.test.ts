@@ -2,10 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 type OpsSqlPack = {
-	status: string;
+	status: "ok" | "fail";
 	recentRuns: unknown[];
 	driftRows: unknown[];
 	targetRunId: string | null;
+	targetRunExists: boolean;
+	failures: Array<{ code: string; detail: string }>;
 };
 
 describe("ops sql pack", () => {
@@ -19,9 +21,10 @@ describe("ops sql pack", () => {
 		const parsed = JSON.parse(readFileSync(proofPath, "utf8")) as OpsSqlPack;
 		expect(parsed.status).toBe("ok");
 		expect(Array.isArray(parsed.recentRuns)).toBe(true);
+		expect(parsed.recentRuns.length).toBeGreaterThan(0);
 		expect(Array.isArray(parsed.driftRows)).toBe(true);
-		if (parsed.targetRunId === null) {
-			expect(parsed.driftRows).toEqual([]);
-		}
+		expect(parsed.targetRunId).not.toBeNull();
+		expect(parsed.targetRunExists).toBe(true);
+		expect(parsed.failures).toEqual([]);
 	});
 });

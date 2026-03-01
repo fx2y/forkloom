@@ -190,11 +190,20 @@ export type OpsStepDriftRow = {
 };
 
 export type OpsSqlPackReport = {
-	status: "ok";
+	status: "ok" | "fail";
 	generatedAt: string;
 	targetRunId: string | null;
+	targetRunExists: boolean;
 	recentRuns: OpsRecentRun[];
 	driftRows: OpsStepDriftRow[];
+	failures: OpsSqlPackFailure[];
+};
+
+export type OpsSqlPackFailureCode = "no_recent_runs" | "target_run_missing";
+
+export type OpsSqlPackFailure = {
+	code: OpsSqlPackFailureCode;
+	detail: string;
 };
 
 const RECENT_RUNS_SQL = `
@@ -228,19 +237,79 @@ const STEP_DRIFT_SQL = `
 	order by s.started_at, s.step_name, s.attempt
 `;
 
+const RUN_EXISTS_SQL = `
+	select run_id
+	from runs
+	where run_id = $1
+	limit 1
+`;
+
+function resolveTargetRunId(input: {
+	explicitRunId: string | null;
+	recentRuns: OpsRecentRun[];
+}): string | null {
+	return input.explicitRunId ?? input.recentRuns[0]?.run_id ?? null;
+}
+
+export function buildOpsSqlPackReport(input: {
+	generatedAt: string;
+	explicitRunId: string | null;
+	recentRuns: OpsRecentRun[];
+	targetRunId: string | null;
+	targetRunExists: boolean;
+	driftRows: OpsStepDriftRow[];
+	requireRecentRuns: boolean;
+}): OpsSqlPackReport {
+	const failures: OpsSqlPackFailure[] = [];
+	if (input.requireRecentRuns && input.recentRuns.length === 0) {
+		failures.push({
+			code: "no_recent_runs",
+			detail: "recent runs query returned zero rows",
+		});
+	}
+	if (input.explicitRunId && !input.targetRunExists) {
+		failures.push({
+			code: "target_run_missing",
+			detail: `explicit run id not found: ${input.explicitRunId}`,
+		});
+	}
+	return {
+		status: failures.length === 0 ? "ok" : "fail",
+		generatedAt: input.generatedAt,
+		targetRunId: input.targetRunId,
+		targetRunExists: input.targetRunExists,
+		recentRuns: input.recentRuns,
+		driftRows: input.driftRows,
+		failures,
+	};
+}
+
 export async function collectOpsSqlPack(input: {
 	runId?: string;
+	requireRecentRuns?: boolean;
 }): Promise<OpsSqlPackReport> {
+	const requireRecentRuns = input.requireRecentRuns ?? true;
+	const explicitRunId = input.runId ?? null;
 	const recentRows = await queryRows<OpsRecentRun>(RECENT_RUNS_SQL);
-	const targetRunId = input.runId ?? recentRows[0]?.run_id ?? null;
-	const driftRows = targetRunId
-		? await queryRows<OpsStepDriftRow>(STEP_DRIFT_SQL, [targetRunId])
-		: [];
-	return {
-		status: "ok",
-		generatedAt: new Date().toISOString(),
-		targetRunId,
+	const targetRunId = resolveTargetRunId({
+		explicitRunId,
 		recentRuns: recentRows,
+	});
+	const targetRunExists = explicitRunId
+		? (await queryRows<{ run_id: string }>(RUN_EXISTS_SQL, [explicitRunId]))
+				.length > 0
+		: targetRunId !== null;
+	const driftRows =
+		targetRunId && targetRunExists
+			? await queryRows<OpsStepDriftRow>(STEP_DRIFT_SQL, [targetRunId])
+			: [];
+	return buildOpsSqlPackReport({
+		generatedAt: new Date().toISOString(),
+		explicitRunId,
+		recentRuns: recentRows,
+		targetRunId,
+		targetRunExists,
 		driftRows,
-	};
+		requireRecentRuns,
+	});
 }

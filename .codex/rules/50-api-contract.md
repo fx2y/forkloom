@@ -1,10 +1,10 @@
 ---
 paths: ["apps/api/**", "contracts/**", "packages/contracts/**"]
 ---
-# API & Contract Rules
-- Contract: Schema=TRUTH. v0 frozen (5-noun), v1 additive (`Run*`).
-- Artifacts: Reserve-first SQL -> store write -> rollback on fail. Exact-byte. Overwrite=409.
-- Sandbox: Isolation in `apps/api/src/sandbox` ONLY. Raw docker BANNED elsewhere. Host mount paths MUST match container absolute paths.
-- Run Launch: Idempotent `runs.run_id` = workflowID. Sandbox dispatch MUST use `run:` prefix.
-- DBOS Teardown: `createPoolCloseOnce()` collapse promise protects DB under compose restarts.
-- Public Surface: `/runs/:runId/truth` is run-owned canonical audit payload; top-level `Sandbox*` public nouns/routes remain banned and scope-guard scanned.
+# API/Contract
+- **Schema**: TRUTH. v0 frozen, v1 additive (`Run*`).
+- **Artifacts**: Reserve-first SQL -> CAS store -> rollback on fail. Exact-byte. Overwrite=409.
+- **Compute**: `apps/api/src/sandbox` ONLY. Raw docker BANNED elsewhere. Host mounts = container absolutes.
+- **Orchestration**: `run:` prefix for Sandbox dispatch. Replay stub R0 skips live side-effects.
+- **Public Surface**: `/runs/:runId/truth` is single canonical audit payload. `Sandbox*` nouns/routes strictly banned from public edge.
+- **DBOS**: `createPoolCloseOnce()` prevents compose restart collapse. `recordStepLedger` is atomic repo txn.

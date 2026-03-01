@@ -7,7 +7,7 @@ require_cmds pnpm docker
 
 mkdir -p .cache/test-int
 docker compose restart api >/dev/null
-wait_for_url "api" "http://127.0.0.1:8080/health" /tmp/svc.api
+wait_for_url_stable "api" "http://127.0.0.1:8080/health" /tmp/svc.api "-fsS" 120 3 1
 pnpm exec tsx scripts/harness/run-sse-live.ts
 pnpm exec vitest run tests/int/run-sse-live.test.ts
 

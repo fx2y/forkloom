@@ -1,14 +1,22 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { RunEvent, RunSpec, RunState } from "@forkloom/contracts";
+import type {
+	RunEvent,
+	RunSpec,
+	RunState,
+	TruthBundle,
+} from "@forkloom/contracts";
+import { listReplayStepPayloads } from "../../apps/api/src/workflow/replay";
 import { createRunId } from "../../packages/shared/src/run-id";
 import {
 	type SseFrame,
 	apiOrigin,
 	asErrorMessage,
+	fetchJsonWithRetry,
+	fetchWithRetry,
 	queryRows,
 	readArrayBuffer,
-	readJson,
+	sleep,
 	withPgClient,
 	writeJson,
 } from "./live-support";
@@ -27,6 +35,15 @@ type RunCreateResponse = {
 	runId: string;
 	created: boolean;
 	status: string;
+};
+
+type QueueRunCommandResponse = {
+	created: boolean;
+	command: {
+		seq: number;
+		kind: string;
+		state: string;
+	};
 };
 
 export type LiveRunProof = {
@@ -59,13 +76,18 @@ export function makeRunSpec(input: {
 	userMsg: string;
 	attachments?: string[] | undefined;
 	scope?: RunSpec["scope"] | undefined;
+	profile?: "safe" | "priv" | undefined;
 }): RunSpec {
-	return {
+	const spec: RunSpec = {
 		runId: createRunId(),
 		scope: input.scope ?? "team",
 		userMsg: input.userMsg,
 		attachments: (input.attachments ?? []).map((sha256) => ({ sha256 })),
 	};
+	if (input.profile) {
+		spec.profile = input.profile;
+	}
+	return spec;
 }
 
 export async function uploadArtifactBuffer(input: {
@@ -80,11 +102,16 @@ export async function uploadArtifactBuffer(input: {
 			type: input.mime,
 		}),
 	);
-	const response = await fetch(`${apiOrigin()}/artifacts`, {
-		method: "POST",
-		body: form,
+	return fetchJsonWithRetry<ArtifactMeta>({
+		url: `${apiOrigin()}/artifacts`,
+		label: `upload ${input.filename}`,
+		init: {
+			method: "POST",
+			body: form,
+		},
+		maxAttempts: 8,
+		retryDelayMs: 300,
 	});
-	return readJson<ArtifactMeta>(response, `upload ${input.filename}`);
 }
 
 export async function uploadArtifactFile(path: string): Promise<ArtifactMeta> {
@@ -100,27 +127,125 @@ export async function createRun(
 	spec: RunSpec,
 ): Promise<{ requestedAtMs: number; response: RunCreateResponse }> {
 	const requestedAtMs = Date.now();
-	const response = await fetch(`${apiOrigin()}/runs`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(spec),
-	});
 	return {
 		requestedAtMs,
-		response: await readJson<RunCreateResponse>(
-			response,
-			`create run ${spec.runId}`,
-		),
+		response: await fetchJsonWithRetry<RunCreateResponse>({
+			url: `${apiOrigin()}/runs`,
+			label: `create run ${spec.runId}`,
+			init: {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(spec),
+			},
+			maxAttempts: 10,
+			retryDelayMs: 400,
+		}),
 	};
 }
 
 export async function fetchRunState(runId: string): Promise<RunState> {
-	const response = await fetch(`${apiOrigin()}/runs/${runId}`);
-	return readJson<RunState>(response, `fetch run ${runId}`);
+	return fetchJsonWithRetry<RunState>({
+		url: `${apiOrigin()}/runs/${runId}`,
+		label: `fetch run ${runId}`,
+		maxAttempts: 8,
+		retryDelayMs: 300,
+		retryOnStatuses: [404, 502, 503, 504],
+	});
+}
+
+export async function fetchRunTruth(runId: string): Promise<TruthBundle> {
+	return fetchJsonWithRetry<TruthBundle>({
+		url: `${apiOrigin()}/runs/${runId}/truth`,
+		label: `fetch run truth ${runId}`,
+		maxAttempts: 8,
+		retryDelayMs: 300,
+		retryOnStatuses: [404, 502, 503, 504],
+	});
+}
+
+export async function queueRunCommand(
+	runId: string,
+	command: {
+		kind: "prompt" | "followUp" | "steer" | "abort" | "approve";
+		payload?: Record<string, unknown> | undefined;
+	},
+): Promise<QueueRunCommandResponse> {
+	return fetchJsonWithRetry<QueueRunCommandResponse>({
+		url: `${apiOrigin()}/runs/${runId}/commands`,
+		label: `queue run command ${runId}`,
+		init: {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(command),
+		},
+		maxAttempts: 10,
+		retryDelayMs: 350,
+	});
+}
+
+export async function waitForReplayablePayload(
+	runId: string,
+	input: {
+		timeoutMs?: number;
+		pollIntervalMs?: number;
+	} = {},
+): Promise<TruthBundle> {
+	const timeoutMs = input.timeoutMs ?? 90_000;
+	const pollIntervalMs = input.pollIntervalMs ?? 500;
+	const deadline = Date.now() + timeoutMs;
+	let lastReason = "none";
+	while (Date.now() < deadline) {
+		try {
+			const truth = await fetchRunTruth(runId);
+			if (listReplayStepPayloads(truth.stepPayloads).length > 0) {
+				return truth;
+			}
+			lastReason = "missing replayable step payload";
+		} catch (error: unknown) {
+			lastReason = asErrorMessage(error);
+		}
+		await sleep(pollIntervalMs);
+	}
+	throw new Error(
+		`run ${runId} missing replayable payload before timeout: ${lastReason}`,
+	);
+}
+
+export async function waitForRunTerminalState(
+	runId: string,
+	input: {
+		timeoutMs?: number;
+		pollIntervalMs?: number;
+	} = {},
+): Promise<RunState> {
+	const timeoutMs = input.timeoutMs ?? 120_000;
+	const pollIntervalMs = input.pollIntervalMs ?? 500;
+	const deadline = Date.now() + timeoutMs;
+	let lastStatus = "unknown";
+	while (Date.now() < deadline) {
+		const state = await fetchRunState(runId);
+		lastStatus = state.status;
+		if (
+			state.status === "done" ||
+			state.status === "failed" ||
+			state.status === "aborted"
+		) {
+			return state;
+		}
+		await sleep(pollIntervalMs);
+	}
+	throw new Error(
+		`run ${runId} did not reach terminal state before timeout (last status: ${lastStatus})`,
+	);
 }
 
 export async function fetchArtifactBytes(sha256: string): Promise<Buffer> {
-	const response = await fetch(`${apiOrigin()}/artifacts/${sha256}`);
+	const response = await fetchWithRetry({
+		url: `${apiOrigin()}/artifacts/${sha256}`,
+		label: `download ${sha256}`,
+		maxAttempts: 8,
+		retryDelayMs: 300,
+	});
 	return Buffer.from(await readArrayBuffer(response, `download ${sha256}`));
 }
 
@@ -128,7 +253,12 @@ export async function fetchArtifactDigest(sha256: string): Promise<{
 	sha256: string;
 	bytes: number;
 }> {
-	const response = await fetch(`${apiOrigin()}/artifacts/${sha256}`);
+	const response = await fetchWithRetry({
+		url: `${apiOrigin()}/artifacts/${sha256}`,
+		label: `download ${sha256}`,
+		maxAttempts: 8,
+		retryDelayMs: 300,
+	});
 	const body = Buffer.from(
 		await readArrayBuffer(response, `download ${sha256}`),
 	);
