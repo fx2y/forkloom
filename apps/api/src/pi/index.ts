@@ -38,3 +38,8 @@ export {
 	probePiSession,
 } from "./session-factory";
 export type { ManagedPiSessionOverrides } from "./session-factory";
+export {
+	assertToolCallResultAdjacency,
+	parseSessionJsonl,
+} from "./session-index";
+export type { SessionIndexSummary, SessionTreeIndex } from "./session-index";

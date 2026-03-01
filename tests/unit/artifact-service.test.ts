@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { hashBytes } from "@forkloom/shared";
+import { hashBytes, hashJSON } from "@forkloom/shared";
 import { describe, expect, it } from "vitest";
 import type { HttpError } from "../../apps/api/src/errors";
 import type {
@@ -257,5 +257,57 @@ describe("ArtifactService", () => {
 			}),
 		).rejects.toThrow("s3 down");
 		expect(deletedSha).toBe(sha);
+	});
+
+	it("putJSON uses canonical hashing and dedupes key-order variants", async () => {
+		const counter = putCountingStore();
+		const service = new ArtifactService({
+			repo: inMemoryRepo(),
+			store: counter.store,
+			s3Bucket: "agentos",
+		});
+		const firstValue = {
+			z: 1,
+			a: {
+				b: true,
+				c: [3, 2, 1],
+			},
+		};
+		const secondValue = {
+			a: {
+				c: [3, 2, 1],
+				b: true,
+			},
+			z: 1,
+		};
+
+		const first = await service.putJSON({
+			value: firstValue,
+			meta: { "run.id": "run-1" },
+		});
+		const second = await service.putJSON({
+			value: secondValue,
+			meta: { "run.id": "run-1" },
+		});
+
+		expect(first.sha256).toBe(hashJSON(firstValue));
+		expect(second.sha256).toBe(first.sha256);
+		expect(counter.getPutCalls()).toBe(1);
+	});
+
+	it("putJSON appends lineage parents via existing link path", async () => {
+		const service = new ArtifactService({
+			repo: inMemoryRepo(),
+			store: inMemoryStore(),
+			s3Bucket: "agentos",
+		});
+
+		const artifact = await service.putJSON({
+			value: { ok: true },
+			meta: { "run.id": "run-1" },
+			parents: ["a".repeat(64), "b".repeat(64), "a".repeat(64)],
+		});
+
+		expect(artifact.parents).toEqual(["a".repeat(64), "b".repeat(64)]);
 	});
 });

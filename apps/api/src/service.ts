@@ -1,4 +1,9 @@
-import { hashBytes, isSha256 } from "@forkloom/shared";
+import {
+	hashBytes,
+	hashJSON,
+	isSha256,
+	stableStringify,
+} from "@forkloom/shared";
 import { InlineStepRunner, type StepRunner } from "./durability";
 import { HttpError } from "./errors";
 import type {
@@ -87,6 +92,31 @@ export class ArtifactService {
 		}
 
 		return reservation.artifact;
+	}
+
+	async putJSON(input: {
+		value: unknown;
+		meta: Record<string, unknown>;
+		parents?: string[] | undefined;
+		type?: PutArtifactInput["type"] | undefined;
+		mime?: string | undefined;
+	}): Promise<ArtifactModel> {
+		const bodyText = stableStringify(input.value);
+		const artifact = await this.putArtifact({
+			body: Buffer.from(bodyText, "utf8"),
+			mime: input.mime ?? "application/json",
+			type: input.type ?? "json",
+			meta: input.meta,
+			expectedSha256: hashJSON(input.value),
+		});
+		const parentSet = new Set(
+			(input.parents ?? []).filter((parent) => parent !== artifact.sha256),
+		);
+		let linked = artifact;
+		for (const parent of parentSet) {
+			linked = await this.linkArtifact(linked.sha256, parent, {});
+		}
+		return linked;
 	}
 
 	async getArtifactMeta(sha256: string): Promise<ArtifactModel> {

@@ -1,8 +1,13 @@
 import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { hashText } from "@forkloom/shared";
-import type { PiSessionPort, PiSessionState, PiSessionStats } from "../pi";
+import {
+	type PiSessionPort,
+	type PiSessionState,
+	type PiSessionStats,
+	assertToolCallResultAdjacency,
+	parseSessionJsonl,
+} from "../pi";
 import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import { WORKSPACE_SNAPSHOT_RULE, materializeSandboxInputs } from "../sandbox";
@@ -16,6 +21,7 @@ import type {
 import type { StagedSandboxInput } from "../sandbox/input-staging";
 import type { ArtifactService } from "../service";
 import { buildRunPromptInput } from "./prompt";
+import { buildStepHashes } from "./step-hash";
 
 type RunSandboxStepName =
 	| "loadPlan"
@@ -207,74 +213,6 @@ function withPointer(
 	return [...list, pointer];
 }
 
-function parseSessionIndex(sessionBytes: Buffer): {
-	entryCount: number;
-	rootId?: string | undefined;
-	leafId?: string | undefined;
-	summaryEntryCount: number;
-	sessionEntryIds: string[];
-} {
-	const lines = sessionBytes.toString("utf8").split("\n").filter(Boolean);
-	let rootId: string | undefined;
-	let leafId: string | undefined;
-	let summaryEntryCount = 0;
-	const sessionEntryIds: string[] = [];
-	for (const line of lines) {
-		try {
-			const parsed = JSON.parse(line) as Record<string, unknown>;
-			const id = typeof parsed.id === "string" ? parsed.id : undefined;
-			const type = typeof parsed.type === "string" ? parsed.type : "";
-			if (id) {
-				if (!rootId) {
-					rootId = id;
-				}
-				leafId = id;
-				if (!sessionEntryIds.includes(id)) {
-					sessionEntryIds.push(id);
-				}
-			}
-			if (type.includes("summary")) {
-				summaryEntryCount += 1;
-			}
-		} catch {
-			// Session JSONL may contain partial/truncated lines during live tailing.
-		}
-	}
-	return {
-		entryCount: lines.length,
-		rootId,
-		leafId,
-		summaryEntryCount,
-		sessionEntryIds,
-	};
-}
-
-function buildStepHashes(input: {
-	command: RunCommandModel;
-	exec: ExecResult;
-	workspaceRef?: { sha256: string } | undefined;
-}): { inHash: string; outHash: string } {
-	const inHash = hashText(
-		JSON.stringify({
-			kind: input.command.kind,
-			payload: input.command.payload,
-			cmdList: input.exec.cmdList ?? [],
-			artifactReads: input.exec.artifactReads ?? [],
-		}),
-	);
-	const outHash = hashText(
-		JSON.stringify({
-			exitCode: input.exec.exitCode,
-			status: input.exec.status,
-			artifactWrites: input.exec.artifactWrites ?? [],
-			stdoutRef: input.exec.stdoutRef ?? null,
-			stderrRef: input.exec.stderrRef ?? null,
-			workspaceRef: input.workspaceRef ?? input.exec.workspaceRef ?? null,
-		}),
-	);
-	return { inHash, outHash };
-}
-
 function toLedgerArtifactShas(exec: ExecResult): string[] {
 	const unique = new Set<string>();
 	for (const read of exec.artifactReads ?? []) {
@@ -283,7 +221,7 @@ function toLedgerArtifactShas(exec: ExecResult): string[] {
 	for (const write of exec.artifactWrites ?? []) {
 		unique.add(write.sha256);
 	}
-	return [...unique];
+	return [...unique].sort((a, b) => a.localeCompare(b));
 }
 
 async function closeSession(session: PiSessionPort | null): Promise<void> {
@@ -443,7 +381,8 @@ export async function executeRunSandbox(
 			});
 			const sessionState = await activeSession.getState();
 			const sessionBytes = await readFileBytes(sessionState.sessionFile);
-			const parsedSession = parseSessionIndex(sessionBytes);
+			const parsedSession = parseSessionJsonl(sessionBytes.toString("utf8"));
+			assertToolCallResultAdjacency(parsedSession.entries);
 			const sessionArtifact = await deps.artifactService.putArtifact({
 				body: sessionBytes,
 				mime: "application/jsonl",
@@ -530,8 +469,8 @@ export async function executeRunSandbox(
 				stats: await activeSession.getSessionStats(),
 				sessionState,
 				sessionEntryIds:
-					parsedSession.sessionEntryIds.length > 0
-						? parsedSession.sessionEntryIds
+					parsedSession.leafPathIds.length > 0
+						? parsedSession.leafPathIds
 						: [sessionState.sessionId],
 				sessionIndex: {
 					entryCount: parsedSession.entryCount,
@@ -622,21 +561,24 @@ export async function executeRunSandbox(
 			});
 			const stepName = "run_command";
 			const attempt = loaded.command.seq;
-			const { inHash, outHash } = buildStepHashes({
+			const { stepKey, inHash, outHash } = buildStepHashes({
+				runId,
+				stepName,
+				attempt,
 				command: loaded.command,
 				exec: baseResult,
-				workspaceRef: withSnapshot?.workspaceRef,
+				sessionEntryIds: withSnapshot?.sessionEntryIds ?? [],
 			});
 			await deps.runService.recordStepLedger({
 				runId,
 				stepName,
 				attempt,
-				stepKey: `${loaded.command.kind}:${attempt}`,
+				stepKey,
 				inHash,
 				outHash,
 				sessionEntryIds: withSnapshot?.sessionEntryIds ?? [],
 				artifactShas: toLedgerArtifactShas(baseResult),
-				note: `kind=${loaded.command.kind} status=${baseResult.status}`,
+				note: `step=${stepName} kind=${loaded.command.kind} status=${baseResult.status}`,
 				payload: {
 					commandSeq: loaded.command.seq,
 					commandKind: loaded.command.kind,
@@ -656,6 +598,10 @@ export async function executeRunSandbox(
 								sessionFile: withSnapshot.sessionState.sessionFile,
 								sessionArtifactSha: withSnapshot.sessionArtifactSha,
 								sessionEntryIds: withSnapshot.sessionEntryIds,
+								entryCount: withSnapshot.sessionIndex.entryCount,
+								rootId: withSnapshot.sessionIndex.rootId,
+								leafId: withSnapshot.sessionIndex.leafId,
+								summaryEntryCount: withSnapshot.sessionIndex.summaryEntryCount,
 							}
 						: null,
 				},
