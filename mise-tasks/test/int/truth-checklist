@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker curl
+
+mkdir -p .cache/spec06
+docker compose restart api >/dev/null
+wait_for_url "api" "http://127.0.0.1:8080/health" /tmp/svc.api
+
+pnpm exec tsx scripts/harness/run-truth-checklist.ts .cache/spec06/checklist-sql.report.json \
+  | tee .cache/spec06/checklist-sql.scan.txt
+pnpm exec vitest run tests/int/truth-checklist.test.ts
+
+write_mark "test:int:truth-checklist"
+echo "test:int:truth-checklist ok"

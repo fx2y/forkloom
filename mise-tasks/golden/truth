@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq rg
+
+mkdir -p .cache/spec06 .cache/golden
+pnpm exec tsx scripts/harness/run-replay-proof.ts
+jq -e '.status == "ok" and (.expectedCount == .replayCount) and (.artifactShas | length > 0)' \
+  .cache/spec06/replay-cli.assert.json >/dev/null
+cp .cache/spec06/replay-cli.assert.json .cache/golden/replay.truth.json
+
+rg -n "golden|truth|replay" mise-tasks/golden scripts/harness tests/int \
+  > .cache/spec06/golden-truth.scan.txt
+rg -n "runId|replaySourceRunId|artifactShas|status" .cache/golden/replay.truth.json \
+  > .cache/spec06/golden-truth.artifacts.txt
+
+write_mark "golden:truth"
+echo "golden:truth ok"

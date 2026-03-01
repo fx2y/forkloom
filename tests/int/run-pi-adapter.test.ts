@@ -146,11 +146,11 @@ describe("run pi adapter integration", () => {
 					failRun: async () => {
 						throw new Error("unexpected failRun");
 					},
-						linkArtifact: async (_runId, sha256, kind) => {
-							linked.push({ sha: sha256, kind });
-						},
-						recordStepLedger: async () => undefined,
+					linkArtifact: async (_runId, sha256, kind) => {
+						linked.push({ sha: sha256, kind });
 					},
+					recordStepLedger: async () => undefined,
+				},
 				artifactService: {
 					getArtifactMeta: async (sha256) => ({
 						sha256,
@@ -248,9 +248,9 @@ describe("run pi adapter integration", () => {
 					failRun: async () => {
 						throw new Error("unexpected failRun");
 					},
-						linkArtifact: async () => undefined,
-						recordStepLedger: async () => undefined,
-					},
+					linkArtifact: async () => undefined,
+					recordStepLedger: async () => undefined,
+				},
 				artifactService: {
 					getArtifactMeta: async (sha256) => ({
 						sha256,

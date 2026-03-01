@@ -5,10 +5,7 @@ import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
 import { buildRunPromptInput } from "./prompt";
-import {
-	buildGenericStepHashes,
-	buildGenericStepPayload,
-} from "./step-hash";
+import { buildGenericStepHashes, buildGenericStepPayload } from "./step-hash";
 
 type RunCoreStepName =
 	| "initRun"
@@ -151,9 +148,7 @@ export async function executeRunOnce(
 			attempt?: number | undefined;
 			note?: string | undefined;
 			resolveMetadata?:
-				| ((
-						out: T,
-				  ) => {
+				| ((out: T) => {
 						sessionEntryIds?: string[] | undefined;
 						artifactShas?: string[] | undefined;
 				  })
@@ -194,23 +189,21 @@ export async function executeRunOnce(
 		});
 
 	try {
-		ctx.run = await runLedgerStep(
-			"initRun",
-			{ runId },
-			async () => {
-				const run = await deps.runRepo.getRun(runId);
-				if (!run) {
-					throw new Error(`run not found: ${runId}`);
-				}
-				await deps.runService.beginRun(runId, { scope: run.spec.scope });
-				return run;
-			},
-		);
+		ctx.run = await runLedgerStep("initRun", { runId }, async () => {
+			const run = await deps.runRepo.getRun(runId);
+			if (!run) {
+				throw new Error(`run not found: ${runId}`);
+			}
+			await deps.runService.beginRun(runId, { scope: run.spec.scope });
+			return run;
+		});
 
 		ctx.artifactShas = await runLedgerStep(
 			"stageInputs",
 			{
-				attachments: assertRun(ctx).spec.attachments.map((pointer) => pointer.sha256),
+				attachments: assertRun(ctx).spec.attachments.map(
+					(pointer) => pointer.sha256,
+				),
 			},
 			async () => {
 				const run = assertRun(ctx);

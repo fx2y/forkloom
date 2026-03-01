@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker
+
+mkdir -p .cache/spec06
+docker compose restart api >/dev/null
+wait_for_url "api" "http://127.0.0.1:8080/health" /tmp/svc.api
+
+pnpm exec tsx scripts/harness/run-ops-sql-pack.ts \
+  | tee .cache/spec06/ops-sql.harness.txt
+pnpm exec vitest run tests/int/ops-sql-pack.test.ts
+rg -n "select .*from runs|select .*from steps" README.md docs/adr scripts/harness \
+  > .cache/spec06/ops-sql.scan.txt
+
+write_mark "test:int:ops-sql"
+echo "test:int:ops-sql ok"

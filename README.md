@@ -118,9 +118,55 @@ curl -fsS http://localhost:8080/runs \
   -H 'content-type: application/json' \
   -d "{\"runId\":\"$RUN_ID\",\"scope\":\"team\",\"userMsg\":\"reply with one concise line\",\"attachments\":[{\"sha256\":\"$SHA\"}]}" | jq .
 curl -N http://localhost:8080/runs/$RUN_ID/events
+curl -fsS http://localhost:8080/runs/$RUN_ID/truth | jq '.run.runId, (.steps|length), (.links|length), (.artifacts|length)'
 ```
 
-Spec-05 CY1 freeze: run remains the only public owner for preview/files/commands, so future sandbox control stays under `/runs*`; no `/sandbox*` HTTP surface is reserved today.
+Spec-06 freeze: run remains the only public owner for preview/files/commands/truth, so future sandbox control stays under `/runs*`; no `/sandbox*` HTTP surface is reserved today.
+
+## C4 Operator SQL Pack
+
+Recent runs:
+
+```sql
+select run_id, status, created_at
+from runs
+order by created_at desc
+limit 50;
+```
+
+Step drift root-cause for one run:
+
+```sql
+select s.step_name, s.in_hash, s.out_hash, l.artifact_shas
+from steps s
+join links l using(run_id, step_name, attempt)
+where s.run_id = $1
+order by s.started_at;
+```
+
+Harness helper path (copy/paste executable):
+
+```ts
+import { queryRows } from "./scripts/harness/live-support";
+
+const recentRuns = await queryRows<{ run_id: string; status: string }>(
+	"select run_id, status from runs order by created_at desc limit 50",
+);
+const driftRows = await queryRows<{
+	step_name: string;
+	in_hash: string;
+	out_hash: string | null;
+}>(
+	`select s.step_name, s.in_hash, s.out_hash
+	 from steps s
+	 join links l using(run_id, step_name, attempt)
+	 where s.run_id = $1
+	 order by s.started_at`,
+	[recentRuns[0]?.run_id ?? ""],
+);
+```
+
+Scope guard (explicit not-now for C4): no generalized observability stack, no extra event bus, no provenance DB/time-travel DB.
 
 ## Actor API Smoke
 
@@ -145,9 +191,13 @@ curl -N http://localhost:8080/actors/actor-smoke/events
 
 ```bash
 MISE_EXPERIMENTAL=1 mise run bootstrap:doctor
+MISE_EXPERIMENTAL=1 mise run check:scope-guard
 MISE_EXPERIMENTAL=1 mise run check:contract
 MISE_EXPERIMENTAL=1 mise run check:unit
 MISE_EXPERIMENTAL=1 mise run test:int
+MISE_EXPERIMENTAL=1 mise run test:int:truth-checklist
+MISE_EXPERIMENTAL=1 mise run test:int:run-replay
+MISE_EXPERIMENTAL=1 mise run test:int:ops-sql
 MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-functional
 MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-files
 MISE_EXPERIMENTAL=1 mise run test:int:run-sandbox-sse

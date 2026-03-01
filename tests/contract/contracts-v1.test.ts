@@ -68,13 +68,13 @@ describe("contracts/v1 examples", () => {
 			}
 
 			const contract = contractForExample(file);
-				const result =
-					contract === "RunSpec" ||
-					contract === "RunState" ||
-					contract === "RunEvent" ||
-					contract === "TruthBundle"
-						? validateRunByName(contract, payload)
-						: validateActorByName(contract, payload);
+			const result =
+				contract === "RunSpec" ||
+				contract === "RunState" ||
+				contract === "RunEvent" ||
+				contract === "TruthBundle"
+					? validateRunByName(contract, payload)
+					: validateActorByName(contract, payload);
 			expect(result.valid).toBe(true);
 			expect(result.errors).toHaveLength(0);
 		});

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds rg ast-grep
+
+mkdir -p .cache/spec06
+rg -n "No generalized observability|No extra event bus|No provenance DB" \
+  spec-0/06-spec.md README.md docs/adr > .cache/spec06/scope-guard.not-now.txt
+
+for needle in "No generalized observability" "No extra event bus" "No provenance DB"; do
+  if ! rg -q "$needle" .cache/spec06/scope-guard.not-now.txt; then
+    echo "scope guard missing: $needle" >&2
+    exit 1
+  fi
+done
+
+rg -n "SandboxSpec|SandboxState|SandboxEvent|SandboxCommand" \
+  contracts/v1 packages/contracts/src/check.ts apps/api/src/run/public-surface.ts \
+  > .cache/spec06/scope-guard.noun-scan.txt
+
+ast-grep --lang typescript -p "RUN_PUBLIC_BANNED_SANDBOX_NOUNS" \
+  apps/api/src/run/public-surface.ts > .cache/spec06/scope-guard.ast-grep.txt
+if [[ ! -s .cache/spec06/scope-guard.ast-grep.txt ]]; then
+  echo "scope guard ast-grep found no banned-sandbox constant anchor" >&2
+  exit 1
+fi
+
+write_mark "check:scope-guard"
+echo "check:scope-guard ok"

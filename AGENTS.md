@@ -10,12 +10,13 @@ Model: `AGENTS.md` + `.codex/rules/*.md`. `check:lesson-guard` enforces rule-syn
 - **Durability (DBOS):** Replay safety > convenience. Step outputs MUST be JSON serializable. Process-local handles banned across steps.
 - **Storage:** Reserve-first SQL -> store write -> rollback. Immutable CAS.
 - **UI:** Zero `innerHTML`. Text-node DOM only. Truth strictly derived from durable event/projection streams, no runtime guesses. Infinite SSE, client manages disconnect/reconnect.
+- **C4 Gates:** SQL checklist (`steps/links/artifact/session-leaf`) + golden replay-truth proof + scope-guard scans are mandatory merge evidence.
 
 ## Entrypoints
 - **Init:** `mise trust && mise install && mise prep && mise run bootstrap`
 - **Loop:** `mise watch check test:int golden`
 - **Ops:** `mise run svc` (up/health/logs/reset). `reset` drops `sbx-*` orphan containers.
-- **Verify:** `ci:force` (check -> test:int:force -> golden -> fault -> test:sys -> bench). Wait `/health` after fault.
+- **Verify:** `ci:force` (check -> test:int:force -> golden -> fault -> test:sys -> bench). Includes `check:scope-guard`, `test:int:truth-checklist`, `golden:truth`, `test:int:ops-sql`. Wait `/health` after fault.
 
 ## Live Loop Guidelines
 - NO hot-reload for `api` container. MUST restart `api` & wait `/health` after TS edits before live proofs.

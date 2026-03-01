@@ -100,8 +100,13 @@ run = "bash ./mise-tasks/check/lesson-guard"
 sources = [".mise.toml", "mise-tasks/check/lesson-guard", "AGENTS.md", ".codex/rules/**/*.md"]
 outputs = [".cache/mise-marks/check__lesson-guard.ok"]
 
+[tasks."check:scope-guard"]
+run = "bash ./mise-tasks/check/scope-guard"
+sources = ["apps/api/src/run/public-surface.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "README.md", "docs/adr/**/*.md", "spec-0/06-spec.md", "mise-tasks/check/scope-guard"]
+outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec06/scope-guard.not-now.txt", ".cache/spec06/scope-guard.noun-scan.txt", ".cache/spec06/scope-guard.ast-grep.txt"]
+
 [tasks.check]
-depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard"]
+depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard", "check:scope-guard"]
 
 [tasks."test:int:dbos-durability"]
 run = "bash ./mise-tasks/test/int/dbos-durability"
@@ -198,6 +203,18 @@ run = "bash ./mise-tasks/test/int/run-replay"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-replay"]
 outputs = [".cache/mise-marks/test__int__run-replay.ok", ".cache/spec06/replay-cli.assert.json"]
 
+[tasks."test:int:truth-checklist"]
+run = "bash ./mise-tasks/test/int/truth-checklist"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/truth-checklist"]
+outputs = [".cache/mise-marks/test__int__truth-checklist.ok", ".cache/spec06/checklist-sql.report.json", ".cache/spec06/checklist-sql.scan.txt"]
+
+[tasks."test:int:ops-sql"]
+run = "bash ./mise-tasks/test/int/ops-sql"
+depends = ["svc:health"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "README.md", "docs/adr/**/*.md", "mise-tasks/test/int/ops-sql"]
+outputs = [".cache/mise-marks/test__int__ops-sql.ok", ".cache/spec06/ops-sql-pack.json", ".cache/spec06/ops-sql.scan.txt", ".cache/spec06/ops-sql.harness.txt"]
+
 [tasks."test:int:ocr-doc"]
 run = "bash ./mise-tasks/test/int/ocr-doc"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]
@@ -222,6 +239,8 @@ run = [
   "mise run test:int:run-sandbox-sse",
   "mise run test:int:run-sandbox-durability",
   "mise run test:int:run-replay",
+  "mise run test:int:truth-checklist",
+  "mise run test:int:ops-sql",
   "mise run test:int:ocr-doc"
 ]
 
@@ -244,6 +263,8 @@ run = [
   "mise run --force test:int:run-sandbox-sse",
   "mise run --force test:int:run-sandbox-durability",
   "mise run --force test:int:run-replay",
+  "mise run --force test:int:truth-checklist",
+  "mise run --force test:int:ops-sql",
   "mise run --force test:int:ocr-doc"
 ]
 
@@ -258,6 +279,11 @@ depends = ["golden:canonicalize"]
 sources = ["fixtures/golden/**/*.jsonl", ".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/diff"]
 outputs = [".cache/mise-marks/golden__diff.ok"]
 
+[tasks."golden:truth"]
+run = "bash ./mise-tasks/golden/truth"
+sources = ["scripts/**/*.ts", "tests/int/**/*.ts", "mise-tasks/golden/truth", "apps/**/*.ts", "packages/**/*.ts", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/golden__truth.ok", ".cache/spec06/replay-cli.assert.json", ".cache/golden/replay.truth.json", ".cache/spec06/golden-truth.scan.txt", ".cache/spec06/golden-truth.artifacts.txt"]
+
 [tasks."golden:accept"]
 run = "bash ./mise-tasks/golden/accept"
 depends = ["golden:canonicalize"]
@@ -265,7 +291,7 @@ sources = [".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/accept
 outputs = [".cache/mise-marks/golden__accept.ok", "fixtures/golden/sample.session.canon.jsonl"]
 
 [tasks.golden]
-depends = ["golden:diff"]
+depends = ["golden:diff", "golden:truth"]
 
 [tasks."fault:kill-resume"]
 run = "bash ./mise-tasks/fault/kill-resume"

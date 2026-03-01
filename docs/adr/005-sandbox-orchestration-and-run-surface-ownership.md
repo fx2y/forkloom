@@ -110,3 +110,9 @@ data: { ... }
 
 *   **Refactoring constraints**: `src/run` developers do not need Docker knowledge; `src/sandbox` developers do not need HTTP/Transport knowledge.
 *   **Operational hygiene**: Using `mise svc:reset` natively sweeps `sbx-*` orphan containers because they are isolated primitives with distinct metadata tags, preventing volume-lock bugs.
+
+## CY8/CY9 Addendum: C4 Gate Closure
+
+*   **Executable evidence gate**: CI now requires SQL checklist integrity (`steps/links/artifact/session leaf`) plus golden replay-truth proof in canonical `mise` DAG lanes (`test:int:truth-checklist`, `golden:truth`, `ci:force`).
+*   **Operator SQL pack**: Debug workflow is codified as copy-paste SQL + `queryRows` harness helper; operators can inspect recent runs and step hash drift without rerunning workloads.
+*   **Scope guard lock**: C4 explicitly defers generalized observability, extra event bus, and provenance DB/time-travel DB. Run-owned public surface remains `/runs*`; `Sandbox*` public nouns stay banned.
