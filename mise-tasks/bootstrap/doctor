@@ -21,11 +21,25 @@ for key in DBOS_SYSTEM_DATABASE_URL S3_ACCESS_KEY S3_SECRET_KEY ZAI_KEY; do
     echo "sensitive secret must be age-backed in top-level [secrets]: $key" >&2
     exit 1
   fi
-  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" <(awk '/^\\[profiles\\.dev\\.secrets\\]/{p=1;next}/^\\[/{p=0}p' fnox.toml); then
+  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" <(
+    awk '
+      BEGIN { in_profile = 0 }
+      /^\[/ { in_profile = 0 }
+      $0 == "[profiles.dev.secrets]" { in_profile = 1; next }
+      in_profile { print }
+    ' fnox.toml
+  ); then
     echo "sensitive secret must be age-backed in [profiles.dev.secrets]: $key" >&2
     exit 1
   fi
-  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" <(awk '/^\\[profiles\\.production\\.secrets\\]/{p=1;next}/^\\[/{p=0}p' fnox.toml); then
+  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" <(
+    awk '
+      BEGIN { in_profile = 0 }
+      /^\[/ { in_profile = 0 }
+      $0 == "[profiles.production.secrets]" { in_profile = 1; next }
+      in_profile { print }
+    ' fnox.toml
+  ); then
     echo "sensitive secret must be age-backed in [profiles.production.secrets]: $key" >&2
     exit 1
   fi

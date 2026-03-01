@@ -38,6 +38,8 @@ export const DOC_OCR_WORKFLOW_STEPS = [
 	"markRunning",
 	"callLayoutParsing",
 	"persistOcr",
+	"publishDone",
+	"markFailed",
 ] as const;
 
 export type DocOcrWorkflowStep = (typeof DOC_OCR_WORKFLOW_STEPS)[number];

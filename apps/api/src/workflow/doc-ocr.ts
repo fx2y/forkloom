@@ -1,5 +1,8 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import {
+	buildChunkJsonAlias,
+	buildChunkMdAlias,
+	buildDocPipeline,
 	buildParseJsonAlias,
 	buildParseMdAlias,
 	buildParseRawJsonAlias,
@@ -10,7 +13,6 @@ import {
 	transitionParseStatus,
 } from "../doc";
 import type { DocRepo, ParsePayloadModel, ParseStatusState } from "../doc";
-import type { ZaiLayoutResult } from "../doc";
 import type { ZaiLayoutClient } from "../doc";
 import type { ArtifactService } from "../service";
 
@@ -19,6 +21,7 @@ type DocOcrStepName =
 	| "markRunning"
 	| "callLayoutParsing"
 	| "persistOcr"
+	| "publishDone"
 	| "markFailed";
 
 type DocOcrStepRunner = {
@@ -34,7 +37,7 @@ export type DocOcrOutput = {
 
 type DocOcrRepo = Pick<
 	DocRepo,
-	"getParsePayload" | "upsertParse" | "recordParseLedger"
+	"getParsePayload" | "upsertParse" | "recordParseLedger" | "markParseDone"
 >;
 
 export type DocOcrDeps = {
@@ -71,28 +74,6 @@ function assertPayload(payload: ParsePayloadModel | null): ParsePayloadModel {
 
 function isCachedStatus(status: ParsePayloadModel["parse"]["status"]): boolean {
 	return OCR_DONE_STATUSES.has(canonicalParseStatus(status));
-}
-
-function buildPageRows(ocr: ZaiLayoutResult, parseId: string) {
-	const count = Math.max(1, ocr.pageCount);
-	const rows = [];
-	for (let page = 1; page <= count; page += 1) {
-		const entries = ocr.layoutDetails[page - 1] ?? [];
-		const sizeFromLayout = entries.find(
-			(entry) => entry.width > 0 && entry.height > 0,
-		);
-		rows.push({
-			parseId,
-			page,
-			width: sizeFromLayout?.width ?? null,
-			height: sizeFromLayout?.height ?? null,
-			imageArtifactSha: null,
-			mdArtifactSha: null,
-			jsonArtifactSha: null,
-			status: "ocr_done" as const,
-		});
-	}
-	return rows;
 }
 
 async function markParseStatus(
@@ -156,7 +137,7 @@ export async function executeDocOcr(
 			parse: running,
 		};
 
-		const ocr = await steps.runStep("callLayoutParsing", async () => {
+			const ocr = await steps.runStep("callLayoutParsing", async () => {
 			const rawSha = assertPayload(payload).doc.rawArtifactSha;
 			if (!rawSha) {
 				throw new Error(`parse ${parseId} missing raw artifact sha`);
@@ -165,8 +146,8 @@ export async function executeDocOcr(
 			return deps.zaiClient.layoutParsing(rawMeta.uri);
 		});
 
-		return steps.runStep("persistOcr", async () => {
-			const current = assertPayload(payload);
+			return steps.runStep("persistOcr", async () => {
+				const current = assertPayload(payload);
 			const rawMd = await deps.artifactService.putArtifact({
 				body: Buffer.from(ocr.markdown, "utf8"),
 				mime: "text/markdown",
@@ -194,9 +175,9 @@ export async function executeDocOcr(
 					"parse.variant": "md",
 				},
 			});
-			const normalizedJson = normalizeJsonValue({
-				layout_details: ocr.layoutDetails.map((page) =>
-					page.map((entry) => ({
+				const normalizedJson = normalizeJsonValue({
+					layout_details: ocr.layoutDetails.map((page) =>
+						page.map((entry) => ({
 						index: entry.index,
 						label: entry.label,
 						bbox_2d: entry.bbox2d,
@@ -209,7 +190,7 @@ export async function executeDocOcr(
 					num_pages: ocr.pageCount,
 				},
 			});
-			const normJson = await deps.artifactService.putJSON({
+				const normJson = await deps.artifactService.putJSON({
 				value: normalizedJson,
 				meta: {
 					"parse.id": current.parse.parseId,
@@ -217,39 +198,88 @@ export async function executeDocOcr(
 				},
 				parents: [rawJson.sha256],
 			});
-			const stamp = now().toISOString();
-			const parseStats = {
-				...current.parse.stats,
-				ocr: {
-					pages: ocr.pageCount,
-					outputTokens: ocr.usage.outputTokens,
-					costMicros: ocr.usage.costMicros,
-				},
-			};
-			await deps.repo.recordParseLedger({
-				doc: {
+				const stamp = now().toISOString();
+				const pipeline = buildDocPipeline({
 					docSha: current.doc.docSha,
-					mime: current.doc.mime,
-					bytes: current.doc.bytes,
-					rawArtifactSha: current.doc.rawArtifactSha,
-					status: current.doc.status === "done" ? "done" : "processing",
-					updatedAt: stamp,
-				},
-				parse: {
 					parseId: current.parse.parseId,
+					layoutDetails: ocr.layoutDetails,
+				});
+				const chunkAliases: Array<{ alias: string; sha256: string }> = [];
+				for (const chunk of pipeline.chunks) {
+					const chunkMd = await deps.artifactService.putArtifact({
+						body: Buffer.from(chunk.md, "utf8"),
+						mime: "text/markdown",
+						type: "raw",
+						meta: {
+							"parse.id": current.parse.parseId,
+							"chunk.id": chunk.chunkId,
+							"chunk.variant": "md",
+						},
+					});
+					const chunkJson = await deps.artifactService.putJSON({
+						value: {
+							chunkId: chunk.chunkId,
+							parseId: chunk.parseId,
+							page: chunk.page,
+							kind: chunk.kind,
+							md: chunk.md,
+							plain: chunk.plain,
+							payload: chunk.payload,
+							bboxUnion: chunk.bboxUnion,
+							tokenEstimate: chunk.tokenEstimate,
+						},
+						meta: {
+							"parse.id": current.parse.parseId,
+							"chunk.id": chunk.chunkId,
+							"chunk.variant": "json",
+						},
+						parents: [chunkMd.sha256, normJson.sha256],
+					});
+					chunkAliases.push(
+						{ alias: buildChunkMdAlias(chunk.chunkId), sha256: chunkMd.sha256 },
+						{ alias: buildChunkJsonAlias(chunk.chunkId), sha256: chunkJson.sha256 },
+					);
+				}
+				const ocrDoneStatus = transitionParseStatus(current.parse.status, "ocr_done");
+				const normDoneStatus = transitionParseStatus(ocrDoneStatus, "norm_done");
+				const indexedStatus = transitionParseStatus(normDoneStatus, "indexed");
+				const parseStats = {
+					...current.parse.stats,
+					ocr: {
+						pages: ocr.pageCount,
+						outputTokens: ocr.usage.outputTokens,
+						costMicros: ocr.usage.costMicros,
+					},
+					pipeline: {
+						blockCount: pipeline.blocks.length,
+						chunkCount: pipeline.chunks.length,
+						spanCount: pipeline.spans.length,
+					},
+				};
+				await deps.repo.recordParseLedger({
+					doc: {
+						docSha: current.doc.docSha,
+						mime: current.doc.mime,
+						bytes: current.doc.bytes,
+						rawArtifactSha: current.doc.rawArtifactSha,
+						status: "processing",
+						updatedAt: stamp,
+					},
+					parse: {
+						parseId: current.parse.parseId,
 					docSha: current.parse.docSha,
 					parser: current.parse.parser,
 					parserVersion: current.parse.parserVersion,
 					cfgHash: current.parse.cfgHash,
 					normVersion: current.parse.normVersion,
-					mdArtifactSha: normMd.sha256,
-					jsonArtifactSha: normJson.sha256,
-					stats: parseStats,
-					status: transitionParseStatus(current.parse.status, "ocr_done"),
-					updatedAt: stamp,
-				},
-				aliases: [
-					{ alias: buildParseRawMdAlias(current.parse.parseId), sha256: rawMd.sha256 },
+						mdArtifactSha: normMd.sha256,
+						jsonArtifactSha: normJson.sha256,
+						stats: parseStats,
+						status: indexedStatus,
+						updatedAt: stamp,
+					},
+					aliases: [
+						{ alias: buildParseRawMdAlias(current.parse.parseId), sha256: rawMd.sha256 },
 					{
 						alias: buildParseRawJsonAlias(current.parse.parseId),
 						sha256: rawJson.sha256,
@@ -258,13 +288,14 @@ export async function executeDocOcr(
 					{
 						alias: buildParseJsonAlias(current.parse.parseId),
 						sha256: normJson.sha256,
-					},
-				],
-				pages: buildPageRows(ocr, current.parse.parseId),
-				blocks: [],
-				chunks: [],
-				spans: [],
-				usage: {
+						},
+						...chunkAliases,
+					],
+					pages: pipeline.pages,
+					blocks: pipeline.blocks,
+					chunks: pipeline.chunks,
+					spans: pipeline.spans,
+					usage: {
 					parseId: current.parse.parseId,
 					vendor: "zai",
 					model: deps.config.model,
@@ -276,10 +307,16 @@ export async function executeDocOcr(
 						usage: ocr.usage.raw,
 					},
 					updatedAt: stamp,
-				},
-				search: [],
-			});
-			return {
+					},
+					search: pipeline.search,
+				});
+				await steps.runStep("publishDone", async () => {
+					await deps.repo.markParseDone({
+						parseId: current.parse.parseId,
+						publishedAt: stamp,
+					});
+				});
+				return {
 				parseId: current.parse.parseId,
 				status: "processed" as const,
 				mdArtifactSha: normMd.sha256,

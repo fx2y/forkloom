@@ -262,4 +262,65 @@ describe("PgDocRepo", () => {
 		]);
 		expect(pool.calls[15]?.params?.[1]).toBe("[0.1,0.2,0.3]");
 	});
+
+	it("searches lexical chunks with websearch_to_tsquery and stable rank ordering", async () => {
+		const pool = new StubPool([
+			{
+				rows: [
+					{
+						chunk_id: "chunk-a",
+						score: 1.2,
+						md: "alpha",
+						plain: "alpha",
+					},
+				],
+				rowCount: 1,
+			},
+		]);
+		const repo = new PgDocRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+
+		const hits = await repo.searchLexicalChunks({
+			query: "alpha",
+			scope: { scope: "all", docSha: null, parseId: null },
+			limit: 5,
+		});
+		expect(hits).toEqual([
+			{
+				chunkId: "chunk-a",
+				score: 1.2,
+				md: "alpha",
+				plain: "alpha",
+			},
+		]);
+		expect(pool.calls[0]?.sql).toContain("websearch_to_tsquery");
+		expect(pool.calls[0]?.sql).toContain("ts_rank");
+	});
+
+	it("marks parse/doc done only after inserting doc_ingested marker", async () => {
+		const pool = new StubPool([
+			{},
+			{ rows: [{ doc_sha: DOC_SHA }], rowCount: 1 },
+			{},
+			{},
+			{},
+		]);
+		const repo = new PgDocRepo({
+			databaseUrl: "postgres://unused",
+			pool,
+		});
+		await repo.markParseDone({
+			parseId: PARSE_ID,
+			publishedAt: ISO,
+		});
+		expect(pool.calls.map((call) => call.sql.toLowerCase())).toEqual([
+			"begin",
+			expect.stringContaining("update parses"),
+			expect.stringContaining("update docs"),
+			expect.stringContaining("insert into doc_ingested"),
+			"commit",
+		]);
+	});
 });

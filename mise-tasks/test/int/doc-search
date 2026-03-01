@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg pnpm ast-grep
+
+mkdir -p .cache/spec07
+rg -n "normMD|normalizeMarkdown|normalizeJsonValue|normVersion|buildParseId" \
+  apps/api/src/doc apps/api/src/workflow/doc-*.ts packages/shared/src \
+  > .cache/spec07/cy7-normalize.scan.txt
+rg -n "layoutDetails|bbox|blockPath|spans|pages|toBlocks" \
+  apps/api/src/doc apps/api/src/workflow/doc-*.ts \
+  > .cache/spec07/cy7-blocks.scan.txt
+rg -n "toChunks|MAX_CHARS|ATOMIC_KINDS|same_table|neighbors|chunkId" \
+  apps/api/src/doc/chunker.ts apps/api/src/doc/pipeline.ts \
+  > .cache/spec07/cy7-chunker.scan.txt
+rg -n "buildDocPipeline|toBlocks|toChunks|recordParseLedger|normalize" \
+  apps/api/src/doc apps/api/src/workflow/doc-*.ts \
+  > .cache/spec07/cy7-compose.scan.txt
+
+ast-grep --lang ts --pattern 'Math.random($$$)' apps/api/src/doc \
+  > .cache/spec07/cy7-random.ast.txt || true
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
+  tests/unit/doc-pipeline.test.ts
+
+{
+  printf 'cy7_gate=ok\n'
+  date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/cy7-gate.txt
+
+rg -n "to_tsvector|websearch_to_tsquery|chunk_vec|vector" \
+  apps/api/src/doc apps/api/migrations/007_doc_index.sql \
+  > .cache/spec07/cy8-index.scan.txt
+rg -n "searchDocs|SpanRef|ts_rank|score|vector" \
+  apps/api/src/doc tests/unit/doc-search.test.ts \
+  > .cache/spec07/cy8-search.scan.txt
+rg -n "resolveSpan|bbox|char_offs|chunk md|char_start|char_end" \
+  apps/api/src/doc tests/unit/doc-search.test.ts \
+  > .cache/spec07/cy8-resolve.scan.txt
+rg -n "doc_ingested|published_at|status.*DONE|mark.*done" \
+  apps/api/src/doc apps/api/src/workflow/doc-*.ts apps/api/migrations/008_doc_publish.sql \
+  > .cache/spec07/cy8-publish.scan.txt
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
+  tests/unit/doc-search.test.ts \
+  tests/unit/doc-repo.test.ts \
+  tests/unit/doc-workflow.test.ts
+
+{
+  printf 'cy8_gate=ok\n'
+  date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/cy8-gate.txt
+
+write_mark "test:int:doc-search"
+echo "test:int:doc-search ok"

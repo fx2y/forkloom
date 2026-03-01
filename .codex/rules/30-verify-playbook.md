@@ -8,4 +8,5 @@ paths: ["tests/**", "scripts/harness/**", "fixtures/**", "schema/**", "docker-co
 - **C4 Proofs**: `test:int:truth-checklist` hard-fails on missing hashes/links/artifacts/payloads. `golden:truth` asserts replay sha-set.
 - **Triage**: Ops SQL (`test:int:ops-sql`) first for RCA. Live runs rejected if no replayable payloads.
 - **Recovery**: Delete `.env*`, `bootstrap:secrets`. Stale workers with claim/lease mismatch hard-fail.
+- **Fnox Checks**: `bootstrap:doctor` profile-secret checks must parse `[profiles.*.secrets]` by exact header boundaries; escape-heavy regex extractors are forbidden.
 - **Doc OCR Gate**: `test:int:doc-ocr` must execute `doc-status` + `doc-zai-client` + `doc-workflow` unit proofs and emit CY5/CY6 scan artifacts under `.cache/spec07/`.

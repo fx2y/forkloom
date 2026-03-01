@@ -30,5 +30,13 @@ export {
 } from "./status";
 export type { ParseStatusState } from "./status";
 export { normalizeJsonValue, normalizeMarkdown } from "./normalize";
+export {
+	buildDeterministicEmbedding,
+	cosineScore,
+	parseSearchScope,
+	toSnippet,
+} from "./search";
+export { ATOMIC_KINDS, MAX_CHARS, SOFT_CHARS, toChunks } from "./chunker";
+export { buildDocPipeline, toBlocks } from "./pipeline";
 export { ZaiLayoutClient } from "./zai-client";
 export type { ZaiLayoutResult } from "./zai-client";

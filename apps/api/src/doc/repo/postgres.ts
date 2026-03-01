@@ -6,10 +6,15 @@ import type {
 	Bbox,
 	DocModel,
 	DocRepo,
+	LexicalChunkHitModel,
+	MarkParseDoneInput,
 	OcrUsageModel,
 	ParsePayloadModel,
 	ParseModel,
 	RecordParseLedgerInput,
+	ResolveSpanModel,
+	SearchDocsInput,
+	SpanModel,
 	UpsertBlockInput,
 	UpsertChunkInput,
 	UpsertChunkSearchInput,
@@ -18,6 +23,7 @@ import type {
 	UpsertPageInput,
 	UpsertParseInput,
 	UpsertSpanInput,
+	VectorChunkModel,
 } from "../ports";
 
 type QueryResultLike<TRow> = {
@@ -78,6 +84,45 @@ type OcrUsageRow = PgRowBase & {
 
 type AliasRow = {
 	sha256: string;
+};
+
+type LexicalChunkRow = {
+	chunk_id: string;
+	score: string | number;
+	md: string;
+	plain: string;
+};
+
+type VectorChunkRow = {
+	chunk_id: string;
+	md: string;
+	plain: string;
+	emb_json: unknown;
+};
+
+type SpanRow = {
+	chunk_id: string;
+	doc_sha: string;
+	parse_id: string;
+	p: number;
+	bbox: Bbox | null;
+	char_start: number | null;
+	char_end: number | null;
+	block_path: string;
+};
+
+type ResolveSpanRow = {
+	chunk_id: string;
+	doc_sha: string;
+	parse_id: string;
+	p: number;
+	bbox: Bbox | null;
+	char_start: number | null;
+	char_end: number | null;
+	block_path: string;
+	chunk_md: string;
+	block_md: string | null;
+	img_artifact_sha: string | null;
 };
 
 export type PgDocRepoDeps = {
@@ -162,6 +207,50 @@ function toOcrUsageModel(row: OcrUsageRow): OcrUsageModel {
 	};
 }
 
+function toScore(value: string | number): number {
+	const score = typeof value === "string" ? Number(value) : value;
+	if (!Number.isFinite(score)) {
+		throw new Error("invalid search score");
+	}
+	return score;
+}
+
+function toEmbedding(value: unknown): number[] {
+	const array = Array.isArray(value) ? value : [];
+	const embedding: number[] = [];
+	for (const item of array) {
+		if (typeof item !== "number" || !Number.isFinite(item)) {
+			continue;
+		}
+		embedding.push(item);
+	}
+	return embedding;
+}
+
+function whereScope(
+	scope: SearchDocsInput["scope"],
+	alias = "c",
+	parseAlias = "p",
+	paramStart = 2,
+): { sql: string; params: unknown[] } {
+	if (scope.docSha) {
+		return {
+			sql: ` and ${parseAlias}.doc_sha = $${paramStart}`,
+			params: [scope.docSha],
+		};
+	}
+	if (scope.parseId) {
+		return {
+			sql: ` and ${alias}.parse_id = $${paramStart}`,
+			params: [scope.parseId],
+		};
+	}
+	return {
+		sql: "",
+		params: [],
+	};
+}
+
 export class PgDocRepo implements DocRepo {
 	private readonly pool: PoolLike;
 	private readonly closePool: () => Promise<void>;
@@ -242,6 +331,205 @@ export class PgDocRepo implements DocRepo {
 			[alias],
 		);
 		return result.rows[0]?.sha256 ?? null;
+	}
+
+	async searchLexicalChunks(
+		input: SearchDocsInput,
+	): Promise<LexicalChunkHitModel[]> {
+		const scope = whereScope(input.scope);
+		const limitIndex = scope.params.length + 2;
+		const result = await this.pool.query<LexicalChunkRow>(
+			`select
+				 c.chunk_id,
+				 c.md,
+				 c.plain,
+				 ts_rank(c.tsv, q) as score
+			 from chunks c
+			 join parses p on p.parse_id = c.parse_id,
+			      websearch_to_tsquery('english', $1) q
+			 where c.tsv @@ q${scope.sql}
+			 order by score desc, c.chunk_id asc
+			 limit $${limitIndex}`,
+			[input.query, ...scope.params, input.limit],
+		);
+		return result.rows.map((row) => ({
+			chunkId: row.chunk_id,
+			score: toScore(row.score),
+			md: row.md,
+			plain: row.plain,
+		}));
+	}
+
+	async listVectorChunks(input: SearchDocsInput): Promise<VectorChunkModel[]> {
+		const scope = whereScope(input.scope, "c", "p", 1);
+		const limitIndex = scope.params.length + 1;
+		const result = await this.pool.query<VectorChunkRow>(
+			`select
+				 c.chunk_id,
+				 c.md,
+				 c.plain,
+				 cv.emb_json
+			 from chunk_vec cv
+			 join chunks c on c.chunk_id = cv.chunk_id
+			 join parses p on p.parse_id = c.parse_id
+			 where jsonb_typeof(cv.emb_json) = 'array'
+			   and jsonb_array_length(cv.emb_json) > 0${scope.sql}
+			 order by c.updated_at desc, c.chunk_id asc
+			 limit $${limitIndex}`,
+			[...scope.params, input.limit * 8],
+		);
+		return result.rows
+			.map((row) => ({
+				chunkId: row.chunk_id,
+				md: row.md,
+				plain: row.plain,
+				embedding: toEmbedding(row.emb_json),
+			}))
+			.filter((row) => row.embedding.length > 0);
+	}
+
+	async listChunkSpans(chunkIds: string[]): Promise<SpanModel[]> {
+		if (chunkIds.length === 0) {
+			return [];
+		}
+		const result = await this.pool.query<SpanRow>(
+			`select
+				 s.chunk_id,
+				 p.doc_sha,
+				 c.parse_id,
+				 s.p,
+				 s.bbox,
+				 s.char_start,
+				 s.char_end,
+				 s.block_path
+			 from spans s
+			 join chunks c on c.chunk_id = s.chunk_id
+			 join parses p on p.parse_id = c.parse_id
+			 where s.chunk_id = any($1::text[])
+			 order by s.chunk_id asc, s.p asc, s.block_path asc, s.char_start asc nulls first`,
+			[chunkIds],
+		);
+		return result.rows.map((row) => ({
+			docSha: row.doc_sha,
+			parseId: row.parse_id,
+			page: row.p,
+			bbox: row.bbox,
+			charStart: row.char_start,
+			charEnd: row.char_end,
+			blockPath: row.block_path,
+			chunkId: row.chunk_id,
+		}));
+	}
+
+	async resolveSpan(span: SpanModel): Promise<ResolveSpanModel | null> {
+		const spanId = buildSpanId(span);
+		const result = await this.pool.query<ResolveSpanRow>(
+			`select
+				 s.chunk_id,
+				 p.doc_sha,
+				 c.parse_id,
+				 s.p,
+				 s.bbox,
+				 s.char_start,
+				 s.char_end,
+				 s.block_path,
+				 c.md as chunk_md,
+				 b.text_md as block_md,
+				 pg.img_artifact_sha
+			 from spans s
+			 join chunks c on c.chunk_id = s.chunk_id
+			 join parses p on p.parse_id = c.parse_id
+			 left join blocks b
+			   on b.parse_id = c.parse_id
+			  and b.p = s.p
+			  and b.block_path = s.block_path
+			 left join pages pg
+			   on pg.parse_id = c.parse_id
+			  and pg.p = s.p
+			 where s.span_id = $1`,
+			[spanId],
+		);
+		const row = result.rows[0];
+		if (!row) {
+			return null;
+		}
+		const resolvedSpan: SpanModel = {
+			docSha: row.doc_sha,
+			parseId: row.parse_id,
+			page: row.p,
+			bbox: row.bbox,
+			charStart: row.char_start,
+			charEnd: row.char_end,
+			blockPath: row.block_path,
+			chunkId: row.chunk_id,
+		};
+		if (
+			resolvedSpan.docSha !== span.docSha ||
+			resolvedSpan.parseId !== span.parseId ||
+			resolvedSpan.chunkId !== span.chunkId
+		) {
+			return null;
+		}
+		let md = row.block_md ?? row.chunk_md;
+		if (
+			row.block_md == null &&
+			row.char_start != null &&
+			row.char_end != null &&
+			row.char_end >= row.char_start &&
+			row.char_end <= row.chunk_md.length
+		) {
+			md = row.chunk_md.slice(row.char_start, row.char_end);
+		}
+		return {
+			span: resolvedSpan,
+			md,
+			bbox: row.bbox,
+			pageImageSha: row.img_artifact_sha,
+		};
+	}
+
+	async markParseDone(input: MarkParseDoneInput): Promise<void> {
+		const client = await this.pool.connect();
+		try {
+			await client.query("begin");
+			const parseResult = await client.query<{ doc_sha: string }>(
+				`update parses
+				 set status = 'done',
+					 updated_at = $2::timestamptz
+				 where parse_id = $1
+				 returning doc_sha`,
+				[input.parseId, input.publishedAt],
+			);
+			const docSha = parseResult.rows[0]?.doc_sha;
+			if (!docSha) {
+				throw new Error(`parse not found for mark done: ${input.parseId}`);
+			}
+			await client.query(
+				`update docs
+				 set status = 'done',
+					 updated_at = $2::timestamptz
+				 where doc_sha = $1`,
+				[docSha, input.publishedAt],
+			);
+			await client.query(
+				`insert into doc_ingested(
+					 parse_id, doc_sha, published_at, status, created_at, updated_at
+				 )
+				 values ($1, $2, $3::timestamptz, 'DONE', $3::timestamptz, $3::timestamptz)
+				 on conflict (parse_id) do update
+				 set doc_sha = excluded.doc_sha,
+					 published_at = excluded.published_at,
+					 status = excluded.status,
+					 updated_at = excluded.updated_at`,
+				[input.parseId, docSha, input.publishedAt],
+			);
+			await client.query("commit");
+		} catch (error) {
+			await client.query("rollback");
+			throw error;
+		} finally {
+			client.release();
+		}
 	}
 
 	async recordParseLedger(input: RecordParseLedgerInput): Promise<void> {

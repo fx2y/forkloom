@@ -20,26 +20,28 @@ describe("doc schema live proof", () => {
 
 		const pool = new pg.Pool({ connectionString: DATABASE_URL });
 		try {
-			const tables = await pool.query<{
-				docs: string | null;
-				parses: string | null;
-				pages: string | null;
-				blocks: string | null;
-				chunks: string | null;
-				spans: string | null;
-				ocr_usage: string | null;
-				chunk_vec: string | null;
-			}>(
-				`select
-					 to_regclass('public.docs') as docs,
-					 to_regclass('public.parses') as parses,
-					 to_regclass('public.pages') as pages,
-					 to_regclass('public.blocks') as blocks,
-					 to_regclass('public.chunks') as chunks,
-					 to_regclass('public.spans') as spans,
-					 to_regclass('public.ocr_usage') as ocr_usage,
-					 to_regclass('public.chunk_vec') as chunk_vec`,
-			);
+				const tables = await pool.query<{
+					docs: string | null;
+					parses: string | null;
+					pages: string | null;
+					blocks: string | null;
+					chunks: string | null;
+					spans: string | null;
+					ocr_usage: string | null;
+					chunk_vec: string | null;
+					doc_ingested: string | null;
+				}>(
+					`select
+						 to_regclass('public.docs') as docs,
+						 to_regclass('public.parses') as parses,
+						 to_regclass('public.pages') as pages,
+						 to_regclass('public.blocks') as blocks,
+						 to_regclass('public.chunks') as chunks,
+						 to_regclass('public.spans') as spans,
+						 to_regclass('public.ocr_usage') as ocr_usage,
+						 to_regclass('public.chunk_vec') as chunk_vec,
+						 to_regclass('public.doc_ingested') as doc_ingested`,
+				);
 			const columns = await pool.query<{ column_name: string }>(
 				`select column_name
 				 from information_schema.columns
@@ -75,16 +77,17 @@ describe("doc schema live proof", () => {
 				 order by column_name asc`,
 			);
 
-			expect(tables.rows[0]).toEqual({
-				docs: "docs",
-				parses: "parses",
-				pages: "pages",
-				blocks: "blocks",
-				chunks: "chunks",
-				spans: "spans",
-				ocr_usage: "ocr_usage",
-				chunk_vec: "chunk_vec",
-			});
+				expect(tables.rows[0]).toEqual({
+					docs: "docs",
+					parses: "parses",
+					pages: "pages",
+					blocks: "blocks",
+					chunks: "chunks",
+					spans: "spans",
+					ocr_usage: "ocr_usage",
+					chunk_vec: "chunk_vec",
+					doc_ingested: "doc_ingested",
+				});
 			expect(columns.rows.map((row) => row.column_name)).toEqual([
 				"bbox_union",
 				"plain",

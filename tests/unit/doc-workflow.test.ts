@@ -94,10 +94,10 @@ function createRepo(store: Store): DocRepo {
 		async resolveAlias(alias) {
 			return store.aliases.get(alias) ?? null;
 		},
-		async recordParseLedger(input) {
-			store.recordLedgerCalls.push(input);
-			await this.upsertDoc(input.doc);
-			await this.upsertParse(input.parse);
+			async recordParseLedger(input) {
+				store.recordLedgerCalls.push(input);
+				await this.upsertDoc(input.doc);
+				await this.upsertParse(input.parse);
 			for (const alias of input.aliases) {
 				await this.aliasArtifact(alias);
 			}
@@ -106,11 +106,42 @@ function createRepo(store: Store): DocRepo {
 					...input.usage,
 					createdAt: input.usage.createdAt ?? ISO,
 					updatedAt: input.usage.updatedAt ?? ISO,
+					});
+				}
+			},
+			async searchLexicalChunks() {
+				return [];
+			},
+			async listVectorChunks() {
+				return [];
+			},
+			async listChunkSpans() {
+				return [];
+			},
+			async resolveSpan() {
+				return null;
+			},
+			async markParseDone(input) {
+				const parse = store.parses.get(input.parseId);
+				if (!parse) {
+					throw new Error(`parse not found: ${input.parseId}`);
+				}
+				store.parses.set(input.parseId, {
+					...parse,
+					status: "done",
+					updatedAt: input.publishedAt,
 				});
-			}
-		},
-	};
-}
+				const doc = store.docs.get(parse.docSha);
+				if (doc) {
+					store.docs.set(parse.docSha, {
+						...doc,
+						status: "done",
+						updatedAt: input.publishedAt,
+					});
+				}
+			},
+		};
+	}
 
 function createArtifactService(logs: {
 	putArtifact: string[];
@@ -386,6 +417,10 @@ describe("doc workflows", () => {
 		expect(store.recordLedgerCalls[0]?.aliases.some((alias) => alias.alias.endsWith(".md.raw"))).toBe(true);
 		expect(artifactLogs.putArtifact).toContain("md.raw");
 		expect(artifactLogs.putJSON).toContain("json.raw");
-		expect(store.parses.get(parseId)?.status).toBe("ocr_done");
+			expect(store.parses.get(parseId)?.status).toBe("done");
+			expect(store.recordLedgerCalls[0]?.blocks.length).toBeGreaterThan(0);
+			expect(store.recordLedgerCalls[0]?.chunks.length).toBeGreaterThan(0);
+			expect(store.recordLedgerCalls[0]?.spans.length).toBeGreaterThan(0);
+			expect(store.recordLedgerCalls[0]?.search.length).toBeGreaterThan(0);
+		});
 	});
-});

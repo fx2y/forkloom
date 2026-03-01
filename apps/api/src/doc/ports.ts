@@ -104,6 +104,44 @@ export type ChunkSearchModel = {
 	embedding: number[] | null;
 };
 
+export type SearchScopeModel = {
+	scope: string;
+	docSha: string | null;
+	parseId: string | null;
+};
+
+export type SearchDocsInput = {
+	query: string;
+	scope: SearchScopeModel;
+	limit: number;
+};
+
+export type LexicalChunkHitModel = {
+	chunkId: string;
+	score: number;
+	md: string;
+	plain: string;
+};
+
+export type VectorChunkModel = {
+	chunkId: string;
+	md: string;
+	plain: string;
+	embedding: number[];
+};
+
+export type ResolveSpanModel = {
+	span: SpanRef;
+	md: string;
+	bbox: Bbox | null;
+	pageImageSha: string | null;
+};
+
+export type MarkParseDoneInput = {
+	parseId: string;
+	publishedAt: string;
+};
+
 export type UpsertDocInput = Omit<DocModel, "createdAt" | "updatedAt"> & {
 	createdAt?: string | undefined;
 	updatedAt?: string | undefined;
@@ -156,4 +194,9 @@ export interface DocRepo {
 	aliasArtifact(input: AliasArtifactInput): Promise<void>;
 	resolveAlias(alias: string): Promise<string | null>;
 	recordParseLedger(input: RecordParseLedgerInput): Promise<void>;
+	searchLexicalChunks(input: SearchDocsInput): Promise<LexicalChunkHitModel[]>;
+	listVectorChunks(input: SearchDocsInput): Promise<VectorChunkModel[]>;
+	listChunkSpans(chunkIds: string[]): Promise<SpanRef[]>;
+	resolveSpan(span: SpanRef): Promise<ResolveSpanModel | null>;
+	markParseDone(input: MarkParseDoneInput): Promise<void>;
 }
