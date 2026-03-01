@@ -226,6 +226,61 @@ describe("web run sandbox flow", () => {
 					{ status: 202, headers: { "content-type": "application/json" } },
 				);
 			}
+			if (url === `/runs/${runId}/truth`) {
+				return new Response(
+					JSON.stringify({
+						run: {
+							runId,
+							status: "running",
+							spec: {
+								runId,
+								scope: "team",
+								userMsg: "ship it",
+								attachments: [],
+								profile: "priv",
+							},
+							createdAt: "2026-02-28T00:00:00.000Z",
+							updatedAt: "2026-02-28T00:00:00.000Z",
+							dbosWorkflowId: runId,
+							piSessionId: "session-1",
+							piSessionFile: "/tmp/session.jsonl",
+							resultText: null,
+							resultStats: null,
+							error: null,
+						},
+						steps: [],
+						links: [
+							{
+								runId,
+								stepName: "run_command",
+								attempt: 1,
+								sessionEntryIds: ["entry-1"],
+								artifactShas: ["a".repeat(64)],
+								note: "step=run_command",
+								createdAt: "2026-02-28T00:00:01.000Z",
+							},
+						],
+						artifacts: [
+							{
+								runId,
+								sha256: "a".repeat(64),
+								kind: "pi_session_jsonl",
+								createdAt: "2026-02-28T00:00:01.000Z",
+							},
+						],
+						sessionIndex: {
+							runId,
+							entryCount: 1,
+							rootId: "root",
+							leafId: "leaf",
+							summaryEntryCount: 0,
+							updatedAt: "2026-02-28T00:00:01.000Z",
+						},
+						stepPayloads: [],
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
 			if (url === `/runs/${runId}/files`) {
 				return new Response(
 					JSON.stringify({
@@ -280,6 +335,11 @@ describe("web run sandbox flow", () => {
 				"WILL-RUN priv / egress",
 			);
 		});
+		await vi.waitFor(() => {
+			expect(
+				root.querySelector("[data-run-provenance]")?.textContent,
+			).toContain("run_command#1");
+		});
 
 		const approveButton =
 			root.querySelector<HTMLButtonElement>("[data-run-approve]");
@@ -329,6 +389,9 @@ describe("web run sandbox flow", () => {
 				"project/proof.txt",
 			);
 		});
+		expect(root.querySelector("[data-run-provenance]")?.textContent).toContain(
+			"session entry-1",
+		);
 		expect(root.querySelector("[data-run-status]")?.textContent).toBe(
 			"running",
 		);

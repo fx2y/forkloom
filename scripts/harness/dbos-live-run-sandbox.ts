@@ -237,6 +237,7 @@ async function writeProof(): Promise<void> {
 		"artifact_workspace_snapshot",
 		"workspace_updated",
 		"persist_exec",
+		"record_step_ledger",
 		"release_lease",
 	];
 	const counts = Object.fromEntries(
@@ -279,6 +280,7 @@ async function run(): Promise<void> {
 				await recordEffect("load_run");
 				return sampleRun();
 			},
+			listStepPayloads: async () => [],
 		},
 		runService: {
 			appendArtifactWritten: async (_runId, payload) => {

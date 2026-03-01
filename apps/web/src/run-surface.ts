@@ -1,4 +1,4 @@
-import type { RunEvent, RunState } from "@forkloom/contracts";
+import type { RunState } from "@forkloom/contracts";
 import {
 	type AppDeps,
 	type EventSourceLike,
@@ -12,6 +12,7 @@ import {
 	exportRunFiles,
 	fetchRun,
 	fetchRunFiles,
+	fetchRunTruth,
 	parseRunEvent,
 	postRunCommand,
 } from "./run-client";
@@ -23,7 +24,9 @@ import {
 } from "./run-compose";
 import {
 	type RunArtifactView,
+	type RunProvenance,
 	hydrateRunState,
+	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
 } from "./state/run-reducer";
@@ -88,6 +91,7 @@ export function mountRunSurface(
 	let errorMessage = "";
 	let uploaded: UploadedAttachment[] = [];
 	let activeStream: PendingRunStream | null = null;
+	let selectedArtifactSha: string | null = null;
 
 	root.replaceChildren(
 		parseStaticFragment(`
@@ -130,18 +134,24 @@ export function mountRunSurface(
 				<div class="upload-list" data-run-uploads></div>
 				<p class="thread-preview" data-run-preview>No WILL-RUN preview yet.</p>
 				<div class="artifact-strip" data-run-artifacts></div>
-				<div class="run-grid">
-					<div class="panel run-subpanel">
-						<p class="section-label">Files</p>
-						<ul class="file-list" data-run-files></ul>
+					<div class="run-grid">
+						<div class="panel run-subpanel">
+							<p class="section-label">Files</p>
+							<ul class="file-list" data-run-files></ul>
+						</div>
+						<div class="panel run-subpanel">
+							<details class="trace-panel" open>
+								<summary data-run-trace-summary>Trace 0</summary>
+								<ol class="trace-list" data-run-trace></ol>
+							</details>
+						</div>
+						<div class="panel run-subpanel">
+							<details class="trace-panel" open>
+								<summary data-run-provenance-summary>Provenance</summary>
+								<ul class="file-list" data-run-provenance></ul>
+							</details>
+						</div>
 					</div>
-					<div class="panel run-subpanel">
-						<details class="trace-panel" open>
-							<summary data-run-trace-summary>Trace 0</summary>
-							<ol class="trace-list" data-run-trace></ol>
-						</details>
-					</div>
-				</div>
 				<form class="composer" data-run-command-form>
 					<label class="field">
 						<span>Control text</span>
@@ -184,6 +194,12 @@ export function mountRunSurface(
 		"[data-run-trace-summary]",
 	);
 	const traceNode = root.querySelector<HTMLOListElement>("[data-run-trace]");
+	const provenanceSummaryNode = root.querySelector<HTMLElement>(
+		"[data-run-provenance-summary]",
+	);
+	const provenanceNode = root.querySelector<HTMLUListElement>(
+		"[data-run-provenance]",
+	);
 	const commandForm = root.querySelector<HTMLFormElement>(
 		"[data-run-command-form]",
 	);
@@ -215,6 +231,8 @@ export function mountRunSurface(
 			filesNode &&
 			traceSummaryNode &&
 			traceNode &&
+			provenanceSummaryNode &&
+			provenanceNode &&
 			commandForm &&
 			commandInput &&
 			createButton &&
@@ -243,9 +261,83 @@ export function mountRunSurface(
 		parent.append(code);
 	};
 
+	const toArtifactSha = (artifact: RunArtifactView): string | null => {
+		const idx = artifact.key.indexOf(":");
+		if (idx < 0) {
+			return null;
+		}
+		const sha256 = artifact.key.slice(idx + 1);
+		return /^[a-f0-9]{64}$/.test(sha256) ? sha256 : null;
+	};
+
+	const renderProvenanceRows = (artifactSha: string, rows: RunProvenance[]) => {
+		clearNode(provenanceNode);
+		for (const row of rows) {
+			const item = document.createElement("li");
+			item.className = "file-item";
+
+			const primary = document.createElement("div");
+			primary.className = "provenance-main";
+			const step = document.createElement("strong");
+			step.textContent = `${row.stepName}#${row.attempt}`;
+			const run = document.createElement("code");
+			run.textContent = row.runId;
+			primary.append(step, run);
+
+			const secondary = document.createElement("div");
+			secondary.className = "provenance-links";
+			const artifactLink = document.createElement("a");
+			artifactLink.href = `/artifacts/${artifactSha}`;
+			artifactLink.target = "_blank";
+			artifactLink.rel = "noreferrer";
+			artifactLink.textContent = "artifact";
+			secondary.append(artifactLink);
+			for (const sessionId of row.sessionIds) {
+				const sessionLink = document.createElement("a");
+				sessionLink.href = `/runs/${row.runId}/truth#session-${encodeURIComponent(sessionId)}`;
+				sessionLink.target = "_blank";
+				sessionLink.rel = "noreferrer";
+				sessionLink.textContent = `session ${sessionId.slice(0, 8)}`;
+				secondary.append(sessionLink);
+			}
+			if (row.parentShas.length > 0) {
+				const parent = document.createElement("code");
+				parent.textContent = `parents ${row.parentShas.map((sha) => sha.slice(0, 12)).join(",")}`;
+				secondary.append(parent);
+			}
+
+			item.append(primary, secondary);
+			provenanceNode.append(item);
+		}
+		provenanceSummaryNode.textContent = `Provenance ${rows.length}`;
+	};
+
+	const renderProvenance = () => {
+		clearNode(provenanceNode);
+		if (!selectedArtifactSha) {
+			const empty = document.createElement("li");
+			empty.className = "hint";
+			empty.textContent = "Select an artifact chip to inspect provenance.";
+			provenanceNode.append(empty);
+			provenanceSummaryNode.textContent = "Provenance";
+			return;
+		}
+		const rows = state.provenanceByArtifact[selectedArtifactSha] ?? [];
+		if (rows.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "hint";
+			empty.textContent = `No durable provenance rows for ${selectedArtifactSha.slice(0, 12)}.`;
+			provenanceNode.append(empty);
+			provenanceSummaryNode.textContent = "Provenance 0";
+			return;
+		}
+		renderProvenanceRows(selectedArtifactSha, rows);
+	};
+
 	const renderArtifacts = () => {
 		clearNode(artifactsNode);
 		for (const artifact of state.artifacts) {
+			const artifactSha = toArtifactSha(artifact);
 			const chip = artifact.href
 				? document.createElement("a")
 				: document.createElement("span");
@@ -257,6 +349,12 @@ export function mountRunSurface(
 			}
 			chip.append(artifact.kind);
 			appendCode(chip, artifact.label);
+			if (artifactSha) {
+				chip.addEventListener("click", () => {
+					selectedArtifactSha = artifactSha;
+					renderProvenance();
+				});
+			}
 			artifactsNode.append(chip);
 		}
 	};
@@ -333,6 +431,7 @@ export function mountRunSurface(
 		renderArtifacts();
 		renderFiles();
 		renderTrace();
+		renderProvenance();
 		renderUploads();
 
 		createButton.disabled = creating;
@@ -362,6 +461,15 @@ export function mountRunSurface(
 		update();
 	};
 
+	const refreshRunTruth = async (runId: string) => {
+		const truth = await fetchRunTruth(deps, runId);
+		state = hydrateRunTruth(state, truth);
+		if (!selectedArtifactSha) {
+			selectedArtifactSha = truth.artifacts[0]?.sha256 ?? null;
+		}
+		update();
+	};
+
 	const connectRun = (runId: string) => {
 		if (activeStream?.runId === runId) {
 			return;
@@ -377,6 +485,13 @@ export function mountRunSurface(
 				const event = parseRunEvent(message);
 				state = reduceRunEvent(state, event);
 				update();
+				if (
+					event.kind === "workspace_updated" ||
+					event.kind === "artifact_written" ||
+					event.kind === "run_done"
+				) {
+					void refreshRunTruth(runId).catch(() => undefined);
+				}
 				if (event.kind === "workspace_updated") {
 					void refreshRunFiles(runId).catch(() => undefined);
 				}
@@ -440,6 +555,7 @@ export function mountRunSurface(
 				profile: runProfile.value as "safe" | "std" | "priv",
 			});
 			state = hydrateRunState(initialRunViewState, await fetchRun(deps, runId));
+			await refreshRunTruth(runId);
 			connectRun(runId);
 			await refreshRunFiles(runId);
 			fileInput.value = "";
@@ -568,6 +684,7 @@ export function mountRunSurface(
 					exported.workspace_export.sha256,
 				),
 			};
+			await refreshRunTruth(runId);
 			await refreshRunFiles(runId);
 		} catch (error) {
 			errorMessage =

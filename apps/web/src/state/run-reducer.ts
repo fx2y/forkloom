@@ -1,4 +1,4 @@
-import type { RunEvent, RunState } from "@forkloom/contracts";
+import type { RunEvent, RunState, TruthBundle } from "@forkloom/contracts";
 
 export type RunArtifactView = {
 	key: string;
@@ -13,11 +13,21 @@ export type RunTraceView = {
 	detail: string;
 };
 
+export type RunProvenance = {
+	artifact: string;
+	runId: string;
+	stepName: string;
+	attempt: number;
+	sessionIds: string[];
+	parentShas: string[];
+};
+
 export type RunViewState = {
 	run: RunState | null;
 	lastEventSeq: number;
 	artifacts: RunArtifactView[];
 	trace: RunTraceView[];
+	provenanceByArtifact: Record<string, RunProvenance[]>;
 };
 
 function appendArtifact(
@@ -93,7 +103,27 @@ export const initialRunViewState: RunViewState = {
 	lastEventSeq: 0,
 	artifacts: [],
 	trace: [],
+	provenanceByArtifact: {},
 };
+
+function appendProvenanceEntry(
+	map: Record<string, RunProvenance[]>,
+	entry: RunProvenance,
+): Record<string, RunProvenance[]> {
+	const current = map[entry.artifact] ?? [];
+	const dedupeKey = `${entry.stepName}:${entry.attempt}`;
+	if (
+		current.some(
+			(existing) => `${existing.stepName}:${existing.attempt}` === dedupeKey,
+		)
+	) {
+		return map;
+	}
+	return {
+		...map,
+		[entry.artifact]: [...current, entry],
+	};
+}
 
 export function hydrateRunState(
 	state: RunViewState,
@@ -115,6 +145,34 @@ export function hydrateRunState(
 		...state,
 		run,
 		artifacts,
+	};
+}
+
+export function hydrateRunTruth(
+	state: RunViewState,
+	truth: TruthBundle,
+): RunViewState {
+	let artifacts = state.artifacts;
+	for (const artifact of truth.artifacts) {
+		artifacts = appendSha(artifacts, artifact.sha256, artifact.kind);
+	}
+	let provenanceByArtifact = state.provenanceByArtifact;
+	for (const link of truth.links) {
+		for (const artifactSha of link.artifactShas) {
+			provenanceByArtifact = appendProvenanceEntry(provenanceByArtifact, {
+				artifact: artifactSha,
+				runId: truth.run.runId,
+				stepName: link.stepName,
+				attempt: link.attempt,
+				sessionIds: [...link.sessionEntryIds],
+				parentShas: link.artifactShas.filter((sha) => sha !== artifactSha),
+			});
+		}
+	}
+	return {
+		...state,
+		artifacts,
+		provenanceByArtifact,
 	};
 }
 
@@ -228,6 +286,7 @@ export function reduceRunEvent(
 		run,
 		lastEventSeq: event.seq,
 		artifacts,
+		provenanceByArtifact: state.provenanceByArtifact,
 		trace: [
 			...state.trace,
 			{

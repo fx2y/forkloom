@@ -94,6 +94,7 @@ describe("executeRunSandbox", () => {
 						resultStats: null,
 						error: null,
 					}),
+					listStepPayloads: async () => [],
 				},
 				runService: {
 					appendArtifactWritten: async () => {
@@ -211,6 +212,7 @@ describe("executeRunSandbox", () => {
 							resultStats: null,
 							error: null,
 						}),
+						listStepPayloads: async () => [],
 					},
 					runService: {
 						appendArtifactWritten: async () => {
@@ -321,6 +323,7 @@ describe("executeRunSandbox", () => {
 							resultStats: null,
 							error: null,
 						}),
+						listStepPayloads: async () => [],
 					},
 					runService: {
 						appendArtifactWritten: async () => {
@@ -412,5 +415,235 @@ describe("executeRunSandbox", () => {
 
 		expect(dead).toBe(0);
 		expect(failed).toBe(0);
+	});
+
+	it("replays from stored payloads without backend/pi side effects in debug mode", async () => {
+		const originalReplayRunId = process.env.REPLAY_RUN_ID;
+		const originalReplayMode = process.env.REPLAY_MODE;
+		process.env.REPLAY_RUN_ID = RUN_ID;
+		process.env.REPLAY_MODE = "debug";
+
+		let recordStepCalls = 0;
+		let releaseLeaseCalls = 0;
+		try {
+			await executeRunSandbox(
+				RUN_ID,
+				{
+					runRepo: {
+						getRun: async () => ({
+							runId: RUN_ID,
+							status: "running",
+							spec: {
+								runId: RUN_ID,
+								scope: "team",
+								userMsg: "hi",
+								attachments: [],
+								profile: "safe",
+							},
+							createdAt: ISO,
+							updatedAt: ISO,
+							dbosWorkflowId: null,
+							piSessionId: null,
+							piSessionFile: null,
+							resultText: "replay text",
+							resultStats: { totalTokens: 5 },
+							error: null,
+						}),
+						listStepPayloads: async () => [
+							{
+								runId: RUN_ID,
+								stepName: "run_command",
+								attempt: 7,
+								payload: {
+									commandSeq: 7,
+									commandKind: "prompt",
+									commandPayload: { text: "replay" },
+									exec: {
+										exitCode: 0,
+										status: "done",
+										startedAt: ISO,
+										endedAt: ISO,
+										cmdList: ["prompt", "replay"],
+										artifactReads: [{ sha256: "a".repeat(64) }],
+										artifactWrites: [{ sha256: "b".repeat(64) }],
+										workspaceRef: { sha256: "c".repeat(64) },
+									},
+									session: {
+										sessionId: "session-replay",
+										sessionFile: "/tmp/replay.session.jsonl",
+										sessionArtifactSha: "d".repeat(64),
+										sessionEntryIds: ["entry-1"],
+										entryCount: 1,
+										rootId: "root",
+										leafId: "leaf",
+										summaryEntryCount: 0,
+									},
+								},
+								createdAt: ISO,
+							},
+						],
+					},
+					runService: {
+						appendArtifactWritten: async () => {
+							throw new Error("not used");
+						},
+						appendPiEvent: async () => {
+							throw new Error("not used");
+						},
+						appendRunEvent: async () => {
+							throw new Error("not used");
+						},
+						beginRun: async () => {
+							throw new Error("not used");
+						},
+						failRun: async () => null,
+						linkArtifact: async () => undefined,
+						recordStepLedger: async (input) => {
+							recordStepCalls += 1;
+							expect(input.stepName).toBe("replay_debug_run_command");
+							expect(input.payload).toMatchObject({
+								replayMode: "debug",
+								synthetic: true,
+							});
+						},
+					},
+					artifactService: {
+						getArtifactBytes: async () => {
+							throw new Error("not used");
+						},
+						getArtifactMeta: async () => {
+							throw new Error("not used");
+						},
+						putArtifact: async () => {
+							throw new Error("not used");
+						},
+					},
+					sandboxRepo: {
+						acquireLease: async () => {
+							throw new Error("not used");
+						},
+						claimNextCommand: async () => {
+							throw new Error("not used");
+						},
+						getSandbox: async () => makeSandbox(),
+						getCurrentCommand: async () => null,
+						markApproved: async () => makeSandbox(),
+						markCommandDead: async () => null,
+						persistExec: async () => {
+							throw new Error("not used");
+						},
+						requeueCommand: async () => null,
+						releaseLease: async () => {
+							releaseLeaseCalls += 1;
+						},
+					},
+					backend: {
+						ensure: async () => {
+							throw new Error("not used");
+						},
+						exec: async () => {
+							throw new Error("backend.exec called in replay mode");
+						},
+						snapshot: async () => {
+							throw new Error("not used");
+						},
+						destroy: async () => null,
+					},
+					workflowLauncher: {
+						startRunOnce: async () => undefined,
+					},
+					createPiSession: async () => {
+						throw new Error("createPiSession called in replay mode");
+					},
+					workflowId: "wf",
+				},
+				stepRunner,
+			);
+		} finally {
+			process.env.REPLAY_RUN_ID = originalReplayRunId;
+			process.env.REPLAY_MODE = originalReplayMode;
+		}
+
+		expect(recordStepCalls).toBe(1);
+		expect(releaseLeaseCalls).toBe(0);
+	});
+
+	it("fails fast when replay payloads are missing", async () => {
+		const originalReplayRunId = process.env.REPLAY_RUN_ID;
+		process.env.REPLAY_RUN_ID = RUN_ID;
+		try {
+			await expect(
+				executeRunSandbox(
+					RUN_ID,
+					{
+						runRepo: {
+							getRun: async () => null,
+							listStepPayloads: async () => [],
+						},
+						runService: {
+							appendArtifactWritten: async () => {
+								throw new Error("not used");
+							},
+							appendPiEvent: async () => {
+								throw new Error("not used");
+							},
+							appendRunEvent: async () => {
+								throw new Error("not used");
+							},
+							beginRun: async () => {
+								throw new Error("not used");
+							},
+							failRun: async () => null,
+							linkArtifact: async () => undefined,
+							recordStepLedger: async () => undefined,
+						},
+						artifactService: {
+							getArtifactBytes: async () => {
+								throw new Error("not used");
+							},
+							getArtifactMeta: async () => {
+								throw new Error("not used");
+							},
+							putArtifact: async () => {
+								throw new Error("not used");
+							},
+						},
+						sandboxRepo: {
+							acquireLease: async () => true,
+							claimNextCommand: async () => null,
+							getSandbox: async () => null,
+							getCurrentCommand: async () => null,
+							markApproved: async () => null,
+							markCommandDead: async () => null,
+							persistExec: async () => {
+								throw new Error("not used");
+							},
+							requeueCommand: async () => null,
+							releaseLease: async () => undefined,
+						},
+						backend: {
+							ensure: async () => makeSandbox(),
+							exec: async () => {
+								throw new Error("not used");
+							},
+							snapshot: async () => {
+								throw new Error("not used");
+							},
+							destroy: async () => null,
+						},
+						workflowLauncher: {
+							startRunOnce: async () => undefined,
+						},
+						createPiSession: async () => {
+							throw new Error("not used");
+						},
+						workflowId: "wf",
+					},
+					stepRunner,
+				),
+			).rejects.toThrow("replay source has no run_command payloads");
+		} finally {
+			process.env.REPLAY_RUN_ID = originalReplayRunId;
+		}
 	});
 });

@@ -37,6 +37,9 @@ describe("run sandbox durability proof", () => {
 		expect(parsed.counts?.persist_session).toBe(1);
 		expect(parsed.counts?.snapshot).toBe(1);
 		expect(parsed.counts?.persist_exec).toBe(1);
+		expect(parsed.counts?.record_step_ledger).toBe(1);
+		expect(parsed.counts?.artifact_pi_session_jsonl).toBe(1);
+		expect(parsed.counts?.artifact_workspace_snapshot).toBe(1);
 		expect(parsed.counts?.release_lease).toBe(1);
 	});
 });

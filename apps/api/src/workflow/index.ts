@@ -40,6 +40,7 @@ export type RunSandboxWorkflowStep =
 	(typeof RUN_SANDBOX_WORKFLOW_STEPS)[number];
 export { executeRunSandbox, registerRunSandboxWorkflow } from "./run-sandbox";
 export type { RunSandboxDeps } from "./run-sandbox";
+export type { ReplayConfig, ReplayMode, ReplayStepPayload } from "./replay";
 export { executeActorTick, registerActorTickWorkflow } from "./actor-tick";
 export type {
 	ActorTickDeps,

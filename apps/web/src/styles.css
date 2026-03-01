@@ -349,6 +349,19 @@ button:disabled {
 	border-bottom: 1px solid var(--border);
 }
 
+.provenance-main,
+.provenance-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.provenance-main {
+	flex-direction: column;
+	align-items: flex-start;
+}
+
 @media (max-width: 960px) {
 	.workspace,
 	.thread-form,

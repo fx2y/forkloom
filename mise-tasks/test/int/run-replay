@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm
+
+mkdir -p .cache/spec06
+pnpm exec tsx scripts/harness/run-replay-proof.ts
+pnpm exec vitest run tests/int/run-replay.test.ts
+
+write_mark "test:int:run-replay"
+echo "test:int:run-replay ok"

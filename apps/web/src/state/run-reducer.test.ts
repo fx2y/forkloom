@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	hydrateRunState,
+	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
 } from "./run-reducer";
@@ -69,6 +70,71 @@ describe("run reducer", () => {
 		expect(aborted.trace.map((entry) => entry.kind)).toEqual([
 			"run_started",
 			"run_aborted",
+		]);
+	});
+
+	it("hydrates provenance graph from truth bundle links", () => {
+		const seeded = hydrateRunState(initialRunViewState, {
+			runId: RUN_ID,
+			status: "running",
+			startedAt: "2026-02-28T00:00:00.000Z",
+			dbosWfId: RUN_ID,
+			artifacts: [],
+		});
+
+		const hydrated = hydrateRunTruth(seeded, {
+			run: {
+				runId: RUN_ID,
+				status: "done",
+				spec: {
+					runId: RUN_ID,
+					scope: "team",
+					userMsg: "truth",
+					attachments: [],
+					profile: "safe",
+				},
+				createdAt: "2026-02-28T00:00:00.000Z",
+				updatedAt: "2026-02-28T00:00:01.000Z",
+				dbosWorkflowId: RUN_ID,
+				piSessionId: "session-1",
+				piSessionFile: "/tmp/session.jsonl",
+				resultText: "done",
+				resultStats: {},
+				error: null,
+			},
+			steps: [],
+			links: [
+				{
+					runId: RUN_ID,
+					stepName: "run_command",
+					attempt: 1,
+					sessionEntryIds: ["entry-1"],
+					artifactShas: ["a".repeat(64), "b".repeat(64)],
+					note: "step=run_command",
+					createdAt: "2026-02-28T00:00:02.000Z",
+				},
+			],
+			artifacts: [
+				{
+					runId: RUN_ID,
+					sha256: "a".repeat(64),
+					kind: "pi_session_jsonl",
+					createdAt: "2026-02-28T00:00:02.000Z",
+				},
+			],
+			sessionIndex: null,
+			stepPayloads: [],
+		});
+
+		expect(hydrated.provenanceByArtifact["a".repeat(64)]).toEqual([
+			{
+				artifact: "a".repeat(64),
+				runId: RUN_ID,
+				stepName: "run_command",
+				attempt: 1,
+				sessionIds: ["entry-1"],
+				parentShas: ["b".repeat(64)],
+			},
 		]);
 	});
 });

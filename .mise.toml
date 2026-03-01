@@ -193,6 +193,11 @@ run = "bash ./mise-tasks/test/int/run-sandbox-durability"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "docker-compose.yml", "mise-tasks/test/int/run-sandbox-durability"]
 outputs = [".cache/mise-marks/test__int__run-sandbox-durability.ok", ".cache/test-int/run-sandbox-durability.json", "/tmp/run-sandbox-live.first.log", "/tmp/run-sandbox-live.recover.log"]
 
+[tasks."test:int:run-replay"]
+run = "bash ./mise-tasks/test/int/run-replay"
+sources = ["src/**/*.ts", "scripts/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "tests/int/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/run-replay"]
+outputs = [".cache/mise-marks/test__int__run-replay.ok", ".cache/spec06/replay-cli.assert.json"]
+
 [tasks."test:int:ocr-doc"]
 run = "bash ./mise-tasks/test/int/ocr-doc"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]
@@ -216,6 +221,7 @@ run = [
   "mise run test:int:run-sandbox-files",
   "mise run test:int:run-sandbox-sse",
   "mise run test:int:run-sandbox-durability",
+  "mise run test:int:run-replay",
   "mise run test:int:ocr-doc"
 ]
 
@@ -237,6 +243,7 @@ run = [
   "mise run --force test:int:run-sandbox-files",
   "mise run --force test:int:run-sandbox-sse",
   "mise run --force test:int:run-sandbox-durability",
+  "mise run --force test:int:run-replay",
   "mise run --force test:int:ocr-doc"
 ]
 

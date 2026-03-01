@@ -21,6 +21,12 @@ import type {
 import type { StagedSandboxInput } from "../sandbox/input-staging";
 import type { ArtifactService } from "../service";
 import { buildRunPromptInput } from "./prompt";
+import {
+	type ReplayStepPayload,
+	listReplayStepPayloads,
+	readReplayConfig,
+	selectReplayStepPayload,
+} from "./replay";
 import { buildStepHashes } from "./step-hash";
 
 type RunSandboxStepName =
@@ -65,7 +71,7 @@ type CollectedCommand = {
 export class RunTransientError extends Error {}
 
 export type RunSandboxDeps = {
-	runRepo: Pick<RunRepo, "getRun">;
+	runRepo: Pick<RunRepo, "getRun" | "listStepPayloads">;
 	runService: Pick<
 		RunService,
 		| "appendArtifactWritten"
@@ -224,6 +230,92 @@ function toLedgerArtifactShas(exec: ExecResult): string[] {
 	return [...unique].sort((a, b) => a.localeCompare(b));
 }
 
+function toReplayCommandKind(kind: string): RunCommandModel["kind"] {
+	switch (kind) {
+		case "approve":
+		case "prompt":
+		case "followUp":
+		case "steer":
+		case "abort":
+			return kind;
+		default:
+			return "prompt";
+	}
+}
+
+function toReplayCommand(
+	runId: string,
+	workflowId: string,
+	payload: ReplayStepPayload,
+): RunCommandModel {
+	return {
+		runId,
+		seq: payload.commandSeq,
+		kind: toReplayCommandKind(payload.commandKind),
+		payload: payload.commandPayload,
+		dedupeKey: `replay:${payload.runId}:${payload.attempt}`,
+		state: "claimed",
+		claimedBy: workflowId,
+		claimedAt: payload.exec.startedAt,
+		leaseExpiresAt: null,
+		doneAt: null,
+		error: null,
+		createdAt: payload.exec.startedAt,
+	};
+}
+
+function toReplayCollected(
+	run: RunModel,
+	sandbox: SandboxModel,
+	payload: ReplayStepPayload,
+): CollectedCommand {
+	const sessionEntryIds = payload.session?.sessionEntryIds ?? [];
+	const sessionState: PiSessionState = {
+		sessionId: payload.session?.sessionId ?? `replay:${run.runId}`,
+		sessionFile: payload.session?.sessionFile ?? "/tmp/replay.session.jsonl",
+		isStreaming: false,
+		pending: 0,
+	};
+	return {
+		resultText: normalizeResultText(
+			typeof run.resultText === "string" ? run.resultText : "[replay]",
+		),
+		stats: run.resultStats ?? {},
+		sessionState,
+		sessionEntryIds,
+		sessionIndex: {
+			entryCount: payload.session?.entryCount ?? 0,
+			rootId: payload.session?.rootId,
+			leafId: payload.session?.leafId,
+			summaryEntryCount: payload.session?.summaryEntryCount ?? 0,
+		},
+		sessionArtifactSha: payload.session?.sessionArtifactSha ?? "",
+		execResult: {
+			exitCode: payload.exec.exitCode,
+			status:
+				payload.exec.status === "running" ||
+				payload.exec.status === "done" ||
+				payload.exec.status === "failed" ||
+				payload.exec.status === "aborted"
+					? payload.exec.status
+					: "done",
+			cmdList: payload.exec.cmdList,
+			artifactReads: payload.exec.artifactReads,
+			artifactWrites: payload.exec.artifactWrites,
+			stdoutTail: "",
+			stderrTail: "",
+			stdoutBytes: 0,
+			stderrBytes: 0,
+			timeoutSec: sandbox.spec.timeoutSec,
+			maxBytesOut: sandbox.spec.maxBytesOut,
+			startedAt: payload.exec.startedAt,
+			endedAt: payload.exec.endedAt,
+			workspaceRef: payload.exec.workspaceRef,
+		},
+		workspaceRef: payload.exec.workspaceRef,
+	};
+}
+
 async function closeSession(session: PiSessionPort | null): Promise<void> {
 	await session?.close().catch(() => undefined);
 }
@@ -236,12 +328,27 @@ export async function executeRunSandbox(
 	const workflowId = deps.workflowId ?? requireWorkflowId();
 	const leaseMs = deps.leaseMs ?? RUN_SANDBOX_LEASE_MS;
 	const readFileBytes = deps.readFileBytes ?? readFile;
+	const replay = readReplayConfig();
 	let loadedPlan: LoadedPlan | null = null;
 	let session: PiSessionPort | null = null;
 	let startedAt: string | null = null;
 	let nextPendingSeq: number | null = null;
 	let nextWorkflowId: string | null = null;
 	let stagedInputs: StagedSandboxInput[] = [];
+	let replayPayload: ReplayStepPayload | null = null;
+
+	if (replay.enabled) {
+		const replaySourceRunId = replay.sourceRunId ?? runId;
+		const replayPayloads = listReplayStepPayloads(
+			await deps.runRepo.listStepPayloads(replaySourceRunId),
+		);
+		replayPayload = selectReplayStepPayload(replayPayloads, replay.attempt);
+		if (!replayPayload) {
+			throw new Error(
+				`replay source has no run_command payloads: ${replaySourceRunId}`,
+			);
+		}
+	}
 
 	const getOrCreateSession = async (): Promise<PiSessionPort> => {
 		if (!session) {
@@ -255,6 +362,20 @@ export async function executeRunSandbox(
 
 	try {
 		loadedPlan = await steps.runStep("loadPlan", async () => {
+			if (replayPayload) {
+				const run =
+					(await deps.runRepo.getRun(runId)) ??
+					(await deps.runRepo.getRun(replayPayload.runId));
+				if (!run) {
+					throw new Error(`run not found: ${runId}`);
+				}
+				const sandbox = await deps.sandboxRepo.getSandbox(runId);
+				if (!sandbox) {
+					throw new Error(`sandbox not found: ${runId}`);
+				}
+				const command = toReplayCommand(runId, workflowId, replayPayload);
+				return { run, sandbox, command };
+			}
 			const acquired = await deps.sandboxRepo.acquireLease({
 				runId,
 				workflowId,
@@ -285,12 +406,19 @@ export async function executeRunSandbox(
 		}
 		const activePlan = assertLoaded(loadedPlan);
 
-		const liveSandbox = await steps.runStep("ensureSandbox", async () =>
-			deps.backend.ensure(activePlan.sandbox.spec),
-		);
+		const liveSandbox = await steps.runStep("ensureSandbox", async () => {
+			if (replayPayload) {
+				return activePlan.sandbox;
+			}
+			return deps.backend.ensure(activePlan.sandbox.spec);
+		});
 		loadedPlan = { ...loadedPlan, sandbox: liveSandbox };
 
 		await steps.runStep("stageInputs", async () => {
+			if (replayPayload) {
+				stagedInputs = [];
+				return;
+			}
 			const sandbox = assertLoaded(loadedPlan).sandbox;
 			const inputMount =
 				sandbox.spec.mounts.find(
@@ -314,6 +442,9 @@ export async function executeRunSandbox(
 
 		startedAt = clockIso();
 		await steps.runStep("applyCommand", async () => {
+			if (replayPayload) {
+				return;
+			}
 			const loaded = assertLoaded(loadedPlan);
 			if (loaded.run.status === "queued" && loaded.command.kind !== "approve") {
 				await deps.runService.beginRun(runId, { scope: loaded.run.spec.scope });
@@ -370,6 +501,12 @@ export async function executeRunSandbox(
 
 		const collected = await steps.runStep("collect", async () => {
 			const loaded = assertLoaded(loadedPlan);
+			if (replayPayload) {
+				if (loaded.command.kind === "approve") {
+					return null;
+				}
+				return toReplayCollected(loaded.run, loaded.sandbox, replayPayload);
+			}
 			if (loaded.command.kind === "approve") {
 				return null;
 			}
@@ -487,6 +624,12 @@ export async function executeRunSandbox(
 			if (!collected) {
 				return null;
 			}
+			if (replayPayload) {
+				return {
+					...collected,
+					workspaceRef: collected.workspaceRef,
+				} satisfies CollectedCommand;
+			}
 			const workspaceRef = await deps.backend.snapshot(
 				assertLoaded(loadedPlan).sandbox,
 				WORKSPACE_SNAPSHOT_RULE,
@@ -551,15 +694,22 @@ export async function executeRunSandbox(
 					withSnapshot.workspaceRef,
 				);
 			}
-			const persisted = await deps.sandboxRepo.persistExec({
-				runId,
-				workflowId,
-				commandSeq: loaded.command.seq,
-				commandKind: loaded.command.kind,
-				result: baseResult,
-				workspaceRef: withSnapshot?.workspaceRef,
-			});
-			const stepName = "run_command";
+			if (!replayPayload) {
+				const persisted = await deps.sandboxRepo.persistExec({
+					runId,
+					workflowId,
+					commandSeq: loaded.command.seq,
+					commandKind: loaded.command.kind,
+					result: baseResult,
+					workspaceRef: withSnapshot?.workspaceRef,
+				});
+				nextPendingSeq = persisted.nextPendingSeq;
+			}
+			const stepName = replayPayload
+				? replay.mode === "debug"
+					? "replay_debug_run_command"
+					: "replay_stub_run_command"
+				: "run_command";
 			const attempt = loaded.command.seq;
 			const { stepKey, inHash, outHash } = buildStepHashes({
 				runId,
@@ -581,36 +731,43 @@ export async function executeRunSandbox(
 				sessionEntryIds: withSnapshot?.sessionEntryIds ?? [],
 				artifactShas: toLedgerArtifactShas(baseResult),
 				note: `step=${stepName} kind=${loaded.command.kind} status=${baseResult.status}`,
-				payload: {
-					commandSeq: loaded.command.seq,
-					commandKind: loaded.command.kind,
-					commandPayload: loaded.command.payload,
-					exec: {
-						exitCode: baseResult.exitCode,
-						status: baseResult.status,
-						startedAt: baseResult.startedAt,
-						endedAt: baseResult.endedAt,
-						cmdList: baseResult.cmdList,
-						artifactReads: baseResult.artifactReads,
-						artifactWrites: baseResult.artifactWrites,
-					},
-					session: withSnapshot
-						? {
-								sessionId: withSnapshot.sessionState.sessionId,
-								sessionFile: withSnapshot.sessionState.sessionFile,
-								sessionArtifactSha: withSnapshot.sessionArtifactSha,
-								sessionEntryIds: withSnapshot.sessionEntryIds,
-								entryCount: withSnapshot.sessionIndex.entryCount,
-								rootId: withSnapshot.sessionIndex.rootId,
-								leafId: withSnapshot.sessionIndex.leafId,
-								summaryEntryCount: withSnapshot.sessionIndex.summaryEntryCount,
-							}
-						: null,
-				},
+				payload: replayPayload
+					? {
+							replayMode: replay.mode,
+							replaySourceRunId: replayPayload.runId,
+							synthetic: true,
+							out_payload: replayPayload,
+						}
+					: {
+							commandSeq: loaded.command.seq,
+							commandKind: loaded.command.kind,
+							commandPayload: loaded.command.payload,
+							exec: {
+								exitCode: baseResult.exitCode,
+								status: baseResult.status,
+								startedAt: baseResult.startedAt,
+								endedAt: baseResult.endedAt,
+								cmdList: baseResult.cmdList,
+								artifactReads: baseResult.artifactReads,
+								artifactWrites: baseResult.artifactWrites,
+							},
+							session: withSnapshot
+								? {
+										sessionId: withSnapshot.sessionState.sessionId,
+										sessionFile: withSnapshot.sessionState.sessionFile,
+										sessionArtifactSha: withSnapshot.sessionArtifactSha,
+										sessionEntryIds: withSnapshot.sessionEntryIds,
+										entryCount: withSnapshot.sessionIndex.entryCount,
+										rootId: withSnapshot.sessionIndex.rootId,
+										leafId: withSnapshot.sessionIndex.leafId,
+										summaryEntryCount:
+											withSnapshot.sessionIndex.summaryEntryCount,
+									}
+								: null,
+						},
 				sessionIndex: withSnapshot?.sessionIndex,
 			});
-			nextPendingSeq = persisted.nextPendingSeq;
-			if (loaded.command.kind === "abort") {
+			if (!replayPayload && loaded.command.kind === "abort") {
 				await deps.runService.appendRunEvent(runId, "run_aborted", {
 					seq: loaded.command.seq,
 				});
@@ -618,7 +775,9 @@ export async function executeRunSandbox(
 			}
 			await closeSession(session);
 			session = null;
-			await deps.sandboxRepo.releaseLease(runId, workflowId);
+			if (!replayPayload) {
+				await deps.sandboxRepo.releaseLease(runId, workflowId);
+			}
 			if (nextPendingSeq != null) {
 				nextWorkflowId = toRunSandboxWorkflowId(runId, nextPendingSeq);
 			}
@@ -632,7 +791,7 @@ export async function executeRunSandbox(
 		let retryWorkflowId: string | null = null;
 		await steps.runStep("markFailed", async () => {
 			if (loadedPlan) {
-				if (!isClaimOrLeaseLost(error)) {
+				if (!replayPayload && !isClaimOrLeaseLost(error)) {
 					const command = loadedPlan.command;
 					nextPendingSeq =
 						error instanceof RunTransientError
@@ -655,7 +814,9 @@ export async function executeRunSandbox(
 						retryWorkflowId = toRunSandboxWorkflowId(runId, nextPendingSeq);
 					}
 				}
-				await deps.sandboxRepo.releaseLease(runId, workflowId);
+				if (!replayPayload) {
+					await deps.sandboxRepo.releaseLease(runId, workflowId);
+				}
 			}
 			await closeSession(session);
 			session = null;

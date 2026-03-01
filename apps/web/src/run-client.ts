@@ -1,4 +1,4 @@
-import type { RunEvent, RunState } from "@forkloom/contracts";
+import type { RunEvent, RunState, TruthBundle } from "@forkloom/contracts";
 import type { AppDeps } from "./actor-client";
 
 type RunCreateInput = {
@@ -51,6 +51,14 @@ export async function fetchRun(
 ): Promise<RunState> {
 	const response = await deps.fetchImpl(`/runs/${runId}`);
 	return readJson(response, `fetch run ${runId}`);
+}
+
+export async function fetchRunTruth(
+	deps: AppDeps,
+	runId: string,
+): Promise<TruthBundle> {
+	const response = await deps.fetchImpl(`/runs/${runId}/truth`);
+	return readJson(response, `fetch run truth ${runId}`);
 }
 
 export async function postRunCommand(
