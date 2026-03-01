@@ -31,6 +31,24 @@ export type StepHashOutputEnvelope = {
 	};
 };
 
+function sanitizeJson(value: unknown): unknown {
+	if (value === undefined) {
+		return null;
+	}
+	if (Array.isArray(value)) {
+		return value.map((entry) => sanitizeJson(entry));
+	}
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+				key,
+				sanitizeJson(entry),
+			]),
+		);
+	}
+	return value;
+}
+
 function sortStrings(values: string[]): string[] {
 	return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
@@ -130,5 +148,49 @@ export function buildStepHashes(input: {
 		),
 		inHash,
 		outHash,
+	};
+}
+
+export function buildGenericStepHashes(input: {
+	runId: string;
+	stepName: string;
+	attempt: number;
+	stepInput: unknown;
+	stepOutput: unknown;
+}): {
+	stepKey: string;
+	inHash: string;
+	outHash: string;
+} {
+	const inEnvelope = {
+		runId: input.runId,
+		stepName: input.stepName,
+		attempt: input.attempt,
+		input: sanitizeJson(input.stepInput),
+	};
+	const outEnvelope = {
+		runId: input.runId,
+		stepName: input.stepName,
+		attempt: input.attempt,
+		output: sanitizeJson(input.stepOutput),
+	};
+	const inHash = hashJSON(inEnvelope);
+	const outHash = hashJSON(outEnvelope);
+	return {
+		stepKey: hashText(
+			`${input.runId}:${input.stepName}:${input.attempt}:${inHash}`,
+		),
+		inHash,
+		outHash,
+	};
+}
+
+export function buildGenericStepPayload(input: {
+	stepInput: unknown;
+	stepOutput: unknown;
+}): Record<string, unknown> {
+	return {
+		input: sanitizeJson(input.stepInput),
+		output: sanitizeJson(input.stepOutput),
 	};
 }

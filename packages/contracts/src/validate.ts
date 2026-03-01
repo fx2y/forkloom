@@ -42,6 +42,9 @@ import runSpecSchema from "../../../contracts/v1/RunSpec.schema.json" with {
 import runStateSchema from "../../../contracts/v1/RunState.schema.json" with {
 	type: "json",
 };
+import truthBundleSchema from "../../../contracts/v1/TruthBundle.schema.json" with {
+	type: "json",
+};
 
 export type ContractName =
 	| "Message"
@@ -49,7 +52,11 @@ export type ContractName =
 	| "Workflow"
 	| "Skill"
 	| "Extension";
-export type RunContractName = "RunSpec" | "RunState" | "RunEvent";
+export type RunContractName =
+	| "RunSpec"
+	| "RunState"
+	| "RunEvent"
+	| "TruthBundle";
 export type ActorContractName =
 	| "ActorSpec"
 	| "MailboxPost"
@@ -72,6 +79,7 @@ const v1RunValidators: Record<RunContractName, ValidateFunction> = {
 	RunSpec: ajv.compile(runSpecSchema),
 	RunState: ajv.compile(runStateSchema),
 	RunEvent: ajv.compile(runEventSchema),
+	TruthBundle: ajv.compile(truthBundleSchema),
 };
 const v1ActorValidators: Record<ActorContractName, ValidateFunction> = {
 	ActorSpec: ajv.compile(actorSpecSchema),

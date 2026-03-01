@@ -1,9 +1,11 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { validateRunByName } from "@forkloom/contracts";
 import type {
 	RunDonePayload,
 	RunEvent,
 	RunFailedPayload,
 	RunState,
+	TruthBundle as TruthBundleContract,
 } from "@forkloom/contracts";
 import { HttpError } from "../errors";
 import {
@@ -36,6 +38,8 @@ export type RunStepLedgerInput = {
 	stepKey: string;
 	inHash: string;
 	outHash?: string | undefined;
+	startedAt?: string | undefined;
+	endedAt?: string | undefined;
 	sessionEntryIds: string[];
 	artifactShas: string[];
 	note?: string | undefined;
@@ -294,6 +298,20 @@ export class RunService {
 		return events.map(toRunEventContract);
 	}
 
+	async getTruthBundle(runId: string): Promise<TruthBundleContract | null> {
+		const truth = await this.deps.runRepo.getTruthBundle(runId);
+		if (!truth) {
+			return null;
+		}
+		const validated = validateRunByName("TruthBundle", truth);
+		if (!validated.valid) {
+			throw new Error(
+				`truth bundle contract invalid: ${validated.errors.join("; ")}`,
+			);
+		}
+		return truth as TruthBundleContract;
+	}
+
 	async listFiles(runId: string): Promise<{
 		workspaceRef?: { sha256: string } | undefined;
 		workspace_manifest: {
@@ -438,6 +456,8 @@ export class RunService {
 			stepKey: input.stepKey,
 			inHash: input.inHash,
 			outHash: input.outHash,
+			startedAt: input.startedAt,
+			endedAt: input.endedAt,
 		});
 		if (input.payload) {
 			await this.deps.runRepo.upsertStepPayload({

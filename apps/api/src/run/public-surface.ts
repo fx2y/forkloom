@@ -1,6 +1,7 @@
 export const RUN_API_ENDPOINTS = [
 	"POST /runs",
 	"GET /runs/:runId",
+	"GET /runs/:runId/truth",
 	"GET /runs/:runId/events",
 	"POST /runs/:runId/commands",
 	"GET /runs/:runId/files",
@@ -11,6 +12,7 @@ export const RUN_PUBLIC_TOP_LEVEL_NOUNS = [
 	"RunSpec",
 	"RunState",
 	"RunEvent",
+	"TruthBundle",
 ] as const;
 
 export const RUN_PUBLIC_COMMAND_KINDS = [

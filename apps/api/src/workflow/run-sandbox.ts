@@ -576,6 +576,8 @@ export async function executeRunSandbox(
 				stepKey,
 				inHash,
 				outHash,
+				startedAt: baseResult.startedAt,
+				endedAt: baseResult.endedAt,
 				sessionEntryIds: withSnapshot?.sessionEntryIds ?? [],
 				artifactShas: toLedgerArtifactShas(baseResult),
 				note: `step=${stepName} kind=${loaded.command.kind} status=${baseResult.status}`,

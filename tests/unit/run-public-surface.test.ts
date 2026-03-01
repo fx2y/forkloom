@@ -12,22 +12,24 @@ import {
 
 describe("run public surface freeze", () => {
 	it("keeps the public owner on /runs", () => {
-		expect(RUN_API_ENDPOINTS).toEqual([
-			"POST /runs",
-			"GET /runs/:runId",
-			"GET /runs/:runId/events",
-			"POST /runs/:runId/commands",
-			"GET /runs/:runId/files",
-			"POST /runs/:runId/files/export",
-		]);
+			expect(RUN_API_ENDPOINTS).toEqual([
+				"POST /runs",
+				"GET /runs/:runId",
+				"GET /runs/:runId/truth",
+				"GET /runs/:runId/events",
+				"POST /runs/:runId/commands",
+				"GET /runs/:runId/files",
+				"POST /runs/:runId/files/export",
+			]);
 	});
 
 	it("keeps top-level nouns run-owned and bans sandbox nouns", () => {
-		expect(RUN_PUBLIC_TOP_LEVEL_NOUNS).toEqual([
-			"RunSpec",
-			"RunState",
-			"RunEvent",
-		]);
+			expect(RUN_PUBLIC_TOP_LEVEL_NOUNS).toEqual([
+				"RunSpec",
+				"RunState",
+				"RunEvent",
+				"TruthBundle",
+			]);
 		expect(RUN_PUBLIC_BANNED_SANDBOX_NOUNS).toEqual([
 			"SandboxSpec",
 			"SandboxState",

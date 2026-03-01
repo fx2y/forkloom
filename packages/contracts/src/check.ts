@@ -56,6 +56,8 @@ function contractForV1Example(
 			return "RunState";
 		case "run-event":
 			return "RunEvent";
+		case "truth-bundle":
+			return "TruthBundle";
 		default:
 			return "";
 	}
@@ -122,7 +124,12 @@ function assertV1Examples(): void {
 		inferContract: contractForV1Example,
 		getNames: () => [...getRunContractNames(), ...getActorContractNames()],
 		validate: (name, payload) => {
-			if (name === "RunSpec" || name === "RunState" || name === "RunEvent") {
+			if (
+				name === "RunSpec" ||
+				name === "RunState" ||
+				name === "RunEvent" ||
+				name === "TruthBundle"
+			) {
 				return validateRunByName(name, payload);
 			}
 			return validateActorByName(name, payload);
@@ -193,7 +200,12 @@ function assertNoBannedNounsInV0(): void {
 }
 
 function assertRunNounsScopedToV1(): void {
-	const runNouns: RunContractName[] = ["RunSpec", "RunState", "RunEvent"];
+	const runNouns: RunContractName[] = [
+		"RunSpec",
+		"RunState",
+		"RunEvent",
+		"TruthBundle",
+	];
 	const actorNouns: ActorContractName[] = [
 		"ActorSpec",
 		"MailboxPost",

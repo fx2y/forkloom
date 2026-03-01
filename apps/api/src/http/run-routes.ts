@@ -76,6 +76,19 @@ export function attachRunRoutes(app: Express, runService: RunService): void {
 	);
 
 	app.get(
+		"/runs/:runId/truth",
+		asyncHandler(async (req, res) => {
+			const runId = requireRouteParam(req.params.runId, "runId");
+			const truth = await runService.getTruthBundle(runId);
+			if (!truth) {
+				res.status(404).json({ error: "run not found" });
+				return;
+			}
+			res.json(truth);
+		}),
+	);
+
+	app.get(
 		"/runs/:runId/events",
 		asyncHandler(async (req, res) => {
 			const runId = requireRouteParam(req.params.runId, "runId");

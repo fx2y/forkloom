@@ -495,7 +495,11 @@ async function run(): Promise<void> {
 			startRunOnce: async () => undefined,
 		},
 		createPiSession: async () => createPiSession(),
-		readFileBytes: async () => Buffer.from("line\n", "utf8"),
+		readFileBytes: async () =>
+			Buffer.from(
+				`${JSON.stringify({ type: "assistant", id: "entry-1", text: "done" })}\n`,
+				"utf8",
+			),
 	});
 
 	await DBOS.launch();

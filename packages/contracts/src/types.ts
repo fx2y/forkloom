@@ -129,6 +129,62 @@ export type RunState = {
 	artifacts: RunArtifactRef[];
 };
 
+export type TruthBundle = {
+	run: {
+		runId: string;
+		status: "queued" | "running" | "done" | "failed";
+		spec: RunSpec;
+		createdAt: string;
+		updatedAt: string;
+		dbosWorkflowId: string | null;
+		piSessionId: string | null;
+		piSessionFile: string | null;
+		resultText: string | null;
+		resultStats: Record<string, unknown> | null;
+		error: string | null;
+	};
+	steps: Array<{
+		runId: string;
+		stepName: string;
+		attempt: number;
+		stepKey: string;
+		inHash: string;
+		outHash: string | null;
+		startedAt: string;
+		endedAt: string | null;
+	}>;
+	links: Array<{
+		runId: string;
+		stepName: string;
+		attempt: number;
+		sessionEntryIds: string[];
+		artifactShas: string[];
+		note: string | null;
+		createdAt: string;
+	}>;
+	artifacts: Array<{
+		runId: string;
+		sha256: string;
+		kind: string;
+		createdAt: string;
+	}>;
+	sessionIndex: {
+		runId: string;
+		entryCount: number;
+		rootId: string | null;
+		leafId: string | null;
+		summaryEntryCount: number;
+		updatedAt: string;
+	} | null;
+	stepPayloads: Array<{
+		runId: string;
+		stepName: string;
+		attempt: number;
+		payload: Record<string, unknown>;
+		createdAt: string;
+	}>;
+};
+
 export type RunStartedPayload = {
 	scope?: RunScope;
 };

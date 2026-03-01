@@ -12,7 +12,12 @@ describe("contracts validate namespace", () => {
 		const all = getAllContractNames();
 		expect(all).toContain("Message");
 		expect(all).toContain("RunSpec");
-		expect(getRunContractNames()).toEqual(["RunSpec", "RunState", "RunEvent"]);
+		expect(getRunContractNames()).toEqual([
+			"RunSpec",
+			"RunState",
+			"RunEvent",
+			"TruthBundle",
+		]);
 	});
 
 	it("validates run payloads through unified validator", () => {

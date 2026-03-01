@@ -1,0 +1,292 @@
+{
+  "$id": "https://forkloom/contracts/v1/TruthBundle.schema.json",
+  "title": "TruthBundle",
+  "type": "object",
+  "required": ["run", "steps", "links", "artifacts", "stepPayloads"],
+  "properties": {
+    "run": {
+      "type": "object",
+      "required": ["runId", "status", "spec", "createdAt", "updatedAt"],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["queued", "running", "done", "failed"]
+        },
+        "spec": {
+          "type": "object",
+          "required": ["runId", "scope", "userMsg", "attachments"],
+          "properties": {
+            "runId": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["me", "team", "org"]
+            },
+            "userMsg": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attachments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["sha256"],
+                "properties": {
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "workdirRef": {
+              "type": "object",
+              "required": ["sha256"],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "additionalProperties": false
+            },
+            "modelPref": {
+              "type": "string",
+              "minLength": 1
+            },
+            "profile": {
+              "type": "string",
+              "enum": ["safe", "std", "priv"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dbosWorkflowId": {
+          "type": ["string", "null"]
+        },
+        "piSessionId": {
+          "type": ["string", "null"]
+        },
+        "piSessionFile": {
+          "type": ["string", "null"]
+        },
+        "resultText": {
+          "type": ["string", "null"]
+        },
+        "resultStats": {
+          "type": ["object", "null"]
+        },
+        "error": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "runId",
+          "stepName",
+          "attempt",
+          "stepKey",
+          "inHash",
+          "startedAt"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "stepName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "stepKey": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "inHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "outHash": {
+            "type": ["string", "null"],
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "runId",
+          "stepName",
+          "attempt",
+          "sessionEntryIds",
+          "artifactShas",
+          "createdAt"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "stepName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sessionEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "artifactShas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "note": {
+            "type": ["string", "null"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["runId", "sha256", "kind", "createdAt"],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "sessionIndex": {
+      "type": ["object", "null"],
+      "required": [
+        "runId",
+        "entryCount",
+        "rootId",
+        "leafId",
+        "summaryEntryCount",
+        "updatedAt"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "entryCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rootId": {
+          "type": ["string", "null"]
+        },
+        "leafId": {
+          "type": ["string", "null"]
+        },
+        "summaryEntryCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "stepPayloads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["runId", "stepName", "attempt", "payload", "createdAt"],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "stepName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

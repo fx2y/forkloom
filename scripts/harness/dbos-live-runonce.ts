@@ -252,6 +252,9 @@ async function run(): Promise<void> {
 			linkArtifact: async (_runId, _sha256, kind) => {
 				await recordEffect(`link_${kind}`);
 			},
+			recordStepLedger: async () => {
+				await recordEffect("record_step_ledger");
+			},
 		},
 		artifactService: {
 			getArtifactMeta: async (sha256) => ({

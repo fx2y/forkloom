@@ -14,6 +14,7 @@ function contractForExample(
 	| "RunSpec"
 	| "RunState"
 	| "RunEvent"
+	| "TruthBundle"
 	| "ActorSpec"
 	| "MailboxPost"
 	| "ActorState"
@@ -34,6 +35,8 @@ function contractForExample(
 			return "RunState";
 		case "run-event":
 			return "RunEvent";
+		case "truth-bundle":
+			return "TruthBundle";
 		default:
 			throw new Error(`unknown example prefix: ${name}`);
 	}
@@ -53,7 +56,10 @@ describe("contracts/v1 examples", () => {
 					...getRunContractNames(),
 					...getActorContractNames(),
 				].some((name) =>
-					name === "RunSpec" || name === "RunState" || name === "RunEvent"
+					name === "RunSpec" ||
+					name === "RunState" ||
+					name === "RunEvent" ||
+					name === "TruthBundle"
 						? validateRunByName(name, payload).valid
 						: validateActorByName(name, payload).valid,
 				);
@@ -62,12 +68,13 @@ describe("contracts/v1 examples", () => {
 			}
 
 			const contract = contractForExample(file);
-			const result =
-				contract === "RunSpec" ||
-				contract === "RunState" ||
-				contract === "RunEvent"
-					? validateRunByName(contract, payload)
-					: validateActorByName(contract, payload);
+				const result =
+					contract === "RunSpec" ||
+					contract === "RunState" ||
+					contract === "RunEvent" ||
+					contract === "TruthBundle"
+						? validateRunByName(contract, payload)
+						: validateActorByName(contract, payload);
 			expect(result.valid).toBe(true);
 			expect(result.errors).toHaveLength(0);
 		});
