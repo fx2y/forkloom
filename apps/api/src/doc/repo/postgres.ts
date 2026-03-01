@@ -1,5 +1,6 @@
 import pg from "pg";
 import { createPoolCloseOnce } from "../../repo/pool-close";
+import { buildSpanId } from "../ids";
 import type {
 	AliasArtifactInput,
 	Bbox,
@@ -8,7 +9,6 @@ import type {
 	OcrUsageModel,
 	ParseModel,
 	RecordParseLedgerInput,
-	SpanModel,
 	UpsertBlockInput,
 	UpsertChunkInput,
 	UpsertChunkSearchInput,
@@ -73,6 +73,10 @@ type OcrUsageRow = PgRowBase & {
 	output_tokens: number;
 	cost_micros: string | number;
 	payload: Record<string, unknown> | null;
+};
+
+type AliasRow = {
+	sha256: string;
 };
 
 export type PgDocRepoDeps = {
@@ -156,6 +160,29 @@ export class PgDocRepo implements DocRepo {
 		await this.closePool();
 	}
 
+	async getDoc(docSha: string): Promise<DocModel | null> {
+		const result = await this.pool.query<DocRow>(
+			`select doc_sha, mime, bytes, raw_artifact_sha, status, created_at, updated_at
+			 from docs
+			 where doc_sha = $1`,
+			[docSha],
+		);
+		const row = result.rows[0];
+		return row ? toDocModel(row) : null;
+	}
+
+	async getParse(parseId: string): Promise<ParseModel | null> {
+		const result = await this.pool.query<ParseRow>(
+			`select parse_id, doc_sha, parser, parser_ver, cfg_hash, norm_ver,
+			        md_artifact_sha, json_artifact_sha, stats, status, created_at, updated_at
+			 from parses
+			 where parse_id = $1`,
+			[parseId],
+		);
+		const row = result.rows[0];
+		return row ? toParseModel(row) : null;
+	}
+
 	async upsertDoc(input: UpsertDocInput): Promise<DocModel> {
 		return this.upsertDocFrom(this.pool, input);
 	}
@@ -166,6 +193,16 @@ export class PgDocRepo implements DocRepo {
 
 	async aliasArtifact(input: AliasArtifactInput): Promise<void> {
 		await this.aliasArtifactFrom(this.pool, input);
+	}
+
+	async resolveAlias(alias: string): Promise<string | null> {
+		const result = await this.pool.query<AliasRow>(
+			`select sha256
+			 from artifact_alias
+			 where alias = $1`,
+			[alias],
+		);
+		return result.rows[0]?.sha256 ?? null;
 	}
 
 	async recordParseLedger(input: RecordParseLedgerInput): Promise<void> {
@@ -290,7 +327,7 @@ export class PgDocRepo implements DocRepo {
 		parseId: string,
 		pages: UpsertPageInput[],
 	): Promise<void> {
-		await queryable.query(`delete from pages where parse_id = $1`, [parseId]);
+		await queryable.query("delete from pages where parse_id = $1", [parseId]);
 		for (const page of pages) {
 			await this.insertPageFrom(queryable, page);
 		}
@@ -323,7 +360,7 @@ export class PgDocRepo implements DocRepo {
 		parseId: string,
 		blocks: UpsertBlockInput[],
 	): Promise<void> {
-		await queryable.query(`delete from blocks where parse_id = $1`, [parseId]);
+		await queryable.query("delete from blocks where parse_id = $1", [parseId]);
 		for (const block of blocks) {
 			await this.insertBlockFrom(queryable, block);
 		}
@@ -357,7 +394,7 @@ export class PgDocRepo implements DocRepo {
 		parseId: string,
 		chunks: UpsertChunkInput[],
 	): Promise<void> {
-		await queryable.query(`delete from chunks where parse_id = $1`, [parseId]);
+		await queryable.query("delete from chunks where parse_id = $1", [parseId]);
 		for (const chunk of chunks) {
 			await this.insertChunkFrom(queryable, chunk);
 		}
@@ -423,7 +460,7 @@ export class PgDocRepo implements DocRepo {
 			 )
 			 values ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb)`,
 			[
-				this.toSpanId(input),
+				buildSpanId(input),
 				input.chunkId,
 				input.page,
 				bboxValue(input.bbox),
@@ -436,15 +473,6 @@ export class PgDocRepo implements DocRepo {
 				}),
 			],
 		);
-	}
-
-	private toSpanId(input: SpanModel): string {
-		const bbox = input.bbox == null ? "" : input.bbox.join(",");
-		const range =
-			input.charStart == null || input.charEnd == null
-				? ""
-				: `${input.charStart}:${input.charEnd}`;
-		return `${input.chunkId}:${input.page}:${input.blockPath}:${bbox || range}`;
 	}
 
 	private async upsertOcrUsageFrom(
@@ -511,7 +539,7 @@ export class PgDocRepo implements DocRepo {
 			[input.chunkId],
 		);
 		if (input.embedding == null) {
-			await queryable.query(`delete from chunk_vec where chunk_id = $1`, [
+			await queryable.query("delete from chunk_vec where chunk_id = $1", [
 				input.chunkId,
 			]);
 			return;

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise
+
+{
+  printf 'cy6_gate=delegated:test:int:ocr-doc\n'
+  date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/cy6-gate.txt
+
+write_mark "test:int:doc-ocr"
+echo "test:int:doc-ocr ok"

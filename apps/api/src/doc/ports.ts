@@ -113,7 +113,10 @@ export type UpsertChunkInput = Omit<ChunkModel, "createdAt" | "updatedAt"> & {
 	updatedAt?: string | undefined;
 };
 export type UpsertSpanInput = SpanModel;
-export type UpsertOcrUsageInput = Omit<OcrUsageModel, "createdAt" | "updatedAt"> & {
+export type UpsertOcrUsageInput = Omit<
+	OcrUsageModel,
+	"createdAt" | "updatedAt"
+> & {
 	createdAt?: string | undefined;
 	updatedAt?: string | undefined;
 };
@@ -137,8 +140,11 @@ export type RecordParseLedgerInput = {
 };
 
 export interface DocRepo {
+	getDoc(docSha: string): Promise<DocModel | null>;
+	getParse(parseId: string): Promise<ParseModel | null>;
 	upsertDoc(input: UpsertDocInput): Promise<DocModel>;
 	upsertParse(input: UpsertParseInput): Promise<ParseModel>;
 	aliasArtifact(input: AliasArtifactInput): Promise<void>;
+	resolveAlias(alias: string): Promise<string | null>;
 	recordParseLedger(input: RecordParseLedgerInput): Promise<void>;
 }

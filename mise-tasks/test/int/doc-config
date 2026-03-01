@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg
+
+mkdir -p .cache/spec07
+rg -n "ZAI|OCR|DOC_" fnox.toml mise-tasks/bootstrap/secrets mise-tasks/bootstrap/doctor \
+  > .cache/spec07/cy3-secrets.scan.txt
+
+MISE_EXPERIMENTAL=1 mise run bootstrap:doctor
+MISE_EXPERIMENTAL=1 mise run bootstrap:secrets
+MISE_EXPERIMENTAL=1 mise run check:scope-guard
+
+{
+  printf 'cy3_gate=ok\n'
+  date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/cy3-gate.txt
+
+write_mark "test:int:doc-config"
+echo "test:int:doc-config ok"

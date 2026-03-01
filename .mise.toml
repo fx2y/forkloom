@@ -102,8 +102,8 @@ outputs = [".cache/mise-marks/check__lesson-guard.ok"]
 
 [tasks."check:scope-guard"]
 run = "bash ./mise-tasks/check/scope-guard"
-sources = ["apps/api/src/run/public-surface.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "README.md", "docs/adr/**/*.md", "spec-0/06-spec.md", "mise-tasks/check/scope-guard"]
-outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec06/scope-guard.not-now.txt", ".cache/spec06/scope-guard.noun-scan.txt", ".cache/spec06/scope-guard.ast-grep.txt"]
+sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "README.md", "docs/adr/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "mise-tasks/check/scope-guard"]
+outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt"]
 
 [tasks.check]
 depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard", "check:scope-guard"]
@@ -221,6 +221,30 @@ run = "bash ./mise-tasks/test/int/ocr-doc"
 sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/ocr-doc"]
 outputs = [".cache/mise-marks/test__int__ocr-doc.ok", ".cache/test-int/ocr.out.1.md", ".cache/test-int/ocr.out.1.json", ".cache/test-int/ocr.out.1.manifest.json", ".cache/test-int/ocr.out.2.md", ".cache/test-int/ocr.out.2.json", ".cache/test-int/ocr.out.2.manifest.json"]
 
+[tasks."test:int:doc-config"]
+run = "bash ./mise-tasks/test/int/doc-config"
+depends = ["bootstrap"]
+sources = [".mise.toml", "fnox.toml", "apps/api/src/config.ts", "mise-tasks/bootstrap/secrets", "mise-tasks/bootstrap/doctor", "mise-tasks/check/scope-guard", "mise-tasks/test/int/doc-config"]
+outputs = [".cache/mise-marks/test__int__doc-config.ok", ".cache/spec07/cy3-gate.txt", ".cache/spec07/cy3-secrets.scan.txt"]
+
+[tasks."test:int:doc-storage"]
+run = "bash ./mise-tasks/test/int/doc-storage"
+sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/config.ts", "tests/unit/doc-*.test.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-storage"]
+outputs = [".cache/mise-marks/test__int__doc-storage.ok", ".cache/spec07/cy4-gate.txt", ".cache/spec07/cy4-alias.scan.txt", ".cache/spec07/cy4-ids.scan.txt", ".cache/spec07/cy4-acquire.scan.txt", ".cache/spec07/cy4-classify.scan.txt"]
+
+[tasks."test:int:doc-ocr"]
+run = "bash ./mise-tasks/test/int/doc-ocr"
+depends = ["test:int:ocr-doc"]
+sources = ["src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
+outputs = [".cache/mise-marks/test__int__doc-ocr.ok", ".cache/spec07/cy6-gate.txt"]
+
+[tasks."test:int:doc-force"]
+run = [
+  "mise run --force test:int:doc-config",
+  "mise run --force test:int:doc-storage",
+  "mise run --force test:int:doc-ocr"
+]
+
 [tasks."test:int"]
 run = [
   "mise run test:int:dbos-durability",
@@ -242,7 +266,9 @@ run = [
   "mise run test:int:run-replay",
   "mise run test:int:truth-checklist",
   "mise run test:int:ops-sql",
-  "mise run test:int:ocr-doc"
+  "mise run test:int:doc-config",
+  "mise run test:int:doc-storage",
+  "mise run test:int:doc-ocr"
 ]
 
 [tasks."test:int:force"]
@@ -266,7 +292,9 @@ run = [
   "mise run --force test:int:run-replay",
   "mise run --force test:int:truth-checklist",
   "mise run --force test:int:ops-sql",
-  "mise run --force test:int:ocr-doc"
+  "mise run --force test:int:doc-config",
+  "mise run --force test:int:doc-storage",
+  "mise run --force test:int:doc-ocr"
 ]
 
 [tasks."golden:canonicalize"]

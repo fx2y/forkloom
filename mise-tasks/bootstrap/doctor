@@ -3,8 +3,8 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 
 cd_repo_root
-require_cmds mise jq rg
-optional_cmds_status fnox docker curl sqlite3 | tee .cache/doctor.optional.txt >/dev/null
+require_cmds mise jq rg fnox
+optional_cmds_status docker curl sqlite3 age age-keygen | tee .cache/doctor.optional.txt >/dev/null
 
 if find . \
   \( -path './.git' -o -path './node_modules' \) -prune -o \
@@ -14,6 +14,50 @@ if find . \
 fi
 
 mise env >/dev/null
+fnox provider test age >/dev/null
+
+for key in DBOS_SYSTEM_DATABASE_URL S3_ACCESS_KEY S3_SECRET_KEY ZAI_KEY; do
+  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" fnox.toml; then
+    echo "sensitive secret must be age-backed in top-level [secrets]: $key" >&2
+    exit 1
+  fi
+  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" <(awk '/^\\[profiles\\.dev\\.secrets\\]/{p=1;next}/^\\[/{p=0}p' fnox.toml); then
+    echo "sensitive secret must be age-backed in [profiles.dev.secrets]: $key" >&2
+    exit 1
+  fi
+  if ! rg -q "^${key}\\s*=\\s*\\{\\s*provider\\s*=\\s*\"age\"" <(awk '/^\\[profiles\\.production\\.secrets\\]/{p=1;next}/^\\[/{p=0}p' fnox.toml); then
+    echo "sensitive secret must be age-backed in [profiles.production.secrets]: $key" >&2
+    exit 1
+  fi
+done
+
+for required_var in ZAI_ENDPOINT ZAI_KEY DOC_OCR_MODEL DOC_PARSER_VERSION DOC_NORM_VERSION; do
+  if [[ -z "${!required_var:-}" ]]; then
+    echo "missing doc config env: $required_var" >&2
+    exit 1
+  fi
+done
+
+if ! [[ "${DOC_LIMIT_PDF_BYTES:-}" =~ ^[0-9]+$ ]] || [[ "${DOC_LIMIT_PDF_BYTES:-0}" -lt 1 ]]; then
+  echo "DOC_LIMIT_PDF_BYTES must be a positive integer" >&2
+  exit 1
+fi
+if ! [[ "${DOC_LIMIT_PDF_PAGES:-}" =~ ^[0-9]+$ ]] || [[ "${DOC_LIMIT_PDF_PAGES:-0}" -lt 1 ]]; then
+  echo "DOC_LIMIT_PDF_PAGES must be a positive integer" >&2
+  exit 1
+fi
+if ! [[ "${DOC_LIMIT_IMAGE_BYTES:-}" =~ ^[0-9]+$ ]] || [[ "${DOC_LIMIT_IMAGE_BYTES:-0}" -lt 1 ]]; then
+  echo "DOC_LIMIT_IMAGE_BYTES must be a positive integer" >&2
+  exit 1
+fi
+if ! [[ "${DOC_OCR_QUEUE_CONCURRENCY:-}" =~ ^[0-9]+$ ]] || [[ "${DOC_OCR_QUEUE_CONCURRENCY:-0}" -lt 1 ]]; then
+  echo "DOC_OCR_QUEUE_CONCURRENCY must be a positive integer" >&2
+  exit 1
+fi
+if ! [[ "${DOC_OCR_QUEUE_RATE_LIMIT_PER_SECOND:-}" =~ ^[0-9]+$ ]] || [[ "${DOC_OCR_QUEUE_RATE_LIMIT_PER_SECOND:-0}" -lt 1 ]]; then
+  echo "DOC_OCR_QUEUE_RATE_LIMIT_PER_SECOND must be a positive integer" >&2
+  exit 1
+fi
 
 if [[ "${PI_RPC_STRICT_REAL:-0}" == "1" ]]; then
   for pi_state in "${HOME}/.pi/agent/auth.json" "${HOME}/.pi/agent/settings.json"; do

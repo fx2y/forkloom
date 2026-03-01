@@ -30,6 +30,20 @@ MISE_EXPERIMENTAL=1 mise prep
 MISE_EXPERIMENTAL=1 mise run bootstrap
 ```
 
+## Secrets (fnox + age)
+
+- Sensitive secrets (`DBOS_SYSTEM_DATABASE_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `ZAI_KEY`) are stored with `fnox` `age` provider.
+- `.env*` remains forbidden and blocked by `bootstrap:doctor`.
+
+Set/rotate a secret (example):
+
+```bash
+fnox set ZAI_KEY '<your-real-key>' --provider age
+fnox set ZAI_KEY '<your-real-key>' --provider age -P dev
+fnox set ZAI_KEY '<your-real-key>' --provider age -P production
+MISE_EXPERIMENTAL=1 mise run bootstrap:secrets
+```
+
 ## One Command Dev
 
 ```bash

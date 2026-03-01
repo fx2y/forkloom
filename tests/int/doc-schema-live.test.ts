@@ -107,9 +107,7 @@ describe("doc schema live proof", () => {
 						],
 			);
 			expect(chunkVecColumns.rows.map((row) => row.column_name)).toEqual(
-				vectorExt.rows[0]?.enabled
-					? ["emb", "emb_json"]
-					: ["emb_json"],
+				vectorExt.rows[0]?.enabled ? ["emb", "emb_json"] : ["emb_json"],
 			);
 
 			await writeJson(".cache/test-int/doc-schema-live.json", {

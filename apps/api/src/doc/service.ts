@@ -1,7 +1,4 @@
-import type {
-	DocRepo,
-	RecordParseLedgerInput,
-} from "./ports";
+import type { DocRepo, RecordParseLedgerInput } from "./ports";
 
 export type DocServiceDeps = {
 	repo: DocRepo;

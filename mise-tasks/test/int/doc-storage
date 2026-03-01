@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds mise rg pnpm
+
+mkdir -p .cache/spec07
+rg -n "artifact_alias|aliasArtifact|resolveAlias|buildRawAlias|buildParseMdAlias|buildChunkMdAlias" apps/api/src \
+  > .cache/spec07/cy4-alias.scan.txt
+rg -n "docSha|parseId|chunkId|spanId|buildDocSha|buildParseId|buildChunkId|buildSpanId" apps/api/src packages/shared/src \
+  > .cache/spec07/cy4-ids.scan.txt
+rg -n "doc_sha|parse_id|raw/|acquire|upsertDoc|upsertParse" apps/api/src/doc \
+  > .cache/spec07/cy4-acquire.scan.txt
+rg -n "classifyDoc|countPdfPages|50_000_000|10_000_000|DOC_LIMIT|pdf|image" apps/api/src/doc \
+  > .cache/spec07/cy4-classify.scan.txt
+
+MISE_EXPERIMENTAL=1 mise exec -- pnpm exec vitest run \
+  tests/unit/doc-ids.test.ts \
+  tests/unit/doc-classify.test.ts \
+  tests/unit/doc-acquire.test.ts
+
+{
+  printf 'cy4_gate=ok\n'
+  date -u +"ts=%Y-%m-%dT%H:%M:%SZ"
+} > .cache/spec07/cy4-gate.txt
+
+write_mark "test:int:doc-storage"
+echo "test:int:doc-storage ok"

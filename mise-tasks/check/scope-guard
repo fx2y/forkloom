@@ -5,24 +5,49 @@ source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 cd_repo_root
 require_cmds rg ast-grep
 
-mkdir -p .cache/spec06
+mkdir -p .cache/spec07
 rg -n "No generalized observability|No extra event bus|No provenance DB" \
-  spec-0/06-spec.md README.md docs/adr > .cache/spec06/scope-guard.not-now.txt
+  spec-0/06-spec.md README.md docs/adr > .cache/spec07/scope-guard.c4-not-now.txt
 
 for needle in "No generalized observability" "No extra event bus" "No provenance DB"; do
-  if ! rg -q "$needle" .cache/spec06/scope-guard.not-now.txt; then
+  if ! rg -q "$needle" .cache/spec07/scope-guard.c4-not-now.txt; then
     echo "scope guard missing: $needle" >&2
     exit 1
   fi
 done
 
-rg -n "SandboxSpec|SandboxState|SandboxEvent|SandboxCommand" \
+rg -n "provenance\\+retrieval|skip entity graph|entities/facts/graph" \
+  spec-0/07-spec.md README.md docs/adr > .cache/spec07/scope-guard.c5-scope.txt || true
+for needle in "provenance+retrieval" "skip entity graph"; do
+  if ! rg -Fq "$needle" .cache/spec07/scope-guard.c5-scope.txt; then
+    echo "scope guard missing spec07 C5 scope lock: $needle" >&2
+    exit 1
+  fi
+done
+
+rg -n "RunDocSearch|RunDocResolve|SpanRef" \
   contracts/v1 packages/contracts/src/check.ts apps/api/src/run/public-surface.ts \
-  > .cache/spec06/scope-guard.noun-scan.txt
+  > .cache/spec07/scope-guard.doc-wire.txt
+for needle in "RunDocSearch" "RunDocResolve" "SpanRef"; do
+  if ! rg -q "$needle" .cache/spec07/scope-guard.doc-wire.txt; then
+    echo "scope guard missing run-owned doc noun: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n "app\\.(get|post|put|patch|delete)\\(\"/docs|router\\.(get|post|put|patch|delete)\\(\"/docs" \
+  apps/api/src/http > .cache/spec07/scope-guard.docs-route-violations.txt; then
+  echo "top-level /docs route is forbidden; keep doc wire under /runs" >&2
+  exit 1
+fi
+
+rg -n "SandboxSpec|SandboxState|SandboxEvent|SandboxCommand|RunDocSearch|RunDocResolve|SpanRef" \
+  contracts/v1 packages/contracts/src/check.ts apps/api/src/run/public-surface.ts \
+  > .cache/spec07/scope-guard.noun-scan.txt
 
 ast-grep --lang typescript -p "RUN_PUBLIC_BANNED_SANDBOX_NOUNS" \
-  apps/api/src/run/public-surface.ts > .cache/spec06/scope-guard.ast-grep.txt
-if [[ ! -s .cache/spec06/scope-guard.ast-grep.txt ]]; then
+  apps/api/src/run/public-surface.ts > .cache/spec07/scope-guard.ast-grep.txt
+if [[ ! -s .cache/spec07/scope-guard.ast-grep.txt ]]; then
   echo "scope guard ast-grep found no banned-sandbox constant anchor" >&2
   exit 1
 fi

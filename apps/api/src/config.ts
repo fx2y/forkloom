@@ -6,6 +6,16 @@ export type AppConfig = {
 	s3Region: string;
 	awsAccessKeyId: string;
 	awsSecretAccessKey: string;
+	docOcrEndpoint: string;
+	docOcrApiKey: string;
+	docOcrModel: string;
+	docParserVersion: string;
+	docNormVersion: string;
+	docLimitPdfBytes: number;
+	docLimitPdfPages: number;
+	docLimitImageBytes: number;
+	docOcrQueueConcurrency: number;
+	docOcrQueueRateLimitPerSecond: number;
 	piRpcUrl: string;
 	piProvider: string;
 	piModel: string;
@@ -67,6 +77,24 @@ function parsePositiveInt(
 	return parsed;
 }
 
+function pickEnv(...names: string[]): string | undefined {
+	for (const name of names) {
+		const value = process.env[name];
+		if (value && value.length > 0) {
+			return value;
+		}
+	}
+	return undefined;
+}
+
+function mustAny(...names: string[]): string {
+	const value = pickEnv(...names);
+	if (!value) {
+		throw new Error(`missing required env: one of ${names.join(", ")}`);
+	}
+	return value;
+}
+
 export function loadConfig(): AppConfig {
 	return {
 		port: parsePort(process.env.PORT, 8080),
@@ -77,6 +105,39 @@ export function loadConfig(): AppConfig {
 		awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? must("S3_ACCESS_KEY"),
 		awsSecretAccessKey:
 			process.env.AWS_SECRET_ACCESS_KEY ?? must("S3_SECRET_KEY"),
+		docOcrEndpoint:
+			process.env.DOC_OCR_ENDPOINT ??
+			process.env.ZAI_ENDPOINT ??
+			"https://api.z.ai/api/paas/v4/layout_parsing",
+		docOcrApiKey: mustAny("DOC_OCR_API_KEY", "ZAI_KEY"),
+		docOcrModel: process.env.DOC_OCR_MODEL ?? "glm-ocr",
+		docParserVersion: process.env.DOC_PARSER_VERSION ?? "v1",
+		docNormVersion: process.env.DOC_NORM_VERSION ?? "v1",
+		docLimitPdfBytes: parsePositiveInt(
+			process.env.DOC_LIMIT_PDF_BYTES,
+			50_000_000,
+			"doc limit pdf bytes",
+		),
+		docLimitPdfPages: parsePositiveInt(
+			process.env.DOC_LIMIT_PDF_PAGES,
+			100,
+			"doc limit pdf pages",
+		),
+		docLimitImageBytes: parsePositiveInt(
+			process.env.DOC_LIMIT_IMAGE_BYTES,
+			10_000_000,
+			"doc limit image bytes",
+		),
+		docOcrQueueConcurrency: parsePositiveInt(
+			process.env.DOC_OCR_QUEUE_CONCURRENCY,
+			2,
+			"doc ocr queue concurrency",
+		),
+		docOcrQueueRateLimitPerSecond: parsePositiveInt(
+			process.env.DOC_OCR_QUEUE_RATE_LIMIT_PER_SECOND,
+			1,
+			"doc ocr queue rate limit per second",
+		),
 		piRpcUrl: process.env.PI_RPC_URL ?? "http://localhost:7070",
 		piProvider: process.env.PI_PROVIDER ?? "github-copilot",
 		piModel: process.env.PI_MODEL ?? "gpt-4.1",

@@ -67,9 +67,7 @@ describe("run public surface freeze", () => {
 			"currentCommand",
 			"files",
 		]);
-		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain(
-			"/runs",
-		);
+		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain("/runs");
 		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain(
 			"sandbox stays internal",
 		);
