@@ -9,11 +9,40 @@ import {
 	parseRunCreatePayload,
 	parseRunCursor,
 	parseRunFileExportPayload,
+	parseRunSkillPreviewPayload,
 } from "./run-request-parsers";
 import { streamInteractiveRunEvents } from "./run-sandbox-sse";
 import { streamRunEvents } from "./run-sse";
 
 export { RUN_SKILL_API_ENDPOINTS_FROZEN_NEXT as RUN_SKILL_ROUTE_TEMPLATES } from "../run/public-surface";
+
+function toSkillListResponse(
+	skills: Awaited<ReturnType<RunService["listSkills"]>>,
+): {
+	skills: Array<{
+		skillId: string;
+		name: string;
+		description: string;
+		path: string;
+		scope: string;
+		hidden: boolean;
+		menuVisible: boolean;
+		allowedTools?: string[] | undefined;
+	}>;
+} {
+	return {
+		skills: skills.map((skill) => ({
+			skillId: skill.skillId,
+			name: skill.name,
+			description: skill.description,
+			path: skill.path,
+			scope: skill.scope,
+			hidden: skill.hidden,
+			menuVisible: skill.menuVisible,
+			allowedTools: skill.allowedTools,
+		})),
+	};
+}
 
 function isInteractiveRunState(run: Record<string, unknown>): boolean {
 	return (
@@ -133,6 +162,33 @@ export function attachRunRoutes(app: Express, runService: RunService): void {
 					state: queued.command.state,
 				},
 			});
+		}),
+	);
+
+	app.get(
+		"/runs/:runId/skills",
+		asyncHandler(async (req, res) => {
+			const runId = requireRouteParam(req.params.runId, "runId");
+			res.json(toSkillListResponse(await runService.listSkills(runId)));
+		}),
+	);
+
+	app.post(
+		"/runs/:runId/skills/preview",
+		express.json({ limit: "1mb" }),
+		asyncHandler(async (req, res) => {
+			const runId = requireRouteParam(req.params.runId, "runId");
+			const payload = parseRunSkillPreviewPayload(req.body);
+			const preview = await runService.previewSkill({
+				runId,
+				skillName: payload.skillName,
+				args: payload.args,
+			});
+			if (!preview) {
+				res.status(404).json({ error: "skill not found" });
+				return;
+			}
+			res.json(preview);
 		}),
 	);
 

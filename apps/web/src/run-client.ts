@@ -15,6 +15,27 @@ export const RUN_SKILL_CLIENT_ROUTE_TEMPLATES = [
 
 export const RUN_SKILL_CLIENT_COMMAND_ALIAS = "/skill:";
 
+export type RunSkillListEntry = {
+	skillId: string;
+	name: string;
+	description: string;
+	path: string;
+	scope: string;
+	hidden: boolean;
+	menuVisible: boolean;
+	allowedTools?: string[] | undefined;
+};
+
+export type RunSkillPreview = {
+	skillName: string;
+	description: string;
+	scripts: string[];
+	touchedPaths: string[];
+	allowedTools?: string[] | undefined;
+	manualOnly: boolean;
+	menuVisible: boolean;
+};
+
 type RunCreateInput = {
 	runId: string;
 	scope: "me" | "team" | "org";
@@ -89,6 +110,33 @@ export async function postRunCommand(
 		body: JSON.stringify(input),
 	});
 	return readJson(response, `post run command ${runId}`);
+}
+
+export async function fetchRunSkills(
+	deps: AppDeps,
+	runId: string,
+): Promise<{ skills: RunSkillListEntry[] }> {
+	const response = await deps.fetchImpl(`/runs/${runId}/skills`);
+	return readJson(response, `fetch run skills ${runId}`);
+}
+
+export async function postRunSkillPreview(
+	deps: AppDeps,
+	runId: string,
+	input: {
+		skillName: string;
+		args?: string | undefined;
+	},
+): Promise<RunSkillPreview | null> {
+	const response = await deps.fetchImpl(`/runs/${runId}/skills/preview`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	if (response.status === 404) {
+		return null;
+	}
+	return readJson(response, `preview run skill ${runId}`);
 }
 
 export async function postRunDocSearch(

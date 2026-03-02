@@ -53,6 +53,13 @@ export type SkillPreviewRequest = {
 	args?: string | undefined;
 };
 
+export type SkillInvocation = {
+	skillName: string;
+	args: string;
+};
+
+export type SkillActivationKind = "explicit" | "implicit";
+
 export type SkillPreview = {
 	skillName: SkillIndexEntry["name"];
 	description: SkillIndexEntry["description"];

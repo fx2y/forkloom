@@ -12,10 +12,12 @@ import type {
 } from "@forkloom/contracts";
 import { HttpError } from "../errors";
 import type {
+	SkillActivationKind,
 	SkillIndexEntry,
 	SkillPreview,
 	SkillPreviewRequest,
 } from "../skill";
+import { parseSkillInvocation } from "../skill";
 import {
 	type RunCommandKind,
 	type RunCommandModel,
@@ -137,6 +139,11 @@ type RunDocDeps = {
 
 type RunSkillDeps = {
 	listSkills(): Promise<SkillIndexEntry[]>;
+	hasSkill(skillName: string): Promise<boolean>;
+	resolvePromptText(input: {
+		text: string;
+		activationKind?: SkillActivationKind | undefined;
+	}): Promise<string>;
 	previewSkill(input: SkillPreviewRequest): Promise<SkillPreview | null>;
 };
 
@@ -265,6 +272,7 @@ export class RunService {
 				"run requires approve before interactive commands",
 			);
 		}
+		await this.assertSkillInvocationExists(input.kind, input.payload);
 		const queued = await sandboxDeps.sandboxRepo.queueCommand({
 			runId: input.runId,
 			kind: input.kind,
@@ -596,5 +604,26 @@ export class RunService {
 			throw new HttpError(404, `run sandbox not found: ${runId}`);
 		}
 		return sandbox;
+	}
+
+	private async assertSkillInvocationExists(
+		kind: RunCommandKind,
+		payload: Record<string, unknown> | undefined,
+	): Promise<void> {
+		if (kind !== "prompt" && kind !== "followUp" && kind !== "steer") {
+			return;
+		}
+		const text = payload?.text;
+		if (typeof text !== "string") {
+			return;
+		}
+		const invocation = parseSkillInvocation(text);
+		if (!invocation) {
+			return;
+		}
+		const skillDeps = this.requireSkillDeps();
+		if (!(await skillDeps.hasSkill(invocation.skillName))) {
+			throw new HttpError(404, `skill not found: ${invocation.skillName}`);
+		}
 	}
 }

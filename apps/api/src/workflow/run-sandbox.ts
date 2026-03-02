@@ -89,6 +89,10 @@ export type RunSandboxDeps = {
 	skills?:
 		| {
 				buildAvailableSkillsXml(): Promise<string>;
+				resolvePromptText?(input: {
+					text: string;
+					activationKind?: "explicit" | "implicit" | undefined;
+				}): Promise<string>;
 		  }
 		| undefined;
 	artifactService: Pick<
@@ -430,6 +434,16 @@ export async function executeRunSandbox(
 		return session;
 	};
 
+	const resolveSkillPromptText = async (text: string): Promise<string> => {
+		if (!deps.skills?.resolvePromptText) {
+			return text;
+		}
+		return deps.skills.resolvePromptText({
+			text,
+			activationKind: "explicit",
+		});
+	};
+
 	try {
 		loadedPlan = await steps.runStep("loadPlan", async () => {
 			if (replayPayload) {
@@ -527,9 +541,12 @@ export async function executeRunSandbox(
 					});
 					return;
 				case "prompt": {
+					const userMsg = await resolveSkillPromptText(
+						readCommandText(loaded.command),
+					);
 					const promptSpec = {
 						...loaded.run.spec,
-						userMsg: readCommandText(loaded.command),
+						userMsg,
 					};
 					const availableSkillsXml = deps.skills
 						? await deps.skills.buildAvailableSkillsXml()
@@ -565,12 +582,12 @@ export async function executeRunSandbox(
 				}
 				case "followUp":
 					await (await getOrCreateSession()).followUp(
-						readCommandText(loaded.command),
+						await resolveSkillPromptText(readCommandText(loaded.command)),
 					);
 					return;
 				case "steer":
 					await (await getOrCreateSession()).steer(
-						readCommandText(loaded.command),
+						await resolveSkillPromptText(readCommandText(loaded.command)),
 					);
 					return;
 				case "abort":

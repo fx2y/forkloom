@@ -1,7 +1,14 @@
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import {
+	parseSkillInvocation,
+	renderActivatedSkillPrompt,
+} from "./activation";
+import { buildSkillPreviewSnapshot } from "./preview";
 import { SkillRegistry, type SkillRegistryOptions } from "./registry";
 import type {
+	SkillActivationKind,
 	SkillIndexEntry,
 	SkillPreview,
 	SkillPreviewRequest,
@@ -17,6 +24,7 @@ export type SkillServiceOptions = {
 	promptMaxSkills?: number | undefined;
 	promptMaxDescriptionChars?: number | undefined;
 	readPrefix?: SkillRegistryOptions["readPrefix"] | undefined;
+	readSkillFile?: ((path: string) => Promise<string>) | undefined;
 	cwd?: string | undefined;
 	homeDir?: string | undefined;
 };
@@ -33,6 +41,7 @@ export class SkillService {
 	private readonly registry: SkillRegistry;
 	private readonly promptMaxSkills: number;
 	private readonly promptMaxDescriptionChars: number;
+	private readonly readSkillFile: (path: string) => Promise<string>;
 	private state: SkillRegistryState = {
 		entries: [],
 		warnings: [],
@@ -52,11 +61,18 @@ export class SkillService {
 		this.promptMaxSkills = options.promptMaxSkills ?? DEFAULT_PROMPT_MAX_SKILLS;
 		this.promptMaxDescriptionChars =
 			options.promptMaxDescriptionChars ?? DEFAULT_PROMPT_MAX_DESCRIPTION_CHARS;
+		this.readSkillFile =
+			options.readSkillFile ??
+			(async (path: string) => readFile(path, "utf8"));
 	}
 
 	async listSkills(): Promise<SkillIndexEntry[]> {
 		const state = await this.refresh();
 		return state.entries;
+	}
+
+	async hasSkill(skillName: string): Promise<boolean> {
+		return (await this.lookupSkill(skillName)) != null;
 	}
 
 	async buildAvailableSkillsXml(): Promise<string> {
@@ -71,15 +87,63 @@ export class SkillService {
 		return this.refresh();
 	}
 
+	async resolvePromptText(input: {
+		text: string;
+		activationKind?: SkillActivationKind | undefined;
+	}): Promise<string> {
+		const invocation = parseSkillInvocation(input.text);
+		if (!invocation) {
+			return input.text;
+		}
+		const entry = await this.lookupSkill(invocation.skillName);
+		if (!entry) {
+			throw new Error(`skill not found: ${invocation.skillName}`);
+		}
+		if ((input.activationKind ?? "explicit") === "implicit" && entry.hidden) {
+			throw new Error(`skill is manual-only: ${entry.name}`);
+		}
+		return renderActivatedSkillPrompt(
+			await this.readSkillFile(entry.path),
+			invocation.args,
+		);
+	}
+
 	async previewSkill(
-		_input: SkillPreviewRequest,
+		input: SkillPreviewRequest,
 	): Promise<SkillPreview | null> {
-		return null;
+		const entry = await this.lookupSkill(input.skillName);
+		if (!entry) {
+			return null;
+		}
+		const skillBody = renderActivatedSkillPrompt(
+			await this.readSkillFile(entry.path),
+			input.args?.trim() ?? "",
+		);
+		const snapshot = await buildSkillPreviewSnapshot({
+			skillPath: entry.path,
+			skillBody,
+		});
+		return {
+			skillName: entry.name,
+			description: entry.description,
+			scripts: snapshot.scripts,
+			touchedPaths: snapshot.touchedPaths,
+			allowedTools: entry.allowedTools,
+			manualOnly: entry.hidden,
+			menuVisible: entry.menuVisible,
+		};
 	}
 
 	private async refresh(): Promise<SkillRegistryState> {
 		this.state = await this.registry.build();
 		return this.state;
+	}
+
+	private async lookupSkill(
+		skillName: string,
+	): Promise<SkillIndexEntry | undefined> {
+		const state = await this.refresh();
+		return state.entries.find((entry) => entry.name === skillName);
 	}
 }
 

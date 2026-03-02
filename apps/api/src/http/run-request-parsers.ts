@@ -2,6 +2,11 @@ import { validateRunByName } from "@forkloom/contracts";
 import type { SpanRef } from "@forkloom/contracts";
 import type { Request } from "express";
 import { HttpError } from "../errors";
+import {
+	hasSkillInvocationPrefix,
+	parseSkillInvocation,
+	SKILL_INVOCATION_PREFIX,
+} from "../skill";
 import type { RunProfile, RunScope, RunSpecModel } from "../run/ports";
 import { RUN_PUBLIC_COMMAND_KINDS } from "../run/public-surface";
 import {
@@ -10,7 +15,7 @@ import {
 } from "./contract-parsers";
 import { parseEventReplayCursor } from "./event-stream";
 
-export const RUN_SKILL_TEXT_COMMAND_PREFIX = "/skill:";
+export const RUN_SKILL_TEXT_COMMAND_PREFIX = SKILL_INVOCATION_PREFIX;
 export const RUN_SKILL_TEXT_COMMAND_KINDS = [
 	"prompt",
 	"followUp",
@@ -94,6 +99,26 @@ export function parseRunCommandPayload(input: unknown): {
 		}
 		payload = record.payload as Record<string, unknown>;
 	}
+	if (isTextCommandKind(kind)) {
+		const text = payload.text;
+		if (typeof text !== "string" || text.trim().length === 0) {
+			throw new HttpError(400, `${kind} payload.text is required`);
+		}
+		const normalized = text.trim();
+		if (
+			hasSkillInvocationPrefix(normalized) &&
+			parseSkillInvocation(normalized) == null
+		) {
+			throw new HttpError(
+				400,
+				"invalid /skill invocation; expected /skill:<name> [args]",
+			);
+		}
+		payload = {
+			...payload,
+			text: normalized,
+		};
+	}
 	return {
 		kind,
 		payload,
@@ -127,6 +152,34 @@ export function parseRunFileExportPayload(input: unknown): {
 	}
 	return {
 		paths: record.paths.map((path) => String(path).trim()),
+	};
+}
+
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export function parseRunSkillPreviewPayload(input: unknown): {
+	skillName: string;
+	args?: string | undefined;
+} {
+	if (input == null || typeof input !== "object" || Array.isArray(input)) {
+		throw new HttpError(400, "skill preview payload must be an object");
+	}
+	const record = input as Record<string, unknown>;
+	const skillName =
+		typeof record.skillName === "string" ? record.skillName.trim() : "";
+	if (skillName.length === 0) {
+		throw new HttpError(400, "skillName is required");
+	}
+	if (!SKILL_NAME_PATTERN.test(skillName)) {
+		throw new HttpError(400, "skillName must match ^[a-z0-9]+(-[a-z0-9]+)*$");
+	}
+	if (record.args != null && typeof record.args !== "string") {
+		throw new HttpError(400, "args must be a string when provided");
+	}
+	const args = typeof record.args === "string" ? record.args.trim() : undefined;
+	return {
+		skillName,
+		args: args && args.length > 0 ? args : undefined,
 	};
 }
 
@@ -219,4 +272,14 @@ export function parseRunCursor(req: Request): {
 	limit: number;
 } {
 	return parseEventReplayCursor(req);
+}
+
+function isTextCommandKind(
+	kind: "approve" | "prompt" | "followUp" | "steer" | "abort",
+): kind is "prompt" | "followUp" | "steer" {
+	return (
+		kind === RUN_SKILL_TEXT_COMMAND_KINDS[0] ||
+		kind === RUN_SKILL_TEXT_COMMAND_KINDS[1] ||
+		kind === RUN_SKILL_TEXT_COMMAND_KINDS[2]
+	);
 }

@@ -8,6 +8,7 @@ import {
 	parseRunDocResolvePayload,
 	parseRunDocSearchPayload,
 	parseRunFileExportPayload,
+	parseRunSkillPreviewPayload,
 	RUN_SKILL_TEXT_COMMAND_KINDS,
 	RUN_SKILL_TEXT_COMMAND_PREFIX,
 } from "../../apps/api/src/http/run-request-parsers";
@@ -114,13 +115,35 @@ describe("run-request-parsers", () => {
 			payload: { text: "continue" },
 			dedupeKey: "abc",
 		});
-			expect(() => parseRunCommandPayload({ kind: "nope" })).toThrow(
-				"kind must be one of",
-			);
-			expect(() => parseRunCommandPayload({ kind: "skill" })).toThrow(
-				"kind must be one of",
-			);
+		expect(() => parseRunCommandPayload({ kind: "nope" })).toThrow(
+			"kind must be one of",
+		);
+		expect(() => parseRunCommandPayload({ kind: "skill" })).toThrow(
+			"kind must be one of",
+		);
+		expect(() => parseRunCommandPayload({ kind: "prompt", payload: {} })).toThrow(
+			"prompt payload.text is required",
+		);
+	});
+
+	it("parses /skill invocations in text command payloads", () => {
+		expect(
+			parseRunCommandPayload({
+				kind: "prompt",
+				payload: { text: "/skill:policy-qa summarize controls" },
+			}),
+		).toEqual({
+			kind: "prompt",
+			payload: { text: "/skill:policy-qa summarize controls" },
+			dedupeKey: undefined,
 		});
+		expect(() =>
+			parseRunCommandPayload({
+				kind: "prompt",
+				payload: { text: "/skill:Policy bad" },
+			}),
+		).toThrow("invalid /skill invocation");
+	});
 
 	it("parses file export payloads and rejects malformed paths", () => {
 		expect(parseRunFileExportPayload(undefined)).toEqual({});
@@ -134,6 +157,24 @@ describe("run-request-parsers", () => {
 		expect(() => parseRunFileExportPayload({ paths: ["", 1] })).toThrow(
 			"paths must be a non-empty string array",
 		);
+	});
+
+	it("parses skill preview payload and validates shape", () => {
+		expect(
+			parseRunSkillPreviewPayload({
+				skillName: "policy-qa",
+				args: "invoice.pdf",
+			}),
+		).toEqual({
+			skillName: "policy-qa",
+			args: "invoice.pdf",
+		});
+		expect(() => parseRunSkillPreviewPayload({})).toThrow("skillName is required");
+		expect(() =>
+			parseRunSkillPreviewPayload({
+				skillName: "Policy-QA",
+			}),
+		).toThrow("skillName must match");
 	});
 
 	it("parses doc search payload and clamps invalid limits", () => {

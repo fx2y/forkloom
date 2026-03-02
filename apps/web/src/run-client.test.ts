@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AppDeps } from "./actor-client";
 import {
+	fetchRunSkills,
 	postRunDocIngest,
 	postRunDocResolve,
 	postRunDocSearch,
+	postRunSkillPreview,
 } from "./run-client";
 
 const RUN_ID = "01HS7Z6E5R4W6NED8MH4D9Y6A0";
@@ -120,6 +122,77 @@ describe("run-client doc methods", () => {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(input),
+		});
+	});
+
+	it("fetches run-owned skills list", async () => {
+		const fetchImpl = vi.fn<typeof fetch>(async () => {
+			return new Response(
+				JSON.stringify({
+					skills: [
+						{
+							skillId: "policy-qa",
+							name: "policy-qa",
+							description: "Policy checks",
+							path: "/skills/policy-qa/SKILL.md",
+							scope: "workspace",
+							hidden: false,
+							menuVisible: true,
+						},
+					],
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			);
+		});
+		const deps: AppDeps = {
+			fetchImpl,
+			createEventSource: () =>
+				({
+					addEventListener() {
+						return;
+					},
+					close() {
+						return;
+					},
+					onerror: null,
+				}) as never,
+		};
+		const out = await fetchRunSkills(deps, RUN_ID);
+		expect(out.skills[0]?.name).toBe("policy-qa");
+		expect(fetchImpl).toHaveBeenCalledWith(`/runs/${RUN_ID}/skills`);
+	});
+
+	it("returns null on 404 skill preview route", async () => {
+		const fetchImpl = vi.fn<typeof fetch>(async () => {
+			return new Response(JSON.stringify({ error: "skill not found" }), {
+				status: 404,
+				headers: { "content-type": "application/json" },
+			});
+		});
+		const deps: AppDeps = {
+			fetchImpl,
+			createEventSource: () =>
+				({
+					addEventListener() {
+						return;
+					},
+					close() {
+						return;
+					},
+					onerror: null,
+				}) as never,
+		};
+		const out = await postRunSkillPreview(deps, RUN_ID, {
+			skillName: "missing",
+		});
+		expect(out).toBeNull();
+		expect(fetchImpl).toHaveBeenCalledWith(`/runs/${RUN_ID}/skills/preview`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ skillName: "missing" }),
 		});
 	});
 });

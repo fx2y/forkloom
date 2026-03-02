@@ -85,6 +85,8 @@ describe("RunService skill surface seam", () => {
 						},
 					];
 				},
+				hasSkill: async () => true,
+				resolvePromptText: async ({ text }) => text,
 				previewSkill: async () => null,
 			},
 		});
@@ -106,6 +108,8 @@ describe("RunService skill surface seam", () => {
 			},
 			skills: {
 				listSkills: async () => [],
+				hasSkill: async () => false,
+				resolvePromptText: async ({ text }) => text,
 				previewSkill: async () => null,
 			},
 		});
