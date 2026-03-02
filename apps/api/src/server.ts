@@ -38,9 +38,9 @@ import {
 import { ArtifactService } from "./service";
 import { S3ArtifactStore } from "./storage/s3";
 import {
-	createDocOcrQueue,
 	LazyDbosDocIngestWorkflowLauncher,
 	LazyDbosDocOcrWorkflowLauncher,
+	createDocOcrQueue,
 	registerActorTickWorkflow,
 	registerDocOcrWorkflow,
 	registerIngestDocWorkflow,

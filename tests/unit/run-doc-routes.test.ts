@@ -133,7 +133,10 @@ describe("run doc routes", () => {
 			}),
 		});
 		expect(response.status).toBe(202);
-		const payload = (await response.json()) as { status: string; parseId: string };
+		const payload = (await response.json()) as {
+			status: string;
+			parseId: string;
+		};
 		expect(payload.status).toBe("queued");
 		expect(payload.parseId).toBe("parse:ingest");
 	});
@@ -203,7 +206,9 @@ describe("run doc routes", () => {
 			body: JSON.stringify({ query: "  ", scope: "*" }),
 		});
 		expect(response.status).toBe(400);
-		expect(await response.json()).toEqual({ error: "doc search query is required" });
+		expect(await response.json()).toEqual({
+			error: "doc search query is required",
+		});
 	});
 
 	it("rejects invalid ingest payloads", async () => {

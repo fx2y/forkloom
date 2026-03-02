@@ -30,7 +30,10 @@ describe("ZaiLayoutClient", () => {
 				),
 		});
 
-		const result = await client.layoutParsing("s3://bucket/cas/aa/bb");
+		const result = await client.layoutParsing({
+			kind: "data_url",
+			value: "data:application/pdf;base64,AAAA",
+		});
 		expect(result.markdown).toBe("# Title");
 		expect(result.pageCount).toBe(1);
 		expect(result.layoutDetails).toHaveLength(1);
@@ -62,7 +65,10 @@ describe("ZaiLayoutClient", () => {
 			},
 		});
 
-		const result = await client.layoutParsing("s3://bucket/cas/aa/bb");
+		const result = await client.layoutParsing({
+			kind: "data_url",
+			value: "data:application/pdf;base64,AAAA",
+		});
 		expect(calls).toBe(2);
 		expect(result.markdown).toBe("ok");
 	});
@@ -84,8 +90,10 @@ describe("ZaiLayoutClient", () => {
 		});
 
 		await expect(
-			client.layoutParsing("s3://bucket/cas/aa/bb"),
+			client.layoutParsing({
+				kind: "data_url",
+				value: "data:application/pdf;base64,AAAA",
+			}),
 		).rejects.toThrow("layout_parsing failed");
 	});
 });
-

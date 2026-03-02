@@ -12,4 +12,3 @@ export function normalizeMarkdown(markdown: string): string {
 export function normalizeJsonValue<T>(value: T): T {
 	return JSON.parse(stableStringify(value)) as T;
 }
-

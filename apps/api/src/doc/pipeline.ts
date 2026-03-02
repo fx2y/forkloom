@@ -1,12 +1,12 @@
-import { buildDeterministicEmbedding } from "./search";
-import { normalizeMarkdown } from "./normalize";
 import { toChunks } from "./chunker";
+import { normalizeMarkdown } from "./normalize";
 import type {
 	Bbox,
 	UpsertBlockInput,
 	UpsertChunkSearchInput,
 	UpsertPageInput,
 } from "./ports";
+import { buildDeterministicEmbedding } from "./search";
 
 type LayoutEntry = {
 	index: number;
@@ -43,7 +43,10 @@ function headingLevel(kind: string): number | null {
 	return Number(match[1]);
 }
 
-function normalizeBlockText(content: string): { textMd: string; textPlain: string } {
+function normalizeBlockText(content: string): {
+	textMd: string;
+	textPlain: string;
+} {
 	const textMd = normalizeMarkdown(content).trimEnd();
 	const textPlain = textMd.replace(/\s+/g, " ").trim();
 	return {
@@ -58,7 +61,11 @@ export function toBlocks(input: {
 }): { pages: UpsertPageInput[]; blocks: UpsertBlockInput[] } {
 	const pages: UpsertPageInput[] = [];
 	const blocks: UpsertBlockInput[] = [];
-	for (let pageIndex = 0; pageIndex < input.layoutDetails.length; pageIndex += 1) {
+	for (
+		let pageIndex = 0;
+		pageIndex < input.layoutDetails.length;
+		pageIndex += 1
+	) {
 		const page = input.layoutDetails[pageIndex] ?? [];
 		const pageNo = pageIndex + 1;
 		const ordered = [...page].sort((a, b) => {
@@ -67,12 +74,8 @@ export function toBlocks(input: {
 			}
 			return a.label.localeCompare(b.label);
 		});
-		const width =
-			ordered.find((entry) => entry.width > 0)?.width ??
-			null;
-		const height =
-			ordered.find((entry) => entry.height > 0)?.height ??
-			null;
+		const width = ordered.find((entry) => entry.width > 0)?.width ?? null;
+		const height = ordered.find((entry) => entry.height > 0)?.height ?? null;
 		pages.push({
 			parseId: input.parseId,
 			page: pageNo,
@@ -85,8 +88,8 @@ export function toBlocks(input: {
 		});
 
 		const headingStack = new Map<number, string>();
-			for (const [i, entry] of ordered.entries()) {
-				const blockPath = `${pageNo}.${String(i + 1).padStart(6, "0")}`;
+		for (const [i, entry] of ordered.entries()) {
+			const blockPath = `${pageNo}.${String(i + 1).padStart(6, "0")}`;
 			const kind = entry.label.trim() || "P";
 			const level = headingLevel(kind);
 			let parentPath: string | null = null;

@@ -3,6 +3,7 @@ import type { RegisteredDocOcrWorkflow } from "./doc-ocr";
 
 export type DocOcrRequest = {
 	parseId: string;
+	workflowID?: string | undefined;
 };
 
 export type DocOcrQueueConfig = {
@@ -36,7 +37,13 @@ export function createDocOcrQueue(config: DocOcrQueueConfig): WorkflowQueue {
 	});
 }
 
-export function toDocOcrWorkflowId(parseId: string): string {
+export function toDocOcrWorkflowId(
+	parseId: string,
+	workflowID?: string | undefined,
+): string {
+	if (workflowID) {
+		return workflowID;
+	}
 	if (!parseId) {
 		throw new Error("parseId is required");
 	}
@@ -52,7 +59,7 @@ export class DbosDocOcrWorkflowLauncher implements DocOcrWorkflowLauncher {
 	async enqueueDocOcr(input: DocOcrRequest): Promise<void> {
 		await DBOS.startWorkflow(this.workflow, {
 			queueName: this.queue.name,
-			workflowID: toDocOcrWorkflowId(input.parseId),
+			workflowID: toDocOcrWorkflowId(input.parseId, input.workflowID),
 		})(input.parseId);
 	}
 }

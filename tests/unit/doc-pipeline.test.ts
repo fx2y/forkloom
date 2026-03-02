@@ -46,9 +46,9 @@ describe("doc pipeline", () => {
 		expect(first.blocks.length).toBeGreaterThan(0);
 		expect(first.chunks.length).toBeGreaterThan(0);
 		expect(first.spans.length).toBeGreaterThan(0);
-		expect(first.search.every((entry) => (entry.embedding?.length ?? 0) > 0)).toBe(
-			true,
-		);
+		expect(
+			first.search.every((entry) => (entry.embedding?.length ?? 0) > 0),
+		).toBe(true);
 	});
 
 	it("keeps table blocks atomic and wires neighbor edges", () => {
@@ -63,4 +63,3 @@ describe("doc pipeline", () => {
 		expect(output.chunks.at(-1)?.nextChunkId).toBeNull();
 	});
 });
-

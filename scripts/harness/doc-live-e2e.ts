@@ -1,8 +1,5 @@
 import { pathToFileURL } from "node:url";
-import {
-	buildSamplePdfBytes,
-	createDocLiveContext,
-} from "./doc-live-support";
+import { buildSamplePdfBytes, createDocLiveContext } from "./doc-live-support";
 import { writeJson } from "./live-support";
 
 type IngestProof = {
@@ -34,9 +31,10 @@ async function main(): Promise<void> {
 			},
 		)) as IngestProof;
 		if (first.status === "rejected") {
-			throw new Error(`live ingest unexpectedly rejected: ${first.reason ?? "?"}`);
+			throw new Error(
+				`live ingest unexpectedly rejected: ${first.reason ?? "?"}`,
+			);
 		}
-		await context.waitForDone(first.parseId, 90_000);
 
 		const second = (await context.ingestLauncher.startIngestDoc(
 			{
@@ -47,7 +45,7 @@ async function main(): Promise<void> {
 				workflowID: `doc_ingest:e2e:second:${Date.now()}`,
 			},
 		)) as IngestProof;
-		await context.waitForDone(second.parseId, 90_000);
+		await context.waitForDone(first.parseId, 90_000);
 		const snapshot = await context.readSnapshot(first.parseId);
 
 		const status =

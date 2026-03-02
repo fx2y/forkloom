@@ -16,6 +16,7 @@ export type AcquireDocResult = {
 	parseId: string;
 	rawAlias: string;
 	shortCircuited: boolean;
+	shortCircuitState: "none" | "inflight" | "done";
 	doc: DocModel;
 	parse: ParseModel;
 };
@@ -80,15 +81,22 @@ export class DocAcquireService {
 		}
 
 		if (
-			existingDoc?.status === "done" &&
-			existingParse?.status === "done" &&
+			existingDoc &&
+			existingParse &&
+			existingDoc.status !== "failed" &&
+			existingParse.status !== "failed" &&
 			aliasedRawSha === docSha
 		) {
+			const shortCircuitState: AcquireDocResult["shortCircuitState"] =
+				existingDoc.status === "done" && existingParse.status === "done"
+					? "done"
+					: "inflight";
 			return {
 				docSha,
 				parseId,
 				rawAlias,
 				shortCircuited: true,
+				shortCircuitState,
 				doc: existingDoc,
 				parse: existingParse,
 			};
@@ -126,6 +134,7 @@ export class DocAcquireService {
 			parseId,
 			rawAlias,
 			shortCircuited: false,
+			shortCircuitState: "none",
 			doc,
 			parse,
 		};

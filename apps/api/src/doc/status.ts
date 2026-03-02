@@ -56,4 +56,3 @@ const OCR_DONE_SET = new Set<ParseStatusState>([
 export function isOcrDoneStatus(status: ParseStatus): boolean {
 	return OCR_DONE_SET.has(canonicalParseStatus(status));
 }
-

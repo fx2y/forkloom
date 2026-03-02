@@ -186,7 +186,9 @@ async function runChecklistQuery(query: QueryDef): Promise<DocChecklistIssue> {
 }
 
 export async function collectDocChecklistReport(): Promise<DocChecklistReport> {
-	const issues = await Promise.all(DOC_CHECKLIST_QUERIES.map(runChecklistQuery));
+	const issues = await Promise.all(
+		DOC_CHECKLIST_QUERIES.map(runChecklistQuery),
+	);
 	return {
 		status: issues.some((issue) => issue.count > 0) ? "fail" : "ok",
 		generatedAt: new Date().toISOString(),

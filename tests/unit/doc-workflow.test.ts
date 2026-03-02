@@ -1,15 +1,17 @@
+import { Readable } from "node:stream";
 import { hashBytes, hashJSON } from "@forkloom/shared";
 import { describe, expect, it } from "vitest";
-import type { ArtifactModel, PutArtifactInput } from "../../apps/api/src/ports";
 import type {
 	DocRepo,
 	OcrUsageModel,
 	RecordParseLedgerInput,
 } from "../../apps/api/src/doc";
-import { executeDocOcr } from "../../apps/api/src/workflow/doc-ocr";
+import type { ArtifactModel, PutArtifactInput } from "../../apps/api/src/ports";
 import { executeIngestDoc } from "../../apps/api/src/workflow/doc-ingest";
+import { executeDocOcr } from "../../apps/api/src/workflow/doc-ocr";
 
 const ISO = "2026-03-01T00:00:00.000Z";
+
 const inlineSteps = {
 	runStep: async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn(),
 };
@@ -94,10 +96,10 @@ function createRepo(store: Store): DocRepo {
 		async resolveAlias(alias) {
 			return store.aliases.get(alias) ?? null;
 		},
-			async recordParseLedger(input) {
-				store.recordLedgerCalls.push(input);
-				await this.upsertDoc(input.doc);
-				await this.upsertParse(input.parse);
+		async recordParseLedger(input) {
+			store.recordLedgerCalls.push(input);
+			await this.upsertDoc(input.doc);
+			await this.upsertParse(input.parse);
 			for (const alias of input.aliases) {
 				await this.aliasArtifact(alias);
 			}
@@ -106,48 +108,52 @@ function createRepo(store: Store): DocRepo {
 					...input.usage,
 					createdAt: input.usage.createdAt ?? ISO,
 					updatedAt: input.usage.updatedAt ?? ISO,
-					});
-				}
-			},
-			async searchLexicalChunks() {
-				return [];
-			},
-			async listVectorChunks() {
-				return [];
-			},
-			async listChunkSpans() {
-				return [];
-			},
-			async resolveSpan() {
-				return null;
-			},
-			async markParseDone(input) {
-				const parse = store.parses.get(input.parseId);
-				if (!parse) {
-					throw new Error(`parse not found: ${input.parseId}`);
-				}
-				store.parses.set(input.parseId, {
-					...parse,
+				});
+			}
+		},
+		async searchLexicalChunks() {
+			return [];
+		},
+		async listVectorChunks() {
+			return [];
+		},
+		async listChunkSpans() {
+			return [];
+		},
+		async resolveSpan() {
+			return null;
+		},
+		async markParseDone(input) {
+			const parse = store.parses.get(input.parseId);
+			if (!parse) {
+				throw new Error(`parse not found: ${input.parseId}`);
+			}
+			store.parses.set(input.parseId, {
+				...parse,
+				status: "done",
+				updatedAt: input.publishedAt,
+			});
+			const doc = store.docs.get(parse.docSha);
+			if (doc) {
+				store.docs.set(parse.docSha, {
+					...doc,
 					status: "done",
 					updatedAt: input.publishedAt,
 				});
-				const doc = store.docs.get(parse.docSha);
-				if (doc) {
-					store.docs.set(parse.docSha, {
-						...doc,
-						status: "done",
-						updatedAt: input.publishedAt,
-					});
-				}
-			},
-		};
-	}
+			}
+		},
+	};
+}
 
 function createArtifactService(logs: {
 	putArtifact: string[];
 	putJSON: string[];
 }) {
-	const toArtifactModel = (sha256: string, mime: string, bytes: number): ArtifactModel => ({
+	const toArtifactModel = (
+		sha256: string,
+		mime: string,
+		bytes: number,
+	): ArtifactModel => ({
 		sha256,
 		uri: `s3://agentos/cas/${sha256.slice(0, 2)}/${sha256}`,
 		mime,
@@ -190,8 +196,12 @@ function createArtifactService(logs: {
 				parents: input.parents ?? [],
 			};
 		},
-		async getArtifactMeta(sha256: string): Promise<ArtifactModel> {
-			return toArtifactModel(sha256, "application/pdf", 128);
+		async getArtifactBytes(_sha256: string) {
+			const body = Buffer.from("%PDF-1.7\n/Type /Page\n");
+			return {
+				body: Readable.from(body),
+				contentType: "application/pdf",
+			};
 		},
 	};
 }
@@ -200,7 +210,10 @@ describe("doc workflows", () => {
 	it("runs acquire->classify->reserve->enqueue in ingest workflow core", async () => {
 		const store = createStore();
 		const repo = createRepo(store);
-		const artifactLogs = { putArtifact: [] as string[], putJSON: [] as string[] };
+		const artifactLogs = {
+			putArtifact: [] as string[],
+			putJSON: [] as string[],
+		};
 		const artifactService = createArtifactService(artifactLogs);
 		const enqueued: string[] = [];
 		const steps: string[] = [];
@@ -242,6 +255,48 @@ describe("doc workflows", () => {
 		expect(enqueued).toEqual([output.parseId]);
 		expect(store.parses.get(output.parseId)?.status).toBe("queued");
 		expect(artifactLogs.putArtifact).toContain("raw");
+	});
+
+	it("dedupes in-flight duplicate ingest and avoids duplicate enqueue", async () => {
+		const store = createStore();
+		const repo = createRepo(store);
+		const artifactService = createArtifactService({
+			putArtifact: [],
+			putJSON: [],
+		});
+		const enqueued: string[] = [];
+		const input = {
+			body: Buffer.from("%PDF-1.7\n/Type /Page\n"),
+			mime: "application/pdf",
+		} as const;
+		const deps = {
+			repo,
+			artifactService,
+			ocrWorkflow: {
+				enqueueDocOcr: async (value: { parseId: string }) => {
+					enqueued.push(value.parseId);
+				},
+			},
+			config: {
+				endpoint: "https://api.z.ai/api/paas/v4/layout_parsing",
+				model: "glm-ocr",
+				parserVersion: "v1",
+				normVersion: "v1",
+				pdfMaxBytes: 50_000_000,
+				pdfMaxPages: 100,
+				imageMaxBytes: 10_000_000,
+			},
+			now: () => new Date(ISO),
+		};
+
+		const first = await executeIngestDoc(input, deps, inlineSteps);
+		const second = await executeIngestDoc(input, deps, inlineSteps);
+
+		expect(first.status).toBe("queued");
+		expect(second.status).toBe("deduped");
+		expect(second.reason).toBe("in_progress");
+		expect(second.parseId).toBe(first.parseId);
+		expect(enqueued).toEqual([first.parseId]);
 	});
 
 	it("rejects over-limit docs and marks parse/doc as failed", async () => {
@@ -339,7 +394,10 @@ describe("doc workflows", () => {
 	it("persists raw+norm artifacts and bills OCR once per parse", async () => {
 		const store = createStore();
 		const repo = createRepo(store);
-		const artifactLogs = { putArtifact: [] as string[], putJSON: [] as string[] };
+		const artifactLogs = {
+			putArtifact: [] as string[],
+			putJSON: [] as string[],
+		};
 		const artifactService = createArtifactService(artifactLogs);
 		const docSha = "f".repeat(64);
 		const parseId = "1".repeat(64);
@@ -365,12 +423,14 @@ describe("doc workflows", () => {
 		});
 
 		let layoutCalls = 0;
+		let lastLayoutArg: unknown = null;
 		const deps = {
 			repo,
 			artifactService,
 			zaiClient: {
-				layoutParsing: async () => {
+				layoutParsing: async (input: unknown) => {
 					layoutCalls += 1;
+					lastLayoutArg = input;
 					return {
 						markdown: "# T\n\nx\n",
 						layoutDetails: [
@@ -412,15 +472,23 @@ describe("doc workflows", () => {
 		expect(first.status).toBe("processed");
 		expect(second.status).toBe("cached");
 		expect(layoutCalls).toBe(1);
+		expect(lastLayoutArg).toMatchObject({
+			kind: "bytes",
+			mime: "application/pdf",
+		});
 		expect(store.recordLedgerCalls).toHaveLength(1);
 		expect(store.recordLedgerCalls[0]?.usage?.parseId).toBe(parseId);
-		expect(store.recordLedgerCalls[0]?.aliases.some((alias) => alias.alias.endsWith(".md.raw"))).toBe(true);
+		expect(
+			store.recordLedgerCalls[0]?.aliases.some((alias) =>
+				alias.alias.endsWith(".md.raw"),
+			),
+		).toBe(true);
 		expect(artifactLogs.putArtifact).toContain("md.raw");
 		expect(artifactLogs.putJSON).toContain("json.raw");
-			expect(store.parses.get(parseId)?.status).toBe("done");
-			expect(store.recordLedgerCalls[0]?.blocks.length).toBeGreaterThan(0);
-			expect(store.recordLedgerCalls[0]?.chunks.length).toBeGreaterThan(0);
-			expect(store.recordLedgerCalls[0]?.spans.length).toBeGreaterThan(0);
-			expect(store.recordLedgerCalls[0]?.search.length).toBeGreaterThan(0);
-		});
+		expect(store.parses.get(parseId)?.status).toBe("done");
+		expect(store.recordLedgerCalls[0]?.blocks.length).toBeGreaterThan(0);
+		expect(store.recordLedgerCalls[0]?.chunks.length).toBeGreaterThan(0);
+		expect(store.recordLedgerCalls[0]?.spans.length).toBeGreaterThan(0);
+		expect(store.recordLedgerCalls[0]?.search.length).toBeGreaterThan(0);
 	});
+});

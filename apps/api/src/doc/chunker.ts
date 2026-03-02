@@ -1,6 +1,11 @@
-import { normalizeMarkdown } from "./normalize";
 import { buildChunkId } from "./ids";
-import type { Bbox, UpsertBlockInput, UpsertChunkInput, UpsertSpanInput } from "./ports";
+import { normalizeMarkdown } from "./normalize";
+import type {
+	Bbox,
+	UpsertBlockInput,
+	UpsertChunkInput,
+	UpsertSpanInput,
+} from "./ports";
 
 export const MAX_CHARS = 6000;
 export const SOFT_CHARS = 5000;
@@ -191,8 +196,9 @@ function assignNeighborsAndParents(drafts: ChunkDraft[]): ChunkDraft[] {
 		}
 
 		if (current.chunk.kind === "table") {
-			(current.chunk.payload as { same_table_prev?: string | null }).same_table_prev =
-				lastTableChunkId;
+			(
+				current.chunk.payload as { same_table_prev?: string | null }
+			).same_table_prev = lastTableChunkId;
 			lastTableChunkId = current.chunk.chunkId;
 		}
 	}

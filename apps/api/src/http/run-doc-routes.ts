@@ -9,10 +9,7 @@ import {
 	parseRunDocSearchPayload,
 } from "./run-request-parsers";
 
-export function attachRunDocRoutes(
-	app: Express,
-	runService: RunService,
-): void {
+export function attachRunDocRoutes(app: Express, runService: RunService): void {
 	app.post(
 		"/runs/:runId/doc/ingest",
 		express.json({ limit: "80mb" }),

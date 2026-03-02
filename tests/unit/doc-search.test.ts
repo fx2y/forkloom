@@ -1,6 +1,9 @@
 import type { SpanRef } from "@forkloom/contracts";
 import { describe, expect, it } from "vitest";
-import { buildDeterministicEmbedding, DocService } from "../../apps/api/src/doc";
+import {
+	DocService,
+	buildDeterministicEmbedding,
+} from "../../apps/api/src/doc";
 import type { DocRepo } from "../../apps/api/src/doc";
 
 const BASE_SPAN: SpanRef = {
@@ -76,7 +79,13 @@ function createRepo(): DocRepo {
 			return chunkIds.flatMap((chunkId) =>
 				chunkId === "chunk-c"
 					? []
-					: [{ ...BASE_SPAN, chunkId, blockPath: chunkId === "chunk-a" ? "1.000001" : "1.000002" }],
+					: [
+							{
+								...BASE_SPAN,
+								chunkId,
+								blockPath: chunkId === "chunk-a" ? "1.000001" : "1.000002",
+							},
+						],
 			);
 		},
 		async resolveSpan(span) {
@@ -102,7 +111,10 @@ describe("doc search service", () => {
 			limit: 10,
 		});
 		expect(result.query).toBe("budget query");
-		expect(result.hits.map((hit) => hit.chunkId)).toEqual(["chunk-a", "chunk-b"]);
+		expect(result.hits.map((hit) => hit.chunkId)).toEqual([
+			"chunk-a",
+			"chunk-b",
+		]);
 		expect(result.hits.every((hit) => hit.spans.length > 0)).toBe(true);
 	});
 
@@ -117,4 +129,3 @@ describe("doc search service", () => {
 		});
 	});
 });
-

@@ -1,5 +1,21 @@
 type FetchLike = typeof fetch;
 
+export type ZaiLayoutFile =
+	| string
+	| {
+			kind: "url";
+			value: string;
+	  }
+	| {
+			kind: "data_url";
+			value: string;
+	  }
+	| {
+			kind: "bytes";
+			value: Uint8Array;
+			mime: string;
+	  };
+
 type LayoutElement = {
 	index: number;
 	label: string;
@@ -102,10 +118,43 @@ function parseMarkdown(value: unknown): string {
 	if (typeof value === "string") {
 		return value;
 	}
-	if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+	if (
+		Array.isArray(value) &&
+		value.every((entry) => typeof entry === "string")
+	) {
 		return value.join("\n\n");
 	}
 	throw new Error("invalid md_results: expected string or string[]");
+}
+
+function toDataUrl(input: { bytes: Uint8Array; mime: string }): string {
+	if (!input.mime) {
+		throw new Error("layout_parsing bytes input requires mime");
+	}
+	const encoded = Buffer.from(input.bytes).toString("base64");
+	if (!encoded) {
+		throw new Error("layout_parsing bytes input is empty");
+	}
+	return `data:${input.mime};base64,${encoded}`;
+}
+
+function resolveFileField(file: ZaiLayoutFile): string {
+	if (typeof file === "string") {
+		if (!file) {
+			throw new Error("layout_parsing requires file input");
+		}
+		return file;
+	}
+	if (file.kind === "url" || file.kind === "data_url") {
+		if (!file.value) {
+			throw new Error("layout_parsing requires file input");
+		}
+		return file.value;
+	}
+	return toDataUrl({
+		bytes: file.value,
+		mime: file.mime,
+	});
 }
 
 function readUsage(
@@ -189,13 +238,11 @@ export class ZaiLayoutClient {
 		this.fetchImpl = deps.fetchImpl ?? fetch;
 	}
 
-	async layoutParsing(fileUrl: string): Promise<ZaiLayoutResult> {
-		if (!fileUrl) {
-			throw new Error("layout_parsing requires fileUrl");
-		}
+	async layoutParsing(file: ZaiLayoutFile): Promise<ZaiLayoutResult> {
+		const fileField = resolveFileField(file);
 		const requestBody = JSON.stringify({
 			model: this.deps.model,
-			file: fileUrl,
+			file: fileField,
 		});
 		let lastError: Error | null = null;
 		for (let attempt = 1; attempt <= this.retryLimit; attempt += 1) {
@@ -237,8 +284,7 @@ export class ZaiLayoutClient {
 					raw: payload,
 				};
 			} catch (error) {
-				lastError =
-					error instanceof Error ? error : new Error(String(error));
+				lastError = error instanceof Error ? error : new Error(String(error));
 				if (attempt >= this.retryLimit) {
 					break;
 				}
@@ -250,4 +296,3 @@ export class ZaiLayoutClient {
 		);
 	}
 }
-

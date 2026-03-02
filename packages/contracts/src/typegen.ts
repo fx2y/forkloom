@@ -481,7 +481,9 @@ export function renderTypes(): string {
 		"\tkind: ActorEventKind;",
 		"\tpayload: Record<string, unknown>;",
 		"};",
-	].join("\n");
+	]
+		.join("\n")
+		.concat("\n");
 }
 
 if (process.argv.includes("--write")) {

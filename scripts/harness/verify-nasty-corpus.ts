@@ -97,10 +97,8 @@ export async function verifyNastyCorpus(input: {
 }
 
 async function main(): Promise<void> {
-	const manifestPath =
-		process.argv[2] ?? "fixtures/ocr/nasty/MANIFEST.json";
-	const outputPath =
-		process.argv[3] ?? ".cache/spec07/cy10-corpus.verify.json";
+	const manifestPath = process.argv[2] ?? "fixtures/ocr/nasty/MANIFEST.json";
+	const outputPath = process.argv[3] ?? ".cache/spec07/cy10-corpus.verify.json";
 	await verifyNastyCorpus({ manifestPath, outputPath });
 }
 

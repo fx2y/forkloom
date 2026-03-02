@@ -42,7 +42,10 @@ type DocOcrRepo = Pick<
 
 export type DocOcrDeps = {
 	repo: DocOcrRepo;
-	artifactService: Pick<ArtifactService, "getArtifactMeta" | "putArtifact" | "putJSON">;
+	artifactService: Pick<
+		ArtifactService,
+		"getArtifactBytes" | "putArtifact" | "putJSON"
+	>;
 	zaiClient: Pick<ZaiLayoutClient, "layoutParsing">;
 	config: {
 		model: string;
@@ -50,7 +53,9 @@ export type DocOcrDeps = {
 	now?: (() => Date) | undefined;
 };
 
-export type RegisteredDocOcrWorkflow = (parseId: string) => Promise<DocOcrOutput>;
+export type RegisteredDocOcrWorkflow = (
+	parseId: string,
+) => Promise<DocOcrOutput>;
 
 const OCR_DONE_STATUSES = new Set<ParseStatusState>([
 	"ocr_done",
@@ -74,6 +79,27 @@ function assertPayload(payload: ParsePayloadModel | null): ParsePayloadModel {
 
 function isCachedStatus(status: ParsePayloadModel["parse"]["status"]): boolean {
 	return OCR_DONE_STATUSES.has(canonicalParseStatus(status));
+}
+
+async function readReadableToBuffer(
+	stream: NodeJS.ReadableStream,
+): Promise<Buffer> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of stream as AsyncIterable<unknown>) {
+		if (typeof chunk === "string") {
+			chunks.push(Buffer.from(chunk, "utf8"));
+			continue;
+		}
+		if (chunk instanceof Uint8Array) {
+			chunks.push(Buffer.from(chunk));
+			continue;
+		}
+		throw new Error("unsupported artifact stream chunk");
+	}
+	if (chunks.length === 0) {
+		throw new Error("artifact stream is empty");
+	}
+	return Buffer.concat(chunks);
 }
 
 async function markParseStatus(
@@ -125,29 +151,29 @@ export async function executeDocOcr(
 
 	try {
 		const running = await steps.runStep("markRunning", async () =>
-			markParseStatus(
-				deps.repo,
-				initial,
-				"ocr_running",
-				now().toISOString(),
-			),
+			markParseStatus(deps.repo, initial, "ocr_running", now().toISOString()),
 		);
 		payload = {
 			...initial,
 			parse: running,
 		};
 
-			const ocr = await steps.runStep("callLayoutParsing", async () => {
+		const ocr = await steps.runStep("callLayoutParsing", async () => {
 			const rawSha = assertPayload(payload).doc.rawArtifactSha;
 			if (!rawSha) {
 				throw new Error(`parse ${parseId} missing raw artifact sha`);
 			}
-			const rawMeta = await deps.artifactService.getArtifactMeta(rawSha);
-			return deps.zaiClient.layoutParsing(rawMeta.uri);
+			const raw = await deps.artifactService.getArtifactBytes(rawSha);
+			const rawBytes = await readReadableToBuffer(raw.body);
+			return deps.zaiClient.layoutParsing({
+				kind: "bytes",
+				value: rawBytes,
+				mime: raw.contentType ?? assertPayload(payload).doc.mime,
+			});
 		});
 
-			return steps.runStep("persistOcr", async () => {
-				const current = assertPayload(payload);
+		const processed = await steps.runStep("persistOcr", async () => {
+			const current = assertPayload(payload);
 			const rawMd = await deps.artifactService.putArtifact({
 				body: Buffer.from(ocr.markdown, "utf8"),
 				mime: "text/markdown",
@@ -175,9 +201,9 @@ export async function executeDocOcr(
 					"parse.variant": "md",
 				},
 			});
-				const normalizedJson = normalizeJsonValue({
-					layout_details: ocr.layoutDetails.map((page) =>
-						page.map((entry) => ({
+			const normalizedJson = normalizeJsonValue({
+				layout_details: ocr.layoutDetails.map((page) =>
+					page.map((entry) => ({
 						index: entry.index,
 						label: entry.label,
 						bbox_2d: entry.bbox2d,
@@ -190,7 +216,7 @@ export async function executeDocOcr(
 					num_pages: ocr.pageCount,
 				},
 			});
-				const normJson = await deps.artifactService.putJSON({
+			const normJson = await deps.artifactService.putJSON({
 				value: normalizedJson,
 				meta: {
 					"parse.id": current.parse.parseId,
@@ -198,104 +224,121 @@ export async function executeDocOcr(
 				},
 				parents: [rawJson.sha256],
 			});
-				const stamp = now().toISOString();
-				const pipeline = buildDocPipeline({
-					docSha: current.doc.docSha,
-					parseId: current.parse.parseId,
-					layoutDetails: ocr.layoutDetails,
+			const stamp = now().toISOString();
+			const pipeline = buildDocPipeline({
+				docSha: current.doc.docSha,
+				parseId: current.parse.parseId,
+				layoutDetails: ocr.layoutDetails,
+			});
+			if (pipeline.chunks.length === 0 || pipeline.spans.length === 0) {
+				throw new Error(
+					`layout_parsing returned empty pipeline for parse ${current.parse.parseId}`,
+				);
+			}
+			const chunkAliases: Array<{ alias: string; sha256: string }> = [];
+			for (const chunk of pipeline.chunks) {
+				const chunkMd = await deps.artifactService.putArtifact({
+					body: Buffer.from(chunk.md, "utf8"),
+					mime: "text/markdown",
+					type: "raw",
+					meta: {
+						"parse.id": current.parse.parseId,
+						"chunk.id": chunk.chunkId,
+						"chunk.variant": "md",
+					},
 				});
-				const chunkAliases: Array<{ alias: string; sha256: string }> = [];
-				for (const chunk of pipeline.chunks) {
-					const chunkMd = await deps.artifactService.putArtifact({
-						body: Buffer.from(chunk.md, "utf8"),
-						mime: "text/markdown",
-						type: "raw",
-						meta: {
-							"parse.id": current.parse.parseId,
-							"chunk.id": chunk.chunkId,
-							"chunk.variant": "md",
-						},
-					});
-					const chunkJson = await deps.artifactService.putJSON({
-						value: {
-							chunkId: chunk.chunkId,
-							parseId: chunk.parseId,
-							page: chunk.page,
-							kind: chunk.kind,
-							md: chunk.md,
-							plain: chunk.plain,
-							payload: chunk.payload,
-							bboxUnion: chunk.bboxUnion,
-							tokenEstimate: chunk.tokenEstimate,
-						},
-						meta: {
-							"parse.id": current.parse.parseId,
-							"chunk.id": chunk.chunkId,
-							"chunk.variant": "json",
-						},
-						parents: [chunkMd.sha256, normJson.sha256],
-					});
-					chunkAliases.push(
-						{ alias: buildChunkMdAlias(chunk.chunkId), sha256: chunkMd.sha256 },
-						{ alias: buildChunkJsonAlias(chunk.chunkId), sha256: chunkJson.sha256 },
-					);
-				}
-				const ocrDoneStatus = transitionParseStatus(current.parse.status, "ocr_done");
-				const normDoneStatus = transitionParseStatus(ocrDoneStatus, "norm_done");
-				const indexedStatus = transitionParseStatus(normDoneStatus, "indexed");
-				const parseStats = {
-					...current.parse.stats,
-					ocr: {
-						pages: ocr.pageCount,
-						outputTokens: ocr.usage.outputTokens,
-						costMicros: ocr.usage.costMicros,
+				const chunkJson = await deps.artifactService.putJSON({
+					value: {
+						chunkId: chunk.chunkId,
+						parseId: chunk.parseId,
+						page: chunk.page,
+						kind: chunk.kind,
+						md: chunk.md,
+						plain: chunk.plain,
+						payload: chunk.payload,
+						bboxUnion: chunk.bboxUnion,
+						tokenEstimate: chunk.tokenEstimate,
 					},
-					pipeline: {
-						blockCount: pipeline.blocks.length,
-						chunkCount: pipeline.chunks.length,
-						spanCount: pipeline.spans.length,
+					meta: {
+						"parse.id": current.parse.parseId,
+						"chunk.id": chunk.chunkId,
+						"chunk.variant": "json",
 					},
-				};
-				await deps.repo.recordParseLedger({
-					doc: {
-						docSha: current.doc.docSha,
-						mime: current.doc.mime,
-						bytes: current.doc.bytes,
-						rawArtifactSha: current.doc.rawArtifactSha,
-						status: "processing",
-						updatedAt: stamp,
+					parents: [chunkMd.sha256, normJson.sha256],
+				});
+				chunkAliases.push(
+					{ alias: buildChunkMdAlias(chunk.chunkId), sha256: chunkMd.sha256 },
+					{
+						alias: buildChunkJsonAlias(chunk.chunkId),
+						sha256: chunkJson.sha256,
 					},
-					parse: {
-						parseId: current.parse.parseId,
+				);
+			}
+			const ocrDoneStatus = transitionParseStatus(
+				current.parse.status,
+				"ocr_done",
+			);
+			const normDoneStatus = transitionParseStatus(ocrDoneStatus, "norm_done");
+			const indexedStatus = transitionParseStatus(normDoneStatus, "indexed");
+			const parseStats = {
+				...current.parse.stats,
+				ocr: {
+					pages: ocr.pageCount,
+					outputTokens: ocr.usage.outputTokens,
+					costMicros: ocr.usage.costMicros,
+				},
+				pipeline: {
+					blockCount: pipeline.blocks.length,
+					chunkCount: pipeline.chunks.length,
+					spanCount: pipeline.spans.length,
+				},
+			};
+			await deps.repo.recordParseLedger({
+				doc: {
+					docSha: current.doc.docSha,
+					mime: current.doc.mime,
+					bytes: current.doc.bytes,
+					rawArtifactSha: current.doc.rawArtifactSha,
+					status: "processing",
+					updatedAt: stamp,
+				},
+				parse: {
+					parseId: current.parse.parseId,
 					docSha: current.parse.docSha,
 					parser: current.parse.parser,
 					parserVersion: current.parse.parserVersion,
 					cfgHash: current.parse.cfgHash,
 					normVersion: current.parse.normVersion,
-						mdArtifactSha: normMd.sha256,
-						jsonArtifactSha: normJson.sha256,
-						stats: parseStats,
-						status: indexedStatus,
-						updatedAt: stamp,
+					mdArtifactSha: normMd.sha256,
+					jsonArtifactSha: normJson.sha256,
+					stats: parseStats,
+					status: indexedStatus,
+					updatedAt: stamp,
+				},
+				aliases: [
+					{
+						alias: buildParseRawMdAlias(current.parse.parseId),
+						sha256: rawMd.sha256,
 					},
-					aliases: [
-						{ alias: buildParseRawMdAlias(current.parse.parseId), sha256: rawMd.sha256 },
 					{
 						alias: buildParseRawJsonAlias(current.parse.parseId),
 						sha256: rawJson.sha256,
 					},
-					{ alias: buildParseMdAlias(current.parse.parseId), sha256: normMd.sha256 },
+					{
+						alias: buildParseMdAlias(current.parse.parseId),
+						sha256: normMd.sha256,
+					},
 					{
 						alias: buildParseJsonAlias(current.parse.parseId),
 						sha256: normJson.sha256,
-						},
-						...chunkAliases,
-					],
-					pages: pipeline.pages,
-					blocks: pipeline.blocks,
-					chunks: pipeline.chunks,
-					spans: pipeline.spans,
-					usage: {
+					},
+					...chunkAliases,
+				],
+				pages: pipeline.pages,
+				blocks: pipeline.blocks,
+				chunks: pipeline.chunks,
+				spans: pipeline.spans,
+				usage: {
 					parseId: current.parse.parseId,
 					vendor: "zai",
 					model: deps.config.model,
@@ -307,31 +350,27 @@ export async function executeDocOcr(
 						usage: ocr.usage.raw,
 					},
 					updatedAt: stamp,
-					},
-					search: pipeline.search,
+				},
+				search: pipeline.search,
+			});
+			await steps.runStep("publishDone", async () => {
+				await deps.repo.markParseDone({
+					parseId: current.parse.parseId,
+					publishedAt: stamp,
 				});
-				await steps.runStep("publishDone", async () => {
-					await deps.repo.markParseDone({
-						parseId: current.parse.parseId,
-						publishedAt: stamp,
-					});
-				});
-				return {
+			});
+			return {
 				parseId: current.parse.parseId,
 				status: "processed" as const,
 				mdArtifactSha: normMd.sha256,
 				jsonArtifactSha: normJson.sha256,
 			};
 		});
+		return processed;
 	} catch (error) {
 		const current = assertPayload(payload);
 		await steps.runStep("markFailed", async () =>
-			markParseStatus(
-				deps.repo,
-				current,
-				"failed",
-				now().toISOString(),
-			),
+			markParseStatus(deps.repo, current, "failed", now().toISOString()),
 		);
 		throw error;
 	}

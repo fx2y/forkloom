@@ -318,9 +318,9 @@ describe("web run sandbox flow", () => {
 					{ status: 200, headers: { "content-type": "application/json" } },
 				);
 			}
-				if (url === `/runs/${runId}/files`) {
-					return new Response(
-						JSON.stringify({
+			if (url === `/runs/${runId}/files`) {
+				return new Response(
+					JSON.stringify({
 						workspaceRef: { sha256: "a".repeat(64) },
 						workspace_manifest: {
 							version: 1,
@@ -333,59 +333,59 @@ describe("web run sandbox flow", () => {
 							],
 						},
 					}),
-						{ status: 200, headers: { "content-type": "application/json" } },
-					);
-				}
-				if (url === `/runs/${runId}/doc/search` && init?.method === "POST") {
-					return new Response(
-						JSON.stringify({
-							query: "invoice total",
-							scope: "*",
-							hits: [
-								{
-									chunkId: "chunk:1",
-									score: 1.25,
-									snippet: "Invoice total is $19.99",
-									spans: [
-										{
-											docSha: "a".repeat(64),
-											parseId: "parse:1",
-											page: 1,
-											bbox: [0, 0, 100, 100],
-											charStart: 0,
-											charEnd: 10,
-											blockPath: "p1/b1",
-											chunkId: "chunk:1",
-										},
-									],
-								},
-							],
-						}),
-						{ status: 200, headers: { "content-type": "application/json" } },
-					);
-				}
-				if (url === `/runs/${runId}/doc/resolve` && init?.method === "POST") {
-					return new Response(
-						JSON.stringify({
-							span: {
-								docSha: "a".repeat(64),
-								parseId: "parse:1",
-								page: 1,
-								bbox: [0, 0, 100, 100],
-								charStart: 0,
-								charEnd: 10,
-								blockPath: "p1/b1",
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			if (url === `/runs/${runId}/doc/search` && init?.method === "POST") {
+				return new Response(
+					JSON.stringify({
+						query: "invoice total",
+						scope: "*",
+						hits: [
+							{
 								chunkId: "chunk:1",
+								score: 1.25,
+								snippet: "Invoice total is $19.99",
+								spans: [
+									{
+										docSha: "a".repeat(64),
+										parseId: "parse:1",
+										page: 1,
+										bbox: [0, 0, 100, 100],
+										charStart: 0,
+										charEnd: 10,
+										blockPath: "p1/b1",
+										chunkId: "chunk:1",
+									},
+								],
 							},
-							md: "Total: $19.99",
+						],
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			if (url === `/runs/${runId}/doc/resolve` && init?.method === "POST") {
+				return new Response(
+					JSON.stringify({
+						span: {
+							docSha: "a".repeat(64),
+							parseId: "parse:1",
+							page: 1,
 							bbox: [0, 0, 100, 100],
-							pageImageSha: "b".repeat(64),
-						}),
-						{ status: 200, headers: { "content-type": "application/json" } },
-					);
-				}
-				throw new Error(`unexpected fetch ${url}`);
-			});
+							charStart: 0,
+							charEnd: 10,
+							blockPath: "p1/b1",
+							chunkId: "chunk:1",
+						},
+						md: "Total: $19.99",
+						bbox: [0, 0, 100, 100],
+						pageImageSha: "b".repeat(64),
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			throw new Error(`unexpected fetch ${url}`);
+		});
 
 		const root = document.createElement("div");
 		document.body.append(root);
@@ -477,40 +477,40 @@ describe("web run sandbox flow", () => {
 		expect(root.querySelector("[data-run-provenance]")?.textContent).toContain(
 			"session entry-1",
 		);
-			expect(root.querySelector("[data-run-status]")?.textContent).toBe(
-				"running",
-			);
+		expect(root.querySelector("[data-run-status]")?.textContent).toBe(
+			"running",
+		);
 
-			const docQueryInput = root.querySelector<HTMLInputElement>(
-				"[data-run-doc-query]",
+		const docQueryInput = root.querySelector<HTMLInputElement>(
+			"[data-run-doc-query]",
+		);
+		const docSearchForm = root.querySelector<HTMLFormElement>(
+			"[data-run-doc-search-form]",
+		);
+		if (!(docQueryInput && docSearchForm)) {
+			throw new Error("missing doc search controls");
+		}
+		docQueryInput.value = "invoice total";
+		docSearchForm.dispatchEvent(new Event("submit", { bubbles: true }));
+		await vi.waitFor(() => {
+			expect(root.querySelector("[data-run-doc-hits]")?.textContent).toContain(
+				"chunk:1",
 			);
-			const docSearchForm = root.querySelector<HTMLFormElement>(
-				"[data-run-doc-search-form]",
-			);
-			if (!(docQueryInput && docSearchForm)) {
-				throw new Error("missing doc search controls");
-			}
-			docQueryInput.value = "invoice total";
-			docSearchForm.dispatchEvent(new Event("submit", { bubbles: true }));
-			await vi.waitFor(() => {
-				expect(root.querySelector("[data-run-doc-hits]")?.textContent).toContain(
-					"chunk:1",
-				);
-			});
-
-			const resolveButton = root.querySelector<HTMLButtonElement>(
-				"[data-run-doc-hits] button",
-			);
-			if (!resolveButton) {
-				throw new Error("missing resolve button");
-			}
-			resolveButton.click();
-			await vi.waitFor(() => {
-				expect(root.querySelector("[data-run-doc-resolve]")?.textContent).toContain(
-					"Total: $19.99",
-				);
-			});
 		});
+
+		const resolveButton = root.querySelector<HTMLButtonElement>(
+			"[data-run-doc-hits] button",
+		);
+		if (!resolveButton) {
+			throw new Error("missing resolve button");
+		}
+		resolveButton.click();
+		await vi.waitFor(() => {
+			expect(
+				root.querySelector("[data-run-doc-resolve]")?.textContent,
+			).toContain("Total: $19.99");
+		});
+	});
 
 	const liveOnly = process.env.FORKLOOM_LIVE_WEB_E2E === "1";
 	(liveOnly ? it : it.skip)(

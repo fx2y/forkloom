@@ -81,6 +81,11 @@ function decodeBody(bodyBase64: string): Buffer {
 	return Buffer.from(bodyBase64, "base64");
 }
 
+function toDocOcrAttemptWorkflowId(parseId: string, stampIso: string): string {
+	const nonce = stampIso.replace(/[^0-9A-Za-z]/g, "");
+	return `doc_ocr:${parseId}:${nonce}`;
+}
+
 async function markRejected(
 	repo: IngestRepo,
 	doc: DocModel,
@@ -148,6 +153,12 @@ export async function executeIngestDoc(
 			docSha: acquired.docSha,
 			parseId: acquired.parseId,
 			status: "deduped",
+			reason:
+				acquired.shortCircuitState === "inflight"
+					? "in_progress"
+					: acquired.shortCircuitState === "done"
+						? "already_done"
+						: undefined,
 		};
 	}
 
@@ -221,9 +232,16 @@ export async function executeIngestDoc(
 	const enqueue = await steps.runStep("enqueue", async () => ({
 		parseId: acquired.parseId,
 		shouldEnqueue: true,
+		workflowID: toDocOcrAttemptWorkflowId(
+			acquired.parseId,
+			now().toISOString(),
+		),
 	}));
 	if (enqueue.shouldEnqueue) {
-		await deps.ocrWorkflow.enqueueDocOcr({ parseId: enqueue.parseId });
+		await deps.ocrWorkflow.enqueueDocOcr({
+			parseId: enqueue.parseId,
+			workflowID: enqueue.workflowID,
+		});
 	}
 
 	return {

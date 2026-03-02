@@ -2,15 +2,18 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import process from "node:process";
-import { Readable } from "node:stream";
-import type { Readable as NodeReadable } from "node:stream";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { loadConfig } from "../../apps/api/src/config";
-import { PgDocRepo, type ParseModel, type DocRepo } from "../../apps/api/src/doc";
+import {
+	type DocRepo,
+	type ParseModel,
+	PgDocRepo,
+	ZaiLayoutClient,
+} from "../../apps/api/src/doc";
 import { InlineStepRunner } from "../../apps/api/src/durability";
-import type { ArtifactStore, PutObjectInput } from "../../apps/api/src/ports";
 import { PgArtifactRepo } from "../../apps/api/src/repo/postgres";
 import { ArtifactService } from "../../apps/api/src/service";
+import { S3ArtifactStore } from "../../apps/api/src/storage/s3";
 import {
 	LazyDbosDocIngestWorkflowLauncher,
 	LazyDbosDocOcrWorkflowLauncher,
@@ -20,67 +23,8 @@ import {
 } from "../../apps/api/src/workflow";
 import { queryRows, sleep } from "./live-support";
 
-type StoredBlob = {
-	body: Buffer;
-	mime: string;
-};
-
-class MemoryArtifactStore implements ArtifactStore {
-	private readonly objects = new Map<string, StoredBlob>();
-
-	async ensureBucket(): Promise<void> {
-		return;
-	}
-
-	async putObject(input: PutObjectInput): Promise<void> {
-		this.objects.set(input.sha256, {
-			body: Buffer.from(input.body),
-			mime: input.mime,
-		});
-	}
-
-	async getObject(
-		sha256: string,
-	): Promise<{ body: NodeReadable; contentType: string | null }> {
-		const found = this.objects.get(sha256);
-		if (!found) {
-			throw new Error(`artifact blob missing in memory store: ${sha256}`);
-		}
-		return {
-			body: Readable.from(found.body) as NodeReadable,
-			contentType: found.mime,
-		};
-	}
-
-	async ping(): Promise<boolean> {
-		return true;
-	}
-}
-
 export type CrashStage = "none" | "ocr" | "index";
 export type CrashMode = "disabled" | "first" | "recover";
-
-type OcrResult = {
-	markdown: string;
-	layoutDetails: Array<
-		Array<{
-			index: number;
-			label: string;
-			bbox2d: [number, number, number, number];
-			content: string;
-			width: number;
-			height: number;
-		}>
-	>;
-	pageCount: number;
-	usage: {
-		inputPages: number;
-		outputTokens: number;
-		costMicros: number;
-		raw: Record<string, unknown>;
-	};
-	raw: Record<string, unknown>;
-};
 
 export type ParseSnapshot = {
 	parseId: string;
@@ -94,12 +38,13 @@ export type ParseSnapshot = {
 
 export type DocLiveContext = {
 	ingestLauncher: LazyDbosDocIngestWorkflowLauncher;
-	docRepo: PgDocRepo;
 	waitForDone(parseId: string, timeoutMs?: number): Promise<ParseModel>;
 	readSnapshot(parseId: string): Promise<ParseSnapshot>;
 	resetParse(parseId: string): Promise<void>;
 	shutdown(): Promise<void>;
 };
+
+const DEFAULT_LIVE_PDF_PATH = "fixtures/ocr/live/01-w3-dummy.pdf";
 
 function hashText(text: string): string {
 	return createHash("sha256").update(text).digest("hex");
@@ -126,72 +71,6 @@ function maybeCrashNow(input: {
 	process.kill(process.pid, "SIGKILL");
 }
 
-function sampleLayoutResult(): OcrResult {
-	return {
-		markdown: [
-			"# Invoice 42",
-			"",
-			"Total: $19.99",
-			"",
-			"| Item | Qty | Price |",
-			"| --- | --- | --- |",
-			"| Widget | 2 | 9.995 |",
-			"",
-			"Formula: a^2 + b^2 = c^2",
-		].join("\n"),
-		layoutDetails: [
-			[
-				{
-					index: 0,
-					label: "H1",
-					bbox2d: [0, 0, 420, 32],
-					content: "Invoice 42",
-					width: 420,
-					height: 32,
-				},
-				{
-					index: 1,
-					label: "P",
-					bbox2d: [0, 36, 420, 72],
-					content: "Total: $19.99",
-					width: 420,
-					height: 36,
-				},
-				{
-					index: 2,
-					label: "TABLE",
-					bbox2d: [0, 74, 420, 170],
-					content: "Item Qty Price",
-					width: 420,
-					height: 96,
-				},
-				{
-					index: 3,
-					label: "FORMULA",
-					bbox2d: [0, 172, 420, 212],
-					content: "a^2 + b^2 = c^2",
-					width: 420,
-					height: 40,
-				},
-			],
-		],
-		pageCount: 1,
-		usage: {
-			inputPages: 1,
-			outputTokens: 64,
-			costMicros: 1200,
-			raw: {
-				mock: true,
-				provider: "zai",
-			},
-		},
-		raw: {
-			mock: true,
-			source: "doc-live-support",
-		},
-	};
-}
-
 function createCrashAwareRepo(
 	baseRepo: PgDocRepo,
 	input: {
@@ -199,7 +78,10 @@ function createCrashAwareRepo(
 		mode: CrashMode;
 		crashMarkerPath: string | null;
 	},
-): Pick<DocRepo, "getParsePayload" | "upsertParse" | "recordParseLedger" | "markParseDone"> {
+): Pick<
+	DocRepo,
+	"getParsePayload" | "upsertParse" | "recordParseLedger" | "markParseDone"
+> {
 	return {
 		getParsePayload: (parseId) => baseRepo.getParsePayload(parseId),
 		upsertParse: (value) => baseRepo.upsertParse(value),
@@ -216,20 +98,8 @@ function createCrashAwareRepo(
 	};
 }
 
-export function buildSamplePdfBytes(): Buffer {
-	return Buffer.from(
-		[
-			"%PDF-1.7",
-			"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-			"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
-			"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> endobj",
-			"4 0 obj << /Length 64 >> stream",
-			"Invoice 42 /Type /Page Total 19.99",
-			"endstream endobj",
-			"%%EOF",
-		].join("\n"),
-		"utf8",
-	);
+export function buildSamplePdfBytes(inputPath = DEFAULT_LIVE_PDF_PATH): Buffer {
+	return readFileSync(inputPath);
 }
 
 export function readCrashMarker(path: string): string | null {
@@ -254,8 +124,15 @@ export async function createDocLiveContext(input: {
 	const docRepo = new PgDocRepo({
 		databaseUrl: config.databaseUrl,
 	});
-	const store = new MemoryArtifactStore();
+	const store = new S3ArtifactStore({
+		endpoint: config.s3Endpoint,
+		bucket: config.s3Bucket,
+		region: config.s3Region,
+		accessKeyId: config.awsAccessKeyId,
+		secretAccessKey: config.awsSecretAccessKey,
+	});
 	await artifactRepo.runMigrations();
+	await store.ensureBucket();
 
 	const artifactService = new ArtifactService({
 		repo: artifactRepo,
@@ -270,6 +147,11 @@ export async function createDocLiveContext(input: {
 	const docOcrLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const docIngestLauncher = new LazyDbosDocIngestWorkflowLauncher();
 	const crashMarkerPath = input.crashMarkerPath ?? null;
+	const zaiClient = new ZaiLayoutClient({
+		endpoint: config.docOcrEndpoint,
+		apiKey: config.docOcrApiKey,
+		model: config.docOcrModel,
+	});
 
 	const ocrWorkflow = registerDocOcrWorkflow({
 		repo: createCrashAwareRepo(docRepo, {
@@ -279,14 +161,14 @@ export async function createDocLiveContext(input: {
 		}),
 		artifactService,
 		zaiClient: {
-			layoutParsing: async () => {
+			layoutParsing: async (file) => {
 				maybeCrashNow({
 					stage: input.crashStage,
 					mode: input.crashMode,
 					expectedStage: "ocr",
 					crashMarkerPath,
 				});
-				return sampleLayoutResult();
+				return zaiClient.layoutParsing(file);
 			},
 		},
 		config: {
@@ -318,7 +200,6 @@ export async function createDocLiveContext(input: {
 
 	return {
 		ingestLauncher: docIngestLauncher,
-		docRepo,
 		waitForDone: async (parseId: string, timeoutMs = 90_000) => {
 			const deadline = Date.now() + timeoutMs;
 			while (Date.now() < deadline) {
@@ -343,11 +224,11 @@ export async function createDocLiveContext(input: {
 				throw new Error(`parse not found for snapshot: ${parseId}`);
 			}
 			const usageRows = await queryRows<{ count: string }>(
-				`select count(*)::text as count from ocr_usage where parse_id = $1`,
+				"select count(*)::text as count from ocr_usage where parse_id = $1",
 				[parseId],
 			);
 			const chunkRows = await queryRows<{ chunk_id: string; md: string }>(
-				`select chunk_id, md from chunks where parse_id = $1 order by chunk_id`,
+				"select chunk_id, md from chunks where parse_id = $1 order by chunk_id",
 				[parseId],
 			);
 			const spanRows = await queryRows<{ count: string }>(

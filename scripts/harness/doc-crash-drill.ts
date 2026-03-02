@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
-	buildSamplePdfBytes,
 	type CrashStage,
+	buildSamplePdfBytes,
 	createDocLiveContext,
 	readCrashMarker,
 } from "./doc-live-support";
@@ -58,11 +58,14 @@ function diffHashes(
 	return { missing, unexpected, hashMismatches };
 }
 
-async function runStage(mode: Exclude<Mode, "aggregate">, input: {
-	stage: CrashStage;
-	scenarioId: string;
-	outputPath: string;
-}): Promise<void> {
+async function runStage(
+	mode: Exclude<Mode, "aggregate">,
+	input: {
+		stage: CrashStage;
+		scenarioId: string;
+		outputPath: string;
+	},
+): Promise<void> {
 	const crashMarkerPath = `.cache/spec07/doc-crash-${input.stage}.${input.scenarioId}.marker`;
 	const parserVersion = `v1-crash-${input.stage}-${input.scenarioId}`;
 	const context = await createDocLiveContext({
@@ -133,11 +136,15 @@ async function runAggregate(input: {
 	outputPath: string;
 }): Promise<void> {
 	const ocr = JSON.parse(readFileSync(input.ocrPath, "utf8")) as StageReport;
-	const index = JSON.parse(readFileSync(input.indexPath, "utf8")) as StageReport;
+	const index = JSON.parse(
+		readFileSync(input.indexPath, "utf8"),
+	) as StageReport;
 	const diff = diffHashes(ocr.chunkMdHashes, index.chunkMdHashes);
 	const duplicateChunkIds = [
 		...(ocr.duplicateChunkIds > 0 ? [`ocr:${ocr.duplicateChunkIds}`] : []),
-		...(index.duplicateChunkIds > 0 ? [`index:${index.duplicateChunkIds}`] : []),
+		...(index.duplicateChunkIds > 0
+			? [`index:${index.duplicateChunkIds}`]
+			: []),
 	];
 	const status =
 		ocr.status === "ok" &&

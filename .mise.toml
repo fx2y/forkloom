@@ -235,7 +235,7 @@ outputs = [".cache/mise-marks/test__int__doc-storage.ok", ".cache/spec07/cy4-gat
 [tasks."test:int:doc-ocr"]
 run = "bash ./mise-tasks/test/int/doc-ocr"
 depends = ["svc:health", "test:int:ocr-doc"]
-sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "apps/api/src/server.ts", "apps/api/src/http/run-doc-routes.ts", "tests/unit/doc-*.test.ts", "tests/int/doc-live-e2e.test.ts", "scripts/harness/doc-live-*.ts", "src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
+sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "apps/api/src/server.ts", "apps/api/src/http/run-doc-routes.ts", "tests/unit/doc-*.test.ts", "tests/int/doc-live-e2e.test.ts", "scripts/harness/doc-live-*.ts", "src/**/*.ts", "scripts/**/*.ts", "fixtures/ocr/**/*.json", "fixtures/ocr/live/**/*.pdf", "package.json", "pnpm-lock.yaml", "mise-tasks/test/int/doc-ocr"]
 outputs = [".cache/mise-marks/test__int__doc-ocr.ok", ".cache/spec07/cy5-register.scan.txt", ".cache/spec07/cy5-queue.scan.txt", ".cache/spec07/cy5-status.scan.txt", ".cache/spec07/cy5-gate.txt", ".cache/spec07/cy6-ocr-step.scan.txt", ".cache/spec07/cy6-ocr-persist.scan.txt", ".cache/spec07/cy6-ocr-proof.txt", ".cache/spec07/cy6-fetch.ast.txt", ".cache/spec07/cy6-live-e2e.json", ".cache/spec07/cy6-gate.txt"]
 
 [tasks."test:int:doc-search"]
@@ -377,7 +377,7 @@ outputs = [".cache/mise-marks/fault__once-guard.ok", "/tmp/fault.once.log", "/tm
 [tasks."fault:doc-kill-resume"]
 run = "bash ./mise-tasks/fault/doc-kill-resume"
 depends = ["svc:health"]
-sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "scripts/harness/doc-*.ts", "fixtures/ocr/nasty/**/*.pdf", "fixtures/ocr/nasty/MANIFEST.json", "tests/int/**/*.ts", "mise-tasks/fault/doc-kill-resume", "package.json", "pnpm-lock.yaml"]
+sources = ["apps/api/src/doc/**/*.ts", "apps/api/src/workflow/doc-*.ts", "scripts/harness/doc-*.ts", "fixtures/ocr/nasty/**/*.pdf", "fixtures/ocr/live/**/*.pdf", "fixtures/ocr/nasty/MANIFEST.json", "tests/int/**/*.ts", "mise-tasks/fault/doc-kill-resume", "package.json", "pnpm-lock.yaml"]
 outputs = [".cache/mise-marks/fault__doc-kill-resume.ok", ".cache/spec07/cy10-crash.ocr.json", ".cache/spec07/cy10-crash.index.json", ".cache/spec07/cy10-crash.report.json", ".cache/spec07/cy10-crash.scan.txt"]
 
 [tasks.fault]

@@ -1,7 +1,6 @@
 import pg from "pg";
 import { createPoolCloseOnce } from "../../repo/pool-close";
 import { buildSpanId } from "../ids";
-import { toPgVectorLiteral } from "../search";
 import type {
 	AliasArtifactInput,
 	Bbox,
@@ -10,8 +9,8 @@ import type {
 	LexicalChunkHitModel,
 	MarkParseDoneInput,
 	OcrUsageModel,
-	ParsePayloadModel,
 	ParseModel,
+	ParsePayloadModel,
 	RecordParseLedgerInput,
 	ResolveSpanModel,
 	SearchDocsInput,
@@ -26,6 +25,7 @@ import type {
 	UpsertSpanInput,
 	VectorChunkModel,
 } from "../ports";
+import { toPgVectorLiteral } from "../search";
 
 type QueryResultLike<TRow> = {
 	rows: TRow[];
@@ -235,8 +235,8 @@ function isVectorUnsupportedError(error: unknown): boolean {
 	}
 	const message = error.message.toLowerCase();
 	return (
-		message.includes("type \"vector\" does not exist") ||
-		message.includes("column \"emb\" does not exist") ||
+		message.includes('type "vector" does not exist') ||
+		message.includes('column "emb" does not exist') ||
 		message.includes("operator does not exist: vector") ||
 		message.includes("cannot cast type") ||
 		message.includes("dimension")

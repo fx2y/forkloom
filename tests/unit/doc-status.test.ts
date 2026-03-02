@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-	canonicalParseStatus,
 	canTransitionParseStatus,
+	canonicalParseStatus,
 	isOcrDoneStatus,
 	transitionParseStatus,
 } from "../../apps/api/src/doc";
@@ -33,4 +33,3 @@ describe("doc parse status machine", () => {
 		expect(isOcrDoneStatus("queued")).toBe(false);
 	});
 });
-

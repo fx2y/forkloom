@@ -156,6 +156,7 @@ describe("DocAcquireService", () => {
 		});
 
 		expect(result.shortCircuited).toBe(true);
+		expect(result.shortCircuitState).toBe("done");
 		expect(repo.calls).toEqual(["getDoc", "getParse", "resolveAlias"]);
 	});
 
@@ -183,6 +184,7 @@ describe("DocAcquireService", () => {
 		});
 
 		expect(result.shortCircuited).toBe(false);
+		expect(result.shortCircuitState).toBe("none");
 		expect(result.rawAlias).toBe(`raw/${result.docSha}`);
 		expect(store.aliases.has(result.rawAlias)).toBe(false);
 		expect(store.docs.get(result.docSha)?.rawArtifactSha).toBeNull();
@@ -218,5 +220,70 @@ describe("DocAcquireService", () => {
 				normVersion: "v1",
 			}),
 		).rejects.toThrow("raw alias points to a different doc sha");
+	});
+
+	it("short-circuits in-flight duplicate acquire", async () => {
+		const body = Buffer.from("inflight bytes");
+		const docSha = buildDocSha(body);
+		const cfgHash = "e".repeat(64);
+		const parseId = buildParseId({
+			docSha,
+			parser: "glm-ocr",
+			parserVersion: "v1",
+			cfgHash,
+			normVersion: "v1",
+		});
+		const rawAlias = buildRawAlias(docSha);
+		const store: Store = {
+			docs: new Map([
+				[
+					docSha,
+					{
+						docSha,
+						mime: "application/pdf",
+						bytes: body.byteLength,
+						rawArtifactSha: docSha,
+						status: "processing",
+						createdAt: "2026-03-01T00:00:00.000Z",
+						updatedAt: "2026-03-01T00:00:00.000Z",
+					},
+				],
+			]),
+			parses: new Map([
+				[
+					parseId,
+					{
+						parseId,
+						docSha,
+						parser: "glm-ocr",
+						parserVersion: "v1",
+						cfgHash,
+						normVersion: "v1",
+						mdArtifactSha: null,
+						jsonArtifactSha: null,
+						stats: {},
+						status: "queued",
+						createdAt: "2026-03-01T00:00:00.000Z",
+						updatedAt: "2026-03-01T00:00:00.000Z",
+					},
+				],
+			]),
+			aliases: new Map([[rawAlias, docSha]]),
+		};
+		const repo = createRepo(store);
+		const service = new DocAcquireService({ repo });
+
+		const result = await service.acquire({
+			body,
+			mime: "application/pdf",
+			parser: "glm-ocr",
+			parserVersion: "v1",
+			cfgHash,
+			normVersion: "v1",
+		});
+
+		expect(result.shortCircuited).toBe(true);
+		expect(result.shortCircuitState).toBe("inflight");
+		expect(repo.calls).toEqual(["getDoc", "getParse", "resolveAlias"]);
 	});
 });
