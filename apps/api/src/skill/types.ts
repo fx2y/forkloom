@@ -60,6 +60,18 @@ export type SkillInvocation = {
 
 export type SkillActivationKind = "explicit" | "implicit";
 
+export type SkillExecutionPlan = {
+	skillName: SkillIndexEntry["name"];
+	skillPath: SkillIndexEntry["path"];
+	argsText: string;
+	scripts: string[];
+};
+
+export type SkillPromptResolution = {
+	text: string;
+	execution?: SkillExecutionPlan | undefined;
+};
+
 export type SkillPreview = {
 	skillName: SkillIndexEntry["name"];
 	description: SkillIndexEntry["description"];

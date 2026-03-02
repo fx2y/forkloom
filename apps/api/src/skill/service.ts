@@ -1,17 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { parseSkillInvocation, renderActivatedSkillPrompt } from "./activation";
 import {
-	parseSkillInvocation,
-	renderActivatedSkillPrompt,
-} from "./activation";
+	type SkillFileReadRequest,
+	type SkillFileReadResult,
+	readSkillFileRequest,
+} from "./lazy";
+import { listSkillScriptLinks } from "./paths";
 import { buildSkillPreviewSnapshot } from "./preview";
 import { SkillRegistry, type SkillRegistryOptions } from "./registry";
 import type {
 	SkillActivationKind,
+	SkillExecutionPlan,
 	SkillIndexEntry,
 	SkillPreview,
 	SkillPreviewRequest,
+	SkillPromptResolution,
 	SkillRegistryState,
 	SkillRoot,
 	SkillScope,
@@ -25,6 +30,7 @@ export type SkillServiceOptions = {
 	promptMaxDescriptionChars?: number | undefined;
 	readPrefix?: SkillRegistryOptions["readPrefix"] | undefined;
 	readSkillFile?: ((path: string) => Promise<string>) | undefined;
+	readSkillBytes?: ((path: string) => Promise<Buffer>) | undefined;
 	cwd?: string | undefined;
 	homeDir?: string | undefined;
 };
@@ -41,7 +47,8 @@ export class SkillService {
 	private readonly registry: SkillRegistry;
 	private readonly promptMaxSkills: number;
 	private readonly promptMaxDescriptionChars: number;
-	private readonly readSkillFile: (path: string) => Promise<string>;
+	private readonly readSkillText: (path: string) => Promise<string>;
+	private readonly readSkillBytes: (path: string) => Promise<Buffer>;
 	private state: SkillRegistryState = {
 		entries: [],
 		warnings: [],
@@ -61,9 +68,10 @@ export class SkillService {
 		this.promptMaxSkills = options.promptMaxSkills ?? DEFAULT_PROMPT_MAX_SKILLS;
 		this.promptMaxDescriptionChars =
 			options.promptMaxDescriptionChars ?? DEFAULT_PROMPT_MAX_DESCRIPTION_CHARS;
-		this.readSkillFile =
-			options.readSkillFile ??
-			(async (path: string) => readFile(path, "utf8"));
+		this.readSkillText =
+			options.readSkillFile ?? (async (path: string) => readFile(path, "utf8"));
+		this.readSkillBytes =
+			options.readSkillBytes ?? (async (path: string) => readFile(path));
 	}
 
 	async listSkills(): Promise<SkillIndexEntry[]> {
@@ -87,13 +95,15 @@ export class SkillService {
 		return this.refresh();
 	}
 
-	async resolvePromptText(input: {
+	async resolvePrompt(input: {
 		text: string;
 		activationKind?: SkillActivationKind | undefined;
-	}): Promise<string> {
+	}): Promise<SkillPromptResolution> {
 		const invocation = parseSkillInvocation(input.text);
 		if (!invocation) {
-			return input.text;
+			return {
+				text: input.text,
+			};
 		}
 		const entry = await this.lookupSkill(invocation.skillName);
 		if (!entry) {
@@ -102,21 +112,48 @@ export class SkillService {
 		if ((input.activationKind ?? "explicit") === "implicit" && entry.hidden) {
 			throw new Error(`skill is manual-only: ${entry.name}`);
 		}
-		return renderActivatedSkillPrompt(
-			await this.readSkillFile(entry.path),
-			invocation.args,
-		);
+		const skillMarkdown = await this.readSkillText(entry.path);
+		const text = renderActivatedSkillPrompt(skillMarkdown, invocation.args);
+		return {
+			text,
+			execution: {
+				skillName: entry.name,
+				skillPath: entry.path,
+				argsText: invocation.args,
+				scripts: listSkillScriptLinks(text, dirname(entry.path)),
+			} satisfies SkillExecutionPlan,
+		};
 	}
 
-	async previewSkill(
-		input: SkillPreviewRequest,
-	): Promise<SkillPreview | null> {
+	async resolvePromptText(input: {
+		text: string;
+		activationKind?: SkillActivationKind | undefined;
+	}): Promise<string> {
+		return (await this.resolvePrompt(input)).text;
+	}
+
+	async readSkillFile(input: {
+		skillName: string;
+		request: SkillFileReadRequest;
+	}): Promise<SkillFileReadResult | null> {
+		const entry = await this.lookupSkill(input.skillName);
+		if (!entry) {
+			return null;
+		}
+		return readSkillFileRequest({
+			skillPath: entry.path,
+			request: input.request,
+			readFileBytes: this.readSkillBytes,
+		});
+	}
+
+	async previewSkill(input: SkillPreviewRequest): Promise<SkillPreview | null> {
 		const entry = await this.lookupSkill(input.skillName);
 		if (!entry) {
 			return null;
 		}
 		const skillBody = renderActivatedSkillPrompt(
-			await this.readSkillFile(entry.path),
+			await this.readSkillText(entry.path),
 			input.args?.trim() ?? "",
 		);
 		const snapshot = await buildSkillPreviewSnapshot({

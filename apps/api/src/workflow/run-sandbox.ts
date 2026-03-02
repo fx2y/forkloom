@@ -24,6 +24,7 @@ import type {
 } from "../sandbox";
 import type { StagedSandboxInput } from "../sandbox/input-staging";
 import type { ArtifactService } from "../service";
+import { type SkillPromptResolution, executeSkillPlanDurably } from "../skill";
 import { buildRunPromptInput } from "./prompt";
 import {
 	type ReplayStepPayload,
@@ -38,6 +39,7 @@ type RunSandboxStepName =
 	| "ensureSandbox"
 	| "stageInputs"
 	| "ensurePi"
+	| "skillExec"
 	| "applyCommand"
 	| "collect"
 	| "snapshot"
@@ -89,6 +91,10 @@ export type RunSandboxDeps = {
 	skills?:
 		| {
 				buildAvailableSkillsXml(): Promise<string>;
+				resolvePrompt?(input: {
+					text: string;
+					activationKind?: "explicit" | "implicit" | undefined;
+				}): Promise<SkillPromptResolution>;
 				resolvePromptText?(input: {
 					text: string;
 					activationKind?: "explicit" | "implicit" | undefined;
@@ -410,6 +416,7 @@ export async function executeRunSandbox(
 	let nextWorkflowId: string | null = null;
 	let stagedInputs: StagedSandboxInput[] = [];
 	let replayPayload: ReplayStepPayload | null = null;
+	let resolvedSkillText: string | null = null;
 
 	if (replay.enabled) {
 		const replaySourceRunId = replay.sourceRunId ?? runId;
@@ -434,14 +441,24 @@ export async function executeRunSandbox(
 		return session;
 	};
 
-	const resolveSkillPromptText = async (text: string): Promise<string> => {
-		if (!deps.skills?.resolvePromptText) {
-			return text;
+	const resolveSkillPrompt = async (
+		text: string,
+	): Promise<SkillPromptResolution> => {
+		if (deps.skills?.resolvePrompt) {
+			return deps.skills.resolvePrompt({
+				text,
+				activationKind: "explicit",
+			});
 		}
-		return deps.skills.resolvePromptText({
-			text,
-			activationKind: "explicit",
-		});
+		if (deps.skills?.resolvePromptText) {
+			return {
+				text: await deps.skills.resolvePromptText({
+					text,
+					activationKind: "explicit",
+				}),
+			};
+		}
+		return { text };
 	};
 
 	try {
@@ -524,6 +541,48 @@ export async function executeRunSandbox(
 			await steps.runStep("ensurePi", async () => undefined);
 		}
 
+		await steps.runStep("skillExec", async () => {
+			if (replayPayload) {
+				resolvedSkillText = null;
+				return null;
+			}
+			const loaded = assertLoaded(loadedPlan);
+			if (
+				loaded.command.kind !== "prompt" &&
+				loaded.command.kind !== "followUp" &&
+				loaded.command.kind !== "steer"
+			) {
+				resolvedSkillText = null;
+				return null;
+			}
+			const resolved = await resolveSkillPrompt(
+				readCommandText(loaded.command),
+			);
+			resolvedSkillText = resolved.text;
+			if (!resolved.execution || resolved.execution.scripts.length === 0) {
+				return {
+					skillName: resolved.execution?.skillName ?? null,
+					scripts: 0,
+				};
+			}
+			await executeSkillPlanDurably({
+				runId,
+				commandSeq: loaded.command.seq,
+				commandKind: loaded.command.kind,
+				plan: resolved.execution,
+				deps: {
+					artifactService: deps.artifactService,
+					runService: deps.runService,
+				},
+				timeoutMs: loaded.sandbox.spec.timeoutSec * 1_000,
+				maxBytesOut: loaded.sandbox.spec.maxBytesOut,
+			});
+			return {
+				skillName: resolved.execution.skillName,
+				scripts: resolved.execution.scripts.length,
+			};
+		});
+
 		startedAt = clockIso();
 		await steps.runStep("applyCommand", async () => {
 			if (replayPayload) {
@@ -541,9 +600,7 @@ export async function executeRunSandbox(
 					});
 					return;
 				case "prompt": {
-					const userMsg = await resolveSkillPromptText(
-						readCommandText(loaded.command),
-					);
+					const userMsg = resolvedSkillText ?? readCommandText(loaded.command);
 					const promptSpec = {
 						...loaded.run.spec,
 						userMsg,
@@ -582,12 +639,12 @@ export async function executeRunSandbox(
 				}
 				case "followUp":
 					await (await getOrCreateSession()).followUp(
-						await resolveSkillPromptText(readCommandText(loaded.command)),
+						resolvedSkillText ?? readCommandText(loaded.command),
 					);
 					return;
 				case "steer":
 					await (await getOrCreateSession()).steer(
-						await resolveSkillPromptText(readCommandText(loaded.command)),
+						resolvedSkillText ?? readCommandText(loaded.command),
 					);
 					return;
 				case "abort":

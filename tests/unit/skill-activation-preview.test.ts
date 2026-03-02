@@ -16,7 +16,11 @@ async function writeSkill(
 	},
 ): Promise<void> {
 	await mkdir(skillDir, { recursive: true });
-	const lines = ["---", `name: ${input.name}`, `description: ${input.description}`];
+	const lines = [
+		"---",
+		`name: ${input.name}`,
+		`description: ${input.description}`,
+	];
 	if (input.disableModelInvocation) {
 		lines.push("disable-model-invocation: true");
 	}
@@ -43,7 +47,7 @@ describe("SkillService activation + preview", () => {
 				name: "hidden-workflow",
 				description: "manual-only flow",
 				disableModelInvocation: true,
-				body: "# hidden\nRun scripts/apply.sh \"$ARGUMENTS\"",
+				body: '# hidden\nRun scripts/apply.sh "$ARGUMENTS"',
 			});
 
 			let readCount = 0;
@@ -100,6 +104,37 @@ describe("SkillService activation + preview", () => {
 		}
 	});
 
+	it("returns execution plan scripts from resolved /skill prompt", async () => {
+		const root = await mkdtemp(join(tmpdir(), "skill-activation-plan-"));
+		try {
+			const workspaceRoot = join(root, "workspace");
+			const skillDir = join(workspaceRoot, "policy-qa");
+			await writeSkill(skillDir, {
+				name: "policy-qa",
+				description: "policy checks",
+				body: [
+					"# policy",
+					"Run [primary](scripts/run.sh) then [helper](scripts/helpers/fix.sh).",
+				].join("\n"),
+			});
+			const service = new SkillService({
+				roots: [{ scope: "workspace", path: workspaceRoot }],
+			});
+			const resolved = await service.resolvePrompt({
+				text: "/skill:policy-qa region=us",
+			});
+			expect(resolved.text).toContain("region=us");
+			expect(resolved.execution).toEqual({
+				skillName: "policy-qa",
+				skillPath: join(skillDir, "SKILL.md"),
+				argsText: "region=us",
+				scripts: ["scripts/helpers/fix.sh", "scripts/run.sh"],
+			});
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
 	it("builds read-only preview from body links + scripts without execution", async () => {
 		const root = await mkdtemp(join(tmpdir(), "skill-preview-"));
 		try {
@@ -119,7 +154,10 @@ describe("SkillService activation + preview", () => {
 			await mkdir(join(skillDir, "references"), { recursive: true });
 			await mkdir(join(skillDir, "assets"), { recursive: true });
 			await mkdir(join(skillDir, "scripts", "helpers"), { recursive: true });
-			await writeFile(join(skillDir, "scripts", "build.sh"), "#!/usr/bin/env bash\n");
+			await writeFile(
+				join(skillDir, "scripts", "build.sh"),
+				"#!/usr/bin/env bash\n",
+			);
 			await writeFile(
 				join(skillDir, "scripts", "helpers", "prepare.sh"),
 				"#!/usr/bin/env bash\n",
