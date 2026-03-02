@@ -11,6 +11,20 @@ export const RUN_API_ENDPOINTS = [
 	"POST /runs/:runId/files/export",
 ] as const;
 
+export const RUN_SKILL_API_ENDPOINTS_FROZEN_NEXT = [
+	"GET /runs/:runId/skills",
+	"POST /runs/:runId/skills/preview",
+] as const;
+
+export const RUN_SKILL_UI_ALIASES = ["/skills", "/skill:<name>"] as const;
+
+export const RUN_SKILL_EXECUTION_SURFACE_NOTE = [
+	"GET /runs/:runId/skills is metadata-only list/read",
+	"POST /runs/:runId/skills/preview is read-only WILL-RUN introspection",
+	"explicit skill execution stays inside POST /runs/:runId/commands text payloads",
+	"/skills and /skill:<name> are UI aliases only, never top-level HTTP routes",
+] as const;
+
 export const RUN_PUBLIC_TOP_LEVEL_NOUNS = [
 	"RunSpec",
 	"RunState",
@@ -60,6 +74,7 @@ export const RUN_PUBLIC_BANNED_SANDBOX_NOUNS = [
 export const RUN_PUBLIC_OWNERSHIP_NOTE = [
 	"run owns public preview/state/commands/files",
 	"doc ingest/search/resolve stay nested under /runs and reuse run-owned contracts",
+	"skill list/preview stay nested under /runs; /skills and /skill:<name> are UI-only aliases",
 	"sandbox stays internal and owns compute/workspace/exec",
 	"actor queue and lease law are reuse-only, not public nouns",
 ] as const;

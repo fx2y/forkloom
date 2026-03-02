@@ -13,5 +13,9 @@ describe("contracts typegen", () => {
 		expect(out).toContain("export type RunPreviewedPayload = {");
 		expect(out).toContain("export type RunDonePayload = {");
 		expect(out).toContain("export type RunEvent =");
+		expect(out).toContain("export type Skill = {");
+		expect(out).toContain("\tskillId: string;");
+		expect(out).toContain("\tallowedTools?: string[];");
+		expect(out).not.toContain("disableModelInvocation");
 	});
 });

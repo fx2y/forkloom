@@ -8,6 +8,13 @@ import type {
 } from "@forkloom/contracts";
 import type { AppDeps } from "./actor-client";
 
+export const RUN_SKILL_CLIENT_ROUTE_TEMPLATES = [
+	"GET /runs/:runId/skills",
+	"POST /runs/:runId/skills/preview",
+] as const;
+
+export const RUN_SKILL_CLIENT_COMMAND_ALIAS = "/skill:";
+
 type RunCreateInput = {
 	runId: string;
 	scope: "me" | "team" | "org";

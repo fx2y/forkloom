@@ -1,6 +1,7 @@
 export type ApiSeamName =
 	| "actor"
 	| "doc"
+	| "skill"
 	| "run"
 	| "sandbox"
 	| "pi"
@@ -27,6 +28,12 @@ export const API_SEAMS: Record<ApiSeamName, ApiSeam> = {
 		root: "apps/api/src/doc",
 		intent: "typed ingest rows, alias law, and doc transaction seam",
 		canImportFrom: ["apps/api/src/service"],
+	},
+	skill: {
+		owner: "skill registry domain",
+		root: "apps/api/src/skill",
+		intent: "skill manifest normalization, discovery, and preview before run/http wiring",
+		canImportFrom: [],
 	},
 	run: {
 		owner: "run domain",
@@ -104,6 +111,8 @@ export const API_REUSE_CUTS: Record<ApiReuseCutName, ApiReuseCut> = {
 export const API_OWNERSHIP_LAW = {
 	run: "run owns preview/state/commands/files on the public wire",
 	doc: "doc ingest/search stays internal until attached under run-owned /runs",
+	skill:
+		"skill owns registry/frontmatter/preview logic; list/preview stay nested under run-owned /runs",
 	sandbox: "sandbox owns container/workspace/exec/image lifecycle off-wire",
 	actorReuseOnly:
 		"actor contributes lease/queue law reuse-only; actor nouns stay off the run wire",

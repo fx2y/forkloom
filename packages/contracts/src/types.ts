@@ -1,6 +1,6 @@
 /*
  * GENERATED FILE - DO NOT EDIT.
- * Run: pnpm exec tsx packages/contracts/src/typegen.ts --write
+ * Run: MISE_EXPERIMENTAL=1 mise exec -- tsx packages/contracts/src/typegen.ts --write
  */
 
 export type Delivery = "steer" | "follow";

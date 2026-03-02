@@ -8,6 +8,8 @@ import {
 	parseRunDocResolvePayload,
 	parseRunDocSearchPayload,
 	parseRunFileExportPayload,
+	RUN_SKILL_TEXT_COMMAND_KINDS,
+	RUN_SKILL_TEXT_COMMAND_PREFIX,
 } from "../../apps/api/src/http/run-request-parsers";
 
 function makeRequest(input: {
@@ -95,6 +97,12 @@ describe("run-request-parsers", () => {
 	});
 
 	it("parses command posts and rejects bad kinds", () => {
+		expect(RUN_SKILL_TEXT_COMMAND_PREFIX).toBe("/skill:");
+		expect(RUN_SKILL_TEXT_COMMAND_KINDS).toEqual([
+			"prompt",
+			"followUp",
+			"steer",
+		]);
 		expect(
 			parseRunCommandPayload({
 				kind: "followUp",
@@ -106,10 +114,13 @@ describe("run-request-parsers", () => {
 			payload: { text: "continue" },
 			dedupeKey: "abc",
 		});
-		expect(() => parseRunCommandPayload({ kind: "nope" })).toThrow(
-			"kind must be one of",
-		);
-	});
+			expect(() => parseRunCommandPayload({ kind: "nope" })).toThrow(
+				"kind must be one of",
+			);
+			expect(() => parseRunCommandPayload({ kind: "skill" })).toThrow(
+				"kind must be one of",
+			);
+		});
 
 	it("parses file export payloads and rejects malformed paths", () => {
 		expect(parseRunFileExportPayload(undefined)).toEqual({});

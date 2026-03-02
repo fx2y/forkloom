@@ -11,6 +11,11 @@ import type {
 	TruthBundle as TruthBundleContract,
 } from "@forkloom/contracts";
 import { HttpError } from "../errors";
+import type {
+	SkillIndexEntry,
+	SkillPreview,
+	SkillPreviewRequest,
+} from "../skill";
 import {
 	type RunCommandKind,
 	type RunCommandModel,
@@ -130,11 +135,17 @@ type RunDocDeps = {
 	}>;
 };
 
+type RunSkillDeps = {
+	listSkills(): Promise<SkillIndexEntry[]>;
+	previewSkill(input: SkillPreviewRequest): Promise<SkillPreview | null>;
+};
+
 export type RunServiceDeps = {
 	runRepo: RunRepo;
 	workflowLauncher: RunWorkflowLauncher;
 	sandbox?: SandboxDeps | undefined;
 	docs?: RunDocDeps | undefined;
+	skills?: RunSkillDeps | undefined;
 };
 
 export type StartRunResult = {
@@ -390,6 +401,23 @@ export class RunService {
 		});
 	}
 
+	async listSkills(runId: string): Promise<SkillIndexEntry[]> {
+		await this.requireRun(runId);
+		return this.requireSkillDeps().listSkills();
+	}
+
+	async previewSkill(input: {
+		runId: string;
+		skillName: string;
+		args?: string | undefined;
+	}): Promise<SkillPreview | null> {
+		await this.requireRun(input.runId);
+		return this.requireSkillDeps().previewSkill({
+			skillName: input.skillName,
+			args: input.args,
+		});
+	}
+
 	async listFiles(runId: string): Promise<{
 		workspaceRef?: { sha256: string } | undefined;
 		workspace_manifest: {
@@ -542,6 +570,13 @@ export class RunService {
 			throw new HttpError(503, "doc search is not configured");
 		}
 		return this.deps.docs;
+	}
+
+	private requireSkillDeps(): RunSkillDeps {
+		if (!this.deps.skills) {
+			throw new HttpError(503, "skills are not configured");
+		}
+		return this.deps.skills;
 	}
 
 	private async requireRun(runId: string): Promise<RunModel> {

@@ -10,6 +10,15 @@ import {
 } from "./contract-parsers";
 import { parseEventReplayCursor } from "./event-stream";
 
+export const RUN_SKILL_TEXT_COMMAND_PREFIX = "/skill:";
+export const RUN_SKILL_TEXT_COMMAND_KINDS = [
+	"prompt",
+	"followUp",
+	"steer",
+] as const;
+export const RUN_SKILL_TEXT_COMMAND_NOTE =
+	"explicit skill activation stays in existing text command payloads; kind never becomes skill";
+
 function parseRunScope(input: unknown): RunScope {
 	if (input === "me" || input === "team" || input === "org") {
 		return input;

@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { renderTypes } from "./typegen";
+import { TYPEGEN_WRITE_CMD } from "./typegen-cmd";
 import {
 	type ActorContractName,
 	type ContractName,
@@ -164,9 +165,7 @@ function assertTypesInSync(): void {
 	const expected = renderTypes();
 	const existing = readFileSync(TYPES_PATH, "utf8");
 	if (existing !== expected) {
-		throw new Error(
-			`types.ts is stale; run: pnpm exec tsx ${basename(resolve("packages/contracts/src/typegen.ts"))} --write`,
-		);
+		throw new Error(`types.ts is stale; run: ${TYPEGEN_WRITE_CMD}`);
 	}
 }
 

@@ -5,6 +5,9 @@ import {
 	RUN_PUBLIC_COMMAND_KINDS,
 	RUN_PUBLIC_EVENT_KINDS_FROZEN_NEXT,
 	RUN_PUBLIC_OWNERSHIP_NOTE,
+	RUN_SKILL_API_ENDPOINTS_FROZEN_NEXT,
+	RUN_SKILL_EXECUTION_SURFACE_NOTE,
+	RUN_SKILL_UI_ALIASES,
 	RUN_PUBLIC_STATE_FIELDS_FROZEN_NEXT,
 	RUN_PUBLIC_STATUSES_FROZEN_NEXT,
 	RUN_PUBLIC_TOP_LEVEL_NOUNS,
@@ -73,6 +76,20 @@ describe("run public surface freeze", () => {
 		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain("/runs");
 		expect(RUN_PUBLIC_OWNERSHIP_NOTE.join(" ")).toContain(
 			"sandbox stays internal",
+		);
+	});
+
+	it("locks future skill list and preview under /runs only", () => {
+		expect(RUN_SKILL_API_ENDPOINTS_FROZEN_NEXT).toEqual([
+			"GET /runs/:runId/skills",
+			"POST /runs/:runId/skills/preview",
+		]);
+		expect(RUN_SKILL_UI_ALIASES).toEqual(["/skills", "/skill:<name>"]);
+		expect(RUN_SKILL_EXECUTION_SURFACE_NOTE.join(" ")).toContain(
+			"POST /runs/:runId/commands",
+		);
+		expect(RUN_SKILL_EXECUTION_SURFACE_NOTE.join(" ")).toContain(
+			"never top-level HTTP routes",
 		);
 	});
 });

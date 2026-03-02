@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { TYPEGEN_WRITE_CMD } from "./typegen-cmd";
 
 const V0_SCHEMA_DIR = resolve("contracts/v0");
 const V1_SCHEMA_DIR = resolve("contracts/v1");
@@ -39,6 +40,53 @@ function schemaProp(
 	return prop;
 }
 
+function requiredKeys(schema: Record<string, unknown>): Set<string> {
+	const required = schema.required as unknown;
+	if (!Array.isArray(required)) {
+		return new Set<string>();
+	}
+	return new Set(
+		required.filter((key): key is string => typeof key === "string"),
+	);
+}
+
+function renderFlatPropertyType(schema: Record<string, unknown>): string {
+	if (schema.type === "string") {
+		return "string";
+	}
+	if (schema.type === "array") {
+		const items = schema.items as Record<string, unknown> | undefined;
+		if (items?.type === "string") {
+			return "string[]";
+		}
+	}
+	throw new Error("unsupported flat schema property");
+}
+
+function renderFlatObjectTypeFromSchema(
+	name: string,
+	schema: Record<string, unknown>,
+): string {
+	if (schema.type !== "object") {
+		throw new Error(`${name} schema must be an object`);
+	}
+	const properties = schema.properties as Record<string, unknown> | undefined;
+	if (!properties || typeof properties !== "object") {
+		throw new Error(`${name} schema missing properties block`);
+	}
+	const required = requiredKeys(schema);
+	return [
+		`export type ${name} = {`,
+		...Object.entries(properties).map(([key, value]) => {
+			if (!value || typeof value !== "object") {
+				throw new Error(`${name}.${key} schema is invalid`);
+			}
+			return `\t${key}${required.has(key) ? "" : "?"}: ${renderFlatPropertyType(value as Record<string, unknown>)};`;
+		}),
+		"};",
+	].join("\n");
+}
+
 function toUnion(name: string, values: string[]): string {
 	const oneLine = `export type ${name} = ${values.map((value) => JSON.stringify(value)).join(" | ")};`;
 	if (oneLine.length <= 80) {
@@ -57,6 +105,7 @@ export function renderTypes(): string {
 	const message = readSchema(V0_SCHEMA_DIR, "Message");
 	const artifact = readSchema(V0_SCHEMA_DIR, "Artifact");
 	const workflow = readSchema(V0_SCHEMA_DIR, "Workflow");
+	const skill = readSchema(V0_SCHEMA_DIR, "Skill");
 	const extension = readSchema(V0_SCHEMA_DIR, "Extension");
 	const runSpec = readSchema(V1_SCHEMA_DIR, "RunSpec");
 	const runState = readSchema(V1_SCHEMA_DIR, "RunState");
@@ -112,11 +161,14 @@ export function renderTypes(): string {
 	if (runDocResolve.title !== "RunDocResolve") {
 		throw new Error("RunDocResolve schema title mismatch");
 	}
+	if (skill.title !== "Skill") {
+		throw new Error("Skill schema title mismatch");
+	}
 
 	return [
 		"/*",
 		" * GENERATED FILE - DO NOT EDIT.",
-		" * Run: pnpm exec tsx packages/contracts/src/typegen.ts --write",
+		` * Run: ${TYPEGEN_WRITE_CMD}`,
 		" */",
 		"",
 		toUnion("Delivery", delivery),
@@ -172,21 +224,14 @@ export function renderTypes(): string {
 		"\tname: string;",
 		"\trunId: string;",
 		"\tstatus: WorkflowStatus;",
-		"\tidempotencyKey: string;",
-		"\tinput?: ArtifactRef | Record<string, unknown>;",
-		"};",
-		"",
-		"export type Skill = {",
-		"\tskillId: string;",
-		"\tpath: string;",
-		"\tname: string;",
-		"\tdescription: string;",
-		"\tallowedTools?: string[];",
-		"\tversion?: string;",
-		"};",
-		"",
-		"export type Extension = {",
-		"\tname: string;",
+			"\tidempotencyKey: string;",
+			"\tinput?: ArtifactRef | Record<string, unknown>;",
+			"};",
+			"",
+			renderFlatObjectTypeFromSchema("Skill", skill),
+			"",
+			"export type Extension = {",
+			"\tname: string;",
 		"\tversion: string;",
 		"\tentry: string;",
 		"\tcapabilities: ExtensionCapability[];",

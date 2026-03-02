@@ -13,6 +13,8 @@ import {
 import { streamInteractiveRunEvents } from "./run-sandbox-sse";
 import { streamRunEvents } from "./run-sse";
 
+export { RUN_SKILL_API_ENDPOINTS_FROZEN_NEXT as RUN_SKILL_ROUTE_TEMPLATES } from "../run/public-surface";
+
 function isInteractiveRunState(run: Record<string, unknown>): boolean {
 	return (
 		run.preview != null ||
