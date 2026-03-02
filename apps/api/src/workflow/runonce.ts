@@ -51,6 +51,11 @@ export type RunOnceDeps = {
 		ArtifactService,
 		"getArtifactBytes" | "getArtifactMeta" | "putArtifact"
 	>;
+	skills?:
+		| {
+				buildAvailableSkillsXml(): Promise<string>;
+		  }
+		| undefined;
 	createPiSession(run: RunModel): Promise<PiSessionPort>;
 	readFileBytes?: ((path: string) => Promise<Buffer>) | undefined;
 };
@@ -247,8 +252,13 @@ export async function executeRunOnce(
 			async () => {
 				const run = assertRun(ctx);
 				const session = await getOrCreateSession();
+				const availableSkillsXml = deps.skills
+					? await deps.skills.buildAvailableSkillsXml()
+					: undefined;
 				await session.prompt(
-					await buildRunPromptInput(run.spec, deps.artifactService),
+					await buildRunPromptInput(run.spec, deps.artifactService, {
+						availableSkillsXml,
+					}),
 				);
 				return { prompted: true };
 			},

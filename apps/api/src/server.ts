@@ -35,8 +35,8 @@ import {
 	PgSandboxRepo,
 	createSandboxPiSessionFactory,
 } from "./sandbox";
-import { SkillService } from "./skill";
 import { ArtifactService } from "./service";
+import { SkillService } from "./skill";
 import { S3ArtifactStore } from "./storage/s3";
 import {
 	LazyDbosDocIngestWorkflowLauncher,
@@ -115,7 +115,12 @@ async function bootstrap() {
 
 	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
 	const docService = new DocService({ repo: docRepo });
-	const skillService = new SkillService();
+	const skillService = new SkillService({
+		roots: config.skillRoots,
+		prefixBytes: config.skillPrefixBytes,
+		promptMaxSkills: config.skillPromptMaxSkills,
+		promptMaxDescriptionChars: config.skillPromptMaxDescriptionChars,
+	});
 	const docIngestWorkflowLauncher = new LazyDbosDocIngestWorkflowLauncher();
 	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const workflowSandboxBackend = new DockerBackend({
@@ -165,6 +170,7 @@ async function bootstrap() {
 	const runWorkflow = registerRunOnceWorkflow({
 		runRepo,
 		runService,
+		skills: skillService,
 		artifactService: workflowArtifactService,
 		createPiSession: async (run) =>
 			createPiSession({
@@ -174,6 +180,7 @@ async function bootstrap() {
 	const runSandboxWorkflow = registerRunSandboxWorkflow({
 		runRepo,
 		runService,
+		skills: skillService,
 		artifactService: workflowArtifactService,
 		sandboxRepo,
 		backend: workflowSandboxBackend,

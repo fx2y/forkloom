@@ -86,6 +86,11 @@ export type RunSandboxDeps = {
 		| "linkArtifact"
 		| "recordStepLedger"
 	>;
+	skills?:
+		| {
+				buildAvailableSkillsXml(): Promise<string>;
+		  }
+		| undefined;
 	artifactService: Pick<
 		ArtifactService,
 		"getArtifactBytes" | "getArtifactMeta" | "putArtifact"
@@ -526,25 +531,35 @@ export async function executeRunSandbox(
 						...loaded.run.spec,
 						userMsg: readCommandText(loaded.command),
 					};
+					const availableSkillsXml = deps.skills
+						? await deps.skills.buildAvailableSkillsXml()
+						: undefined;
 					const stagedBySha = new Map(
 						stagedInputs.map((input) => [input.sha256, input]),
 					);
 					await (await getOrCreateSession()).prompt(
-						await buildRunPromptInput(promptSpec, {
-							getArtifactMeta: async (sha256: string) =>
-								deps.artifactService.getArtifactMeta(sha256),
-							getArtifactBytes: async (sha256: string) => {
-								const staged = stagedBySha.get(sha256);
-								if (!staged) {
-									return deps.artifactService.getArtifactBytes(sha256);
-								}
-								const meta = await deps.artifactService.getArtifactMeta(sha256);
-								return {
-									body: createReadStream(staged.hostPath),
-									contentType: meta.mime,
-								};
+						await buildRunPromptInput(
+							promptSpec,
+							{
+								getArtifactMeta: async (sha256: string) =>
+									deps.artifactService.getArtifactMeta(sha256),
+								getArtifactBytes: async (sha256: string) => {
+									const staged = stagedBySha.get(sha256);
+									if (!staged) {
+										return deps.artifactService.getArtifactBytes(sha256);
+									}
+									const meta =
+										await deps.artifactService.getArtifactMeta(sha256);
+									return {
+										body: createReadStream(staged.hostPath),
+										contentType: meta.mime,
+									};
+								},
 							},
-						}),
+							{
+								availableSkillsXml,
+							},
+						),
 					);
 					return;
 				}

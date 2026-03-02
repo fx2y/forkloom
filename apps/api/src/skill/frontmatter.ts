@@ -137,21 +137,34 @@ export function parseFrontmatterBlock(block: string): SkillFrontmatterRaw {
 export function parseSkillFrontmatter(
 	skillMarkdown: string,
 ): SkillFrontmatter | null {
-	const normalized = skillMarkdown.replaceAll("\r\n", "\n");
+	const frontmatterLines = parseFrontmatterEnvelopeLines(skillMarkdown);
+	if (!frontmatterLines) {
+		return null;
+	}
+	return normalizeSkillFrontmatter(parseFrontmatterBlock(frontmatterLines));
+}
+
+export function parseSkillFrontmatterPrefix(
+	skillPrefix: string,
+): SkillFrontmatter | null {
+	const frontmatterLines = parseFrontmatterEnvelopeLines(skillPrefix);
+	if (!frontmatterLines) {
+		return null;
+	}
+	return normalizeSkillFrontmatter(parseFrontmatterBlock(frontmatterLines));
+}
+
+function parseFrontmatterEnvelopeLines(input: string): string | null {
+	const normalized = input.replaceAll("\r\n", "\n");
 	const lines = normalized.split("\n");
 	if (lines[0]?.trim() !== FRONTMATTER_OPEN) {
 		return null;
 	}
-
 	const closingIndex = lines.findIndex(
 		(line, idx) => idx > 0 && line.trim() === FRONTMATTER_OPEN,
 	);
 	if (closingIndex <= 0) {
 		return null;
 	}
-
-	const frontmatterLines = lines.slice(1, closingIndex);
-	return normalizeSkillFrontmatter(
-		parseFrontmatterBlock(frontmatterLines.join("\n")),
-	);
+	return lines.slice(1, closingIndex).join("\n");
 }

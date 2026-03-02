@@ -1,3 +1,11 @@
+import { homedir } from "node:os";
+import { delimiter, resolve } from "node:path";
+import {
+	SKILL_SCOPE_PRECEDENCE,
+	type SkillRoot,
+	type SkillScope,
+} from "./skill/types";
+
 export type AppConfig = {
 	port: number;
 	databaseUrl: string;
@@ -28,6 +36,10 @@ export type AppConfig = {
 	sandboxPiHomePath: string;
 	sandboxDefaultTimeoutSec: number;
 	sandboxMaxBytesOut: number;
+	skillRoots: SkillRoot[];
+	skillPrefixBytes: number;
+	skillPromptMaxSkills: number;
+	skillPromptMaxDescriptionChars: number;
 };
 
 function must(name: string): string {
@@ -95,7 +107,60 @@ function mustAny(...names: string[]): string {
 	return value;
 }
 
+function parsePathList(value: string | undefined): string[] {
+	if (!value) {
+		return [];
+	}
+	return value
+		.split(delimiter)
+		.map((entry) => entry.trim())
+		.filter((entry) => entry.length > 0);
+}
+
+function normalizePath(path: string, cwd: string, homeDir: string): string {
+	if (path.startsWith("~/")) {
+		return resolve(homeDir, path.slice(2));
+	}
+	if (path.startsWith("/")) {
+		return resolve(path);
+	}
+	return resolve(cwd, path);
+}
+
+function buildSkillRoots(cwd: string, homeDir: string): SkillRoot[] {
+	const defaults: Record<SkillScope, string[]> = {
+		org: [".forkloom/skills/org"],
+		workspace: [".codex/skills", "skills"],
+		user: ["~/.codex/skills", "~/.pi/skills", "~/.agents/skills"],
+		package: ["packages/skills"],
+		global: ["/etc/forkloom/skills"],
+	};
+	const roots: SkillRoot[] = [];
+	const seen = new Set<string>();
+	for (const scope of SKILL_SCOPE_PRECEDENCE) {
+		const envPaths = parsePathList(
+			process.env[`SKILL_ROOTS_${scope.toUpperCase()}`],
+		);
+		const candidates = envPaths.length > 0 ? envPaths : defaults[scope];
+		for (const candidate of candidates) {
+			const normalized = normalizePath(candidate, cwd, homeDir);
+			const key = `${scope}:${normalized}`;
+			if (seen.has(key)) {
+				continue;
+			}
+			seen.add(key);
+			roots.push({
+				scope,
+				path: normalized,
+			});
+		}
+	}
+	return roots;
+}
+
 export function loadConfig(): AppConfig {
+	const cwd = process.cwd();
+	const homeDir = homedir();
 	return {
 		port: parsePort(process.env.PORT, 8080),
 		databaseUrl: process.env.DATABASE_URL ?? must("DBOS_SYSTEM_DATABASE_URL"),
@@ -160,6 +225,22 @@ export function loadConfig(): AppConfig {
 			process.env.SANDBOX_MAX_BYTES_OUT,
 			256_000,
 			"sandbox max bytes out",
+		),
+		skillRoots: buildSkillRoots(cwd, homeDir),
+		skillPrefixBytes: parsePositiveInt(
+			process.env.SKILL_PREFIX_BYTES,
+			8_192,
+			"skill prefix bytes",
+		),
+		skillPromptMaxSkills: parsePositiveInt(
+			process.env.SKILL_PROMPT_MAX_SKILLS,
+			128,
+			"skill prompt max skills",
+		),
+		skillPromptMaxDescriptionChars: parsePositiveInt(
+			process.env.SKILL_PROMPT_MAX_DESCRIPTION_CHARS,
+			240,
+			"skill prompt description max chars",
 		),
 	};
 }

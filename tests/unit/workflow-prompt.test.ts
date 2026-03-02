@@ -106,6 +106,17 @@ describe("buildRunPromptMessage", () => {
 		expect(msg).toContain("attachmentRefs");
 		expect(msg).toContain("modelPref");
 	});
+
+	it("injects available_skills XML before run context when provided", () => {
+		const msg = buildRunPromptMessage(minSpec({ modelPref: "gpt-5" }), {
+			availableSkillsXml:
+				"<available_skills><skill><name>policy-qa</name></skill></available_skills>",
+		});
+		expect(msg).toContain("<available_skills>");
+		expect(msg.indexOf("<available_skills>")).toBeLessThan(
+			msg.indexOf("Run context:"),
+		);
+	});
 });
 
 describe("loadPromptImages", () => {

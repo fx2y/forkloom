@@ -6,7 +6,14 @@ import {
 } from "../pi/prompt-input";
 import type { RunSpecModel } from "../run/ports";
 
-export function buildRunPromptMessage(spec: RunSpecModel): string {
+export type BuildRunPromptOptions = {
+	availableSkillsXml?: string | undefined;
+};
+
+export function buildRunPromptMessage(
+	spec: RunSpecModel,
+	options: BuildRunPromptOptions = {},
+): string {
 	const contextLines: string[] = [];
 	appendContextLine(
 		contextLines,
@@ -15,10 +22,14 @@ export function buildRunPromptMessage(spec: RunSpecModel): string {
 	);
 	appendContextLine(contextLines, "workdirRef", spec.workdirRef?.sha256 ?? "");
 	appendContextLine(contextLines, "modelPref", spec.modelPref ?? "");
-	if (contextLines.length === 0) {
-		return spec.userMsg;
+	const sections: string[] = [spec.userMsg];
+	if (options.availableSkillsXml) {
+		sections.push(options.availableSkillsXml);
 	}
-	return `${spec.userMsg}\n\nRun context:\n${contextLines.join("\n")}`;
+	if (contextLines.length > 0) {
+		sections.push(`Run context:\n${contextLines.join("\n")}`);
+	}
+	return sections.join("\n\n");
 }
 
 export function loadPromptImages(
@@ -31,13 +42,14 @@ export function loadPromptImages(
 export async function buildRunPromptInput(
 	spec: RunSpecModel,
 	loader: PromptArtifactLoader,
+	options: BuildRunPromptOptions = {},
 ): Promise<PiPromptInput> {
 	const images = await loadPromptImagesFromAttachments(
 		spec.attachments,
 		loader,
 	);
 	return {
-		message: buildRunPromptMessage(spec),
+		message: buildRunPromptMessage(spec, options),
 		images: images.length > 0 ? images : undefined,
 	};
 }

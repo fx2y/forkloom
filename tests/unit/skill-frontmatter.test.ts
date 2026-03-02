@@ -3,6 +3,7 @@ import {
 	normalizeSkillFrontmatter,
 	parseFrontmatterBlock,
 	parseSkillFrontmatter,
+	parseSkillFrontmatterPrefix,
 } from "../../apps/api/src/skill/frontmatter";
 
 describe("skill frontmatter normalization", () => {
@@ -84,5 +85,17 @@ user-invocable: false
 	it("returns null when SKILL.md has no valid frontmatter envelope", () => {
 		expect(parseSkillFrontmatter("# no frontmatter")).toBeNull();
 		expect(parseSkillFrontmatter("---\nname: x\n# missing close")).toBeNull();
+	});
+
+	it("parses from bounded prefix content without requiring body reads", () => {
+		const prefix = `---
+name: policy-qa
+description: prefix parse works
+---
+# body is not needed`;
+		expect(parseSkillFrontmatterPrefix(prefix)).toMatchObject({
+			name: "policy-qa",
+			description: "prefix parse works",
+		});
 	});
 });
