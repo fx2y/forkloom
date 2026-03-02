@@ -4,6 +4,24 @@ export type SkillManifest = SkillManifestV0;
 
 export type SkillScope = "org" | "workspace" | "user" | "package" | "global";
 
+export type SkillFrontmatterRaw = Partial<{
+	name: unknown;
+	description: unknown;
+	version: unknown;
+	"allowed-tools": unknown;
+	"disable-model-invocation": unknown;
+	"user-invocable": unknown;
+}>;
+
+export type SkillFrontmatter = {
+	name?: string | undefined;
+	description?: string | undefined;
+	version?: SkillManifest["version"] | undefined;
+	allowedTools?: SkillManifest["allowedTools"] | undefined;
+	disableModelInvocation: boolean;
+	userInvocable: boolean;
+};
+
 export type SkillIndexEntry = {
 	skillId: SkillManifest["skillId"];
 	name: SkillManifest["name"];

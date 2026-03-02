@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { renderTypes } from "./typegen";
 import { TYPEGEN_WRITE_CMD } from "./typegen-cmd";
 import {

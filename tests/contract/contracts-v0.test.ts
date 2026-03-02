@@ -49,4 +49,16 @@ describe("contracts/v0 examples", () => {
 			expect(result.errors).toHaveLength(0);
 		});
 	}
+
+	it("rejects spec08-only frontmatter keys in v0 Skill manifests", () => {
+		const payload = JSON.parse(
+			readFileSync(
+				resolve("contracts/v0/examples/skill.spec08.invalid.json"),
+				"utf8",
+			),
+		) as unknown;
+		const result = validateByName("Skill", payload);
+		expect(result.valid).toBe(false);
+		expect(result.errors.length).toBeGreaterThan(0);
+	});
 });
