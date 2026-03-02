@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "meeting_actions_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "actions"],
+  "properties": {
+    "kind": { "const": "meeting_actions_v1" },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "owner", "task", "dueDate", "state"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "owner": { "type": "string", "minLength": 1 },
+          "task": { "type": "string", "minLength": 1 },
+          "dueDate": { "type": "string", "minLength": 10 },
+          "state": { "enum": ["todo", "in_progress", "done", "needs_input"] }
+        }
+      }
+    }
+  }
+}

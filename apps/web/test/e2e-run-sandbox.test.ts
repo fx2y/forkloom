@@ -263,6 +263,42 @@ describe("web run sandbox flow", () => {
 					{ status: 202, headers: { "content-type": "application/json" } },
 				);
 			}
+			if (url === `/runs/${runId}/skills`) {
+				return new Response(
+					JSON.stringify({
+						skills: [
+							{
+								skillId: "policy-qa",
+								name: "policy-qa",
+								description: "Policy checks with citations",
+								path: "/skills/policy-qa/SKILL.md",
+								scope: "workspace",
+								hidden: false,
+								menuVisible: true,
+								allowedTools: ["Read", "Bash"],
+							},
+						],
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			if (
+				url === `/runs/${runId}/skills/preview` &&
+				init?.method === "POST"
+			) {
+				return new Response(
+					JSON.stringify({
+						skillName: "policy-qa",
+						description: "Policy checks with citations",
+						scripts: ["scripts/emit-policy-answer.sh"],
+						touchedPaths: ["references/policy-glossary.md", "scripts/emit-policy-answer.sh"],
+						allowedTools: ["Read", "Bash"],
+						manualOnly: false,
+						menuVisible: true,
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
 			if (url === `/runs/${runId}/truth`) {
 				return new Response(
 					JSON.stringify({
@@ -425,6 +461,49 @@ describe("web run sandbox flow", () => {
 				root.querySelector("[data-run-provenance]")?.textContent,
 			).toContain("run_command#1");
 		});
+		await vi.waitFor(() => {
+			expect(root.querySelector("[data-run-skill-list]")?.textContent).toContain(
+				"policy-qa",
+			);
+		});
+
+		const skillNameInput = root.querySelector<HTMLInputElement>(
+			"[data-run-skill-name]",
+		);
+		const skillArgsInput = root.querySelector<HTMLInputElement>(
+			"[data-run-skill-args]",
+		);
+		const skillPreviewButton = root.querySelector<HTMLButtonElement>(
+			"[data-run-skill-preview-button]",
+		);
+		const skillInsertButton = root.querySelector<HTMLButtonElement>(
+			"[data-run-skill-insert]",
+		);
+		const commandInput = root.querySelector<HTMLTextAreaElement>(
+			"[data-run-command-input]",
+		);
+		if (
+			!(
+				skillNameInput &&
+				skillArgsInput &&
+				skillPreviewButton &&
+				skillInsertButton &&
+				commandInput
+			)
+		) {
+			throw new Error("missing skill controls");
+		}
+		skillNameInput.value = "policy-qa";
+		skillArgsInput.value = "region=us";
+		skillPreviewButton.click();
+
+		await vi.waitFor(() => {
+			expect(
+				root.querySelector("[data-run-skill-preview]")?.textContent,
+			).toContain("scripts/emit-policy-answer.sh");
+		});
+		skillInsertButton.click();
+		expect(commandInput.value).toBe("/skill:policy-qa region=us");
 
 		const approveButton =
 			root.querySelector<HTMLButtonElement>("[data-run-approve]");

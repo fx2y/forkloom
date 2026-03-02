@@ -29,6 +29,27 @@ export type RunProvenance = {
 	parentShas: string[];
 };
 
+export type RunSkillView = {
+	skillId: string;
+	name: string;
+	description: string;
+	path: string;
+	scope: string;
+	hidden: boolean;
+	menuVisible: boolean;
+	allowedTools?: string[] | undefined;
+};
+
+export type RunSkillPreviewView = {
+	skillName: string;
+	description: string;
+	scripts: string[];
+	touchedPaths: string[];
+	allowedTools?: string[] | undefined;
+	manualOnly: boolean;
+	menuVisible: boolean;
+};
+
 export type RunViewState = {
 	run: RunState | null;
 	lastEventSeq: number;
@@ -37,6 +58,9 @@ export type RunViewState = {
 	provenanceByArtifact: Record<string, RunProvenance[]>;
 	docSearch: RunDocSearch | null;
 	resolvedSpanByKey: Record<string, RunDocResolve>;
+	skills: RunSkillView[];
+	selectedSkillName: string | null;
+	selectedSkillPreview: RunSkillPreviewView | null;
 };
 
 function appendArtifact(
@@ -115,6 +139,9 @@ export const initialRunViewState: RunViewState = {
 	provenanceByArtifact: {},
 	docSearch: null,
 	resolvedSpanByKey: {},
+	skills: [],
+	selectedSkillName: null,
+	selectedSkillPreview: null,
 };
 
 export function toSpanKey(span: SpanRef): string {
@@ -221,6 +248,60 @@ export function hydrateRunDocResolve(
 			...state.resolvedSpanByKey,
 			[key]: resolved,
 		},
+	};
+}
+
+export function hydrateRunSkills(
+	state: RunViewState,
+	skills: RunSkillView[],
+): RunViewState {
+	const sorted = [...skills].sort((left, right) =>
+		left.name.localeCompare(right.name),
+	);
+	const selectedSkillName =
+		state.selectedSkillName &&
+		sorted.some((skill) => skill.name === state.selectedSkillName)
+			? state.selectedSkillName
+			: sorted[0]?.name ?? null;
+	const selectedSkillPreview =
+		state.selectedSkillPreview &&
+		state.selectedSkillPreview.skillName === selectedSkillName
+			? state.selectedSkillPreview
+			: null;
+	return {
+		...state,
+		skills: sorted,
+		selectedSkillName,
+		selectedSkillPreview,
+	};
+}
+
+export function selectRunSkill(
+	state: RunViewState,
+	skillName: string | null,
+): RunViewState {
+	const selectedSkillName =
+		skillName && state.skills.some((skill) => skill.name === skillName)
+			? skillName
+			: null;
+	return {
+		...state,
+		selectedSkillName,
+		selectedSkillPreview:
+			state.selectedSkillPreview?.skillName === selectedSkillName
+				? state.selectedSkillPreview
+				: null,
+	};
+}
+
+export function hydrateRunSkillPreview(
+	state: RunViewState,
+	preview: RunSkillPreviewView,
+): RunViewState {
+	return {
+		...state,
+		selectedSkillName: preview.skillName,
+		selectedSkillPreview: preview,
 	};
 }
 
@@ -337,6 +418,9 @@ export function reduceRunEvent(
 		provenanceByArtifact: state.provenanceByArtifact,
 		docSearch: state.docSearch,
 		resolvedSpanByKey: state.resolvedSpanByKey,
+		skills: state.skills,
+		selectedSkillName: state.selectedSkillName,
+		selectedSkillPreview: state.selectedSkillPreview,
 		trace: [
 			...state.trace,
 			{

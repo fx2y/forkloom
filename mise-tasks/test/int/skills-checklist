@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq rg sqlite3
+
+mkdir -p .cache/spec08
+
+pnpm exec tsx scripts/harness/run-skill-checklist.ts \
+  .cache/spec08/skills-checklist.report.json
+
+jq -e '.status == "ok"' .cache/spec08/skills-checklist.report.json >/dev/null
+jq -e '.status == "ok"' .cache/spec08/skills-validate.json >/dev/null
+jq -e '.status == "ok"' .cache/spec08/skills-perf.json >/dev/null
+
+req_miss_count="$(sqlite3 spec-0/08-htn.sqlite "select count(*) from req r left join req_cover c on c.req_id=r.id and c.fit='full' where c.req_id is null;")"
+task_done_row="$(sqlite3 spec-0/08-tasks.sqlite "select sum(case when status='done' then 1 else 0 end), count(*) from task;")"
+task_done="${task_done_row%%|*}"
+task_total="${task_done_row##*|}"
+
+cat > .cache/spec08/final-proof-index.txt <<EOF_INDEX
+skills_validate=.cache/spec08/skills-validate.json
+skills_validate_status=$(jq -r '.status' .cache/spec08/skills-validate.json)
+skills_perf=.cache/spec08/skills-perf.json
+skills_perf_status=$(jq -r '.status' .cache/spec08/skills-perf.json)
+skills_checklist=.cache/spec08/skills-checklist.report.json
+skills_checklist_status=$(jq -r '.status' .cache/spec08/skills-checklist.report.json)
+req_full_cover_miss=${req_miss_count}
+task_done=${task_done}
+task_total=${task_total}
+task_all_done=$(jq -r '.taskAllDone|if . then 1 else 0 end' .cache/spec08/skills-checklist.report.json)
+scope_guard=.cache/mise-marks/check__scope-guard.ok
+EOF_INDEX
+
+for needle in \
+  "skills_validate_status=ok" \
+  "skills_perf_status=ok" \
+  "skills_checklist_status=ok" \
+  "req_full_cover_miss=0" \
+  "task_all_done=1"; do
+  if ! rg -q "$needle" .cache/spec08/final-proof-index.txt; then
+    echo "final-proof-index missing: $needle" >&2
+    exit 1
+  fi
+done
+
+write_mark "test:int:skills-checklist"
+echo "test:int:skills-checklist ok"

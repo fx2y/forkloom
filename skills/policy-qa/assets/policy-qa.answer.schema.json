@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "policy_qa_answer_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "question",
+    "summary",
+    "citations",
+    "nextActions",
+    "needs_follow_up"
+  ],
+  "properties": {
+    "kind": { "const": "policy_qa_answer_v1" },
+    "question": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["docSha", "parseId", "page", "chunkId", "blockPath"],
+        "properties": {
+          "docSha": { "type": "string", "minLength": 64, "maxLength": 64 },
+          "parseId": { "type": "string", "minLength": 1 },
+          "page": { "type": "integer", "minimum": 1 },
+          "chunkId": { "type": "string", "minLength": 1 },
+          "blockPath": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "nextActions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "needs_follow_up": { "type": "boolean" }
+  }
+}

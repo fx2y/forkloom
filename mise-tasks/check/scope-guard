@@ -6,6 +6,7 @@ cd_repo_root
 require_cmds rg ast-grep
 
 mkdir -p .cache/spec07
+mkdir -p .cache/spec08
 rg -n "No generalized observability|No extra event bus|No provenance DB" \
   spec-0/06-spec.md README.md docs/adr > .cache/spec07/scope-guard.c4-not-now.txt
 
@@ -61,6 +62,44 @@ if [[ ! -s .cache/spec07/scope-guard.ast-grep.txt ]]; then
   echo "scope guard ast-grep found no banned-sandbox constant anchor" >&2
   exit 1
 fi
+
+rg -n "/runs/:runId/skills|/runs/:runId/skills/preview|RUN_SKILL_CLIENT_ROUTE_TEMPLATES|RUN_SKILL_CLIENT_COMMAND_ALIAS|parseRunSkillPreviewPayload" \
+  apps/api/src/http/run-routes.ts apps/api/src/run/public-surface.ts apps/web/src/run-client.ts \
+  > .cache/spec08/scope-guard.skill-wire.txt
+for needle in "/runs/:runId/skills" "/runs/:runId/skills/preview" "RUN_SKILL_CLIENT_COMMAND_ALIAS"; do
+  if ! rg -Fq "$needle" .cache/spec08/scope-guard.skill-wire.txt; then
+    echo "scope guard missing run-owned skill wire anchor: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n "app\\.(get|post|put|patch|delete)\\(\"/skills|router\\.(get|post|put|patch|delete)\\(\"/skills" \
+  apps/api/src/http > .cache/spec08/scope-guard.skills-route-violations.txt; then
+  echo "top-level /skills route is forbidden; keep skill wire under /runs" >&2
+  exit 1
+fi
+
+ast-grep --lang typescript -p '{ kind: "skill" }' \
+  apps/api/src/http apps/api/src/run apps/web/src \
+  > .cache/spec08/scope-guard.skill-kind.ast.txt || true
+if [[ -s .cache/spec08/scope-guard.skill-kind.ast.txt ]]; then
+  echo "public command kind=skill is forbidden" >&2
+  exit 1
+fi
+
+if rg -n "innerHTML" apps/web/src > .cache/spec08/scope-guard.innerhtml.scan.txt; then
+  echo "innerHTML usage is forbidden in web surface" >&2
+  exit 1
+fi
+
+rg -n "name: policy-qa|name: contract-review|name: invoice-extract|name: meeting-to-actions|## Outputs \\(ARTIFACTS\\)|scripts/emit-.*\\.sh" \
+  skills/*/SKILL.md > .cache/spec08/scope-guard.pack.scan.txt
+for needle in "name: policy-qa" "name: contract-review" "name: invoice-extract" "name: meeting-to-actions" "## Outputs (ARTIFACTS)"; do
+  if ! rg -Fq "$needle" .cache/spec08/scope-guard.pack.scan.txt; then
+    echo "scope guard missing first-party pack footprint anchor: $needle" >&2
+    exit 1
+  fi
+done
 
 write_mark "check:scope-guard"
 echo "check:scope-guard ok"

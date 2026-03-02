@@ -1,0 +1,6 @@
+<available_skills>
+  <skill><name>contract-review</name><description>Review contracts with deterministic checklist and redline artifacts. Use for clause risk, obligations, and remediation proposals.</description></skill>
+  <skill><name>invoice-extract</name><description>Extract invoice line items to CSV and reconcile totals using existing ingest/OCR pipeline.</description></skill>
+  <skill><name>meeting-to-actions</name><description>Convert meeting notes into action artifacts and durable follow-through queue stubs.</description></skill>
+  <skill><name>policy-qa</name><description>Answer policy/procedure questions with cite-first evidence. Use when user asks policy, controls, handbook, or compliance questions.</description></skill>
+</available_skills>

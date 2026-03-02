@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "invoice_reconcile_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "currency", "subtotal", "tax", "total", "lineCount", "variance"],
+  "properties": {
+    "kind": { "const": "invoice_reconcile_v1" },
+    "status": { "enum": ["ok", "needs_input"] },
+    "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+    "subtotal": { "type": "number" },
+    "tax": { "type": "number" },
+    "total": { "type": "number" },
+    "lineCount": { "type": "integer", "minimum": 0 },
+    "variance": { "type": "number" }
+  }
+}

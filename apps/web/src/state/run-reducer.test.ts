@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
 	hydrateRunDocResolve,
 	hydrateRunDocSearch,
+	hydrateRunSkillPreview,
+	hydrateRunSkills,
 	hydrateRunState,
 	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
+	selectRunSkill,
 	toSpanKey,
 } from "./run-reducer";
 
@@ -178,5 +181,50 @@ describe("run reducer", () => {
 		});
 		const key = toSpanKey(span);
 		expect(resolved.resolvedSpanByKey[key]?.md).toContain("19.99");
+	});
+
+	it("keeps skill list and preview inside reducer-owned state transitions", () => {
+		const seeded = hydrateRunSkills(initialRunViewState, [
+			{
+				skillId: "policy-qa",
+				name: "policy-qa",
+				description: "Policy checks",
+				path: "/skills/policy-qa/SKILL.md",
+				scope: "workspace",
+				hidden: false,
+				menuVisible: true,
+			},
+			{
+				skillId: "meeting-to-actions",
+				name: "meeting-to-actions",
+				description: "Action follow-through",
+				path: "/skills/meeting-to-actions/SKILL.md",
+				scope: "workspace",
+				hidden: false,
+				menuVisible: true,
+			},
+		]);
+		expect(seeded.skills.map((skill) => skill.name)).toEqual([
+			"meeting-to-actions",
+			"policy-qa",
+		]);
+		expect(seeded.selectedSkillName).toBe("meeting-to-actions");
+
+		const selected = selectRunSkill(seeded, "policy-qa");
+		expect(selected.selectedSkillName).toBe("policy-qa");
+		expect(selected.selectedSkillPreview).toBeNull();
+
+		const previewed = hydrateRunSkillPreview(selected, {
+			skillName: "policy-qa",
+			description: "Policy checks",
+			scripts: ["scripts/emit-policy-answer.sh"],
+			touchedPaths: ["scripts/emit-policy-answer.sh"],
+			manualOnly: false,
+			menuVisible: true,
+		});
+		expect(previewed.selectedSkillName).toBe("policy-qa");
+		expect(previewed.selectedSkillPreview?.scripts).toEqual([
+			"scripts/emit-policy-answer.sh",
+		]);
 	});
 });

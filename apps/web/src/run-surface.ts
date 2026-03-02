@@ -12,11 +12,13 @@ import {
 	exportRunFiles,
 	fetchRun,
 	fetchRunFiles,
+	fetchRunSkills,
 	fetchRunTruth,
 	parseRunEvent,
 	postRunCommand,
 	postRunDocResolve,
 	postRunDocSearch,
+	postRunSkillPreview,
 } from "./run-client";
 import {
 	canAbortRun,
@@ -29,10 +31,13 @@ import {
 	type RunProvenance,
 	hydrateRunDocResolve,
 	hydrateRunDocSearch,
+	hydrateRunSkillPreview,
+	hydrateRunSkills,
 	hydrateRunState,
 	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
+	selectRunSkill,
 	toSpanKey,
 } from "./state/run-reducer";
 import { parseStaticFragment } from "./static-html";
@@ -86,6 +91,40 @@ function prettyPreview(run: RunState): string {
 	return `WILL-RUN ${profile} / ${network}\nworkdir ${workdir}\ntimeout ${timeoutSec}s / cap ${maxBytesOut}b`;
 }
 
+function prettySkillPreview(
+	preview: {
+		skillName: string;
+		description: string;
+		scripts: string[];
+		touchedPaths: string[];
+		allowedTools?: string[] | undefined;
+		manualOnly: boolean;
+		menuVisible: boolean;
+	} | null,
+): string {
+	if (!preview) {
+		return "No skill WILL-RUN preview yet.";
+	}
+	const lines = [
+		`/skill:${preview.skillName}`,
+		preview.description,
+		`manualOnly ${preview.manualOnly ? "yes" : "no"} / menuVisible ${preview.menuVisible ? "yes" : "no"}`,
+		`scripts ${preview.scripts.join(", ") || "(none)"}`,
+		`touched ${preview.touchedPaths.join(", ") || "(none)"}`,
+	];
+	if (preview.allowedTools && preview.allowedTools.length > 0) {
+		lines.push(`allowedTools ${preview.allowedTools.join(", ")}`);
+	}
+	return lines.join("\n");
+}
+
+function toSkillCommandText(skillName: string, args: string): string {
+	const trimmedArgs = args.trim();
+	return trimmedArgs.length > 0
+		? `/skill:${skillName} ${trimmedArgs}`
+		: `/skill:${skillName}`;
+}
+
 export function mountRunSurface(
 	root: HTMLElement,
 	deps: AppDeps = browserDeps(),
@@ -93,6 +132,8 @@ export function mountRunSurface(
 	let state = initialRunViewState;
 	let creating = false;
 	let sending = false;
+	let loadingSkills = false;
+	let previewingSkill = false;
 	let searchingDocs = false;
 	let resolvingSpanKey: string | null = null;
 	let errorMessage = "";
@@ -160,6 +201,24 @@ export function mountRunSurface(
 								</details>
 							</div>
 							<div class="panel run-subpanel">
+								<p class="section-label">Skills</p>
+								<label class="field">
+									<span>Skill Picker</span>
+									<input data-run-skill-name type="text" name="skillName" placeholder="policy-qa" list="run-skill-options" autocomplete="off" />
+									<datalist id="run-skill-options" data-run-skill-options></datalist>
+								</label>
+								<label class="field">
+									<span>Skill Args</span>
+									<input data-run-skill-args type="text" name="skillArgs" placeholder="region=us" autocomplete="off" />
+								</label>
+								<div class="actions run-actions">
+									<button type="button" class="secondary" data-run-skill-preview-button>Preview skill</button>
+									<button type="button" class="secondary" data-run-skill-insert>/skill insert</button>
+								</div>
+								<ul class="file-list" data-run-skill-list></ul>
+								<p class="thread-preview" data-run-skill-preview>No skill WILL-RUN preview yet.</p>
+							</div>
+							<div class="panel run-subpanel">
 								<p class="section-label">Citations</p>
 								<form class="field" data-run-doc-search-form>
 									<label class="field">
@@ -224,6 +283,27 @@ export function mountRunSurface(
 	const provenanceNode = root.querySelector<HTMLUListElement>(
 		"[data-run-provenance]",
 	);
+	const skillNameInput = root.querySelector<HTMLInputElement>(
+		"[data-run-skill-name]",
+	);
+	const skillArgsInput = root.querySelector<HTMLInputElement>(
+		"[data-run-skill-args]",
+	);
+	const skillOptionsNode = root.querySelector<HTMLDataListElement>(
+		"[data-run-skill-options]",
+	);
+	const skillListNode = root.querySelector<HTMLUListElement>(
+		"[data-run-skill-list]",
+	);
+	const skillPreviewNode = root.querySelector<HTMLElement>(
+		"[data-run-skill-preview]",
+	);
+	const skillPreviewButton = root.querySelector<HTMLButtonElement>(
+		"[data-run-skill-preview-button]",
+	);
+	const skillInsertButton = root.querySelector<HTMLButtonElement>(
+		"[data-run-skill-insert]",
+	);
 	const docSearchForm = root.querySelector<HTMLFormElement>(
 		"[data-run-doc-search-form]",
 	);
@@ -275,6 +355,13 @@ export function mountRunSurface(
 			traceNode &&
 			provenanceSummaryNode &&
 			provenanceNode &&
+			skillNameInput &&
+			skillArgsInput &&
+			skillOptionsNode &&
+			skillListNode &&
+			skillPreviewNode &&
+			skillPreviewButton &&
+			skillInsertButton &&
 			docSearchForm &&
 			docQueryInput &&
 			docScopeInput &&
@@ -553,6 +640,55 @@ export function mountRunSurface(
 		}
 	};
 
+	const renderSkills = () => {
+		clearNode(skillListNode);
+		clearNode(skillOptionsNode);
+		for (const skill of state.skills) {
+			const option = document.createElement("option");
+			option.value = skill.name;
+			option.label = skill.description;
+			skillOptionsNode.append(option);
+
+			const row = document.createElement("li");
+			row.className = "file-item";
+			const left = document.createElement("div");
+			left.className = "provenance-main";
+			const name = document.createElement("strong");
+			name.textContent = skill.name;
+			const desc = document.createElement("span");
+			desc.textContent = skill.description;
+			const scope = document.createElement("code");
+			scope.textContent = `${skill.scope}${skill.hidden ? " manual-only" : ""}${skill.menuVisible ? "" : " menu-hidden"}`;
+			left.append(name, desc, scope);
+
+			const pick = document.createElement("button");
+			pick.type = "button";
+			pick.className = "secondary";
+			pick.textContent =
+				state.selectedSkillName === skill.name ? "Selected" : "Select";
+			pick.disabled = state.selectedSkillName === skill.name;
+			pick.addEventListener("click", () => {
+				state = selectRunSkill(state, skill.name);
+				skillNameInput.value = skill.name;
+				update();
+			});
+
+			row.append(left, pick);
+			skillListNode.append(row);
+		}
+		if (state.skills.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "hint";
+			empty.textContent = "No registered skills for this run.";
+			skillListNode.append(empty);
+		}
+
+		if (state.selectedSkillName) {
+			skillNameInput.value = state.selectedSkillName;
+		}
+		skillPreviewNode.textContent = prettySkillPreview(state.selectedSkillPreview);
+	};
+
 	const update = () => {
 		const run = state.run;
 		const status = run?.status ?? "idle";
@@ -571,6 +707,7 @@ export function mountRunSurface(
 		renderFiles();
 		renderTrace();
 		renderProvenance();
+		renderSkills();
 		renderDocHits();
 		renderResolvedSpan();
 		renderUploads();
@@ -581,6 +718,16 @@ export function mountRunSurface(
 		docSearchButton.textContent = searchingDocs
 			? "Searching..."
 			: "Search citations";
+		skillPreviewButton.disabled =
+			previewingSkill || loadingSkills || run == null || state.skills.length === 0;
+		skillPreviewButton.textContent = previewingSkill
+			? "Previewing..."
+			: loadingSkills
+				? "Loading..."
+				: "Preview skill";
+		skillInsertButton.disabled = run == null || state.selectedSkillName == null;
+		skillNameInput.disabled = loadingSkills || run == null;
+		skillArgsInput.disabled = run == null;
 		sendButton.disabled = sending || !canSendRunText(run);
 		sendButton.textContent = `Queue ${sendKind}`;
 		steerButton.disabled =
@@ -613,6 +760,18 @@ export function mountRunSurface(
 			selectedArtifactSha = truth.artifacts[0]?.sha256 ?? null;
 		}
 		update();
+	};
+
+	const refreshRunSkills = async (runId: string) => {
+		loadingSkills = true;
+		update();
+		try {
+			const result = await fetchRunSkills(deps, runId);
+			state = hydrateRunSkills(state, result.skills);
+		} finally {
+			loadingSkills = false;
+			update();
+		}
 	};
 
 	const connectRun = (runId: string) => {
@@ -701,6 +860,7 @@ export function mountRunSurface(
 			});
 			state = hydrateRunState(initialRunViewState, await fetchRun(deps, runId));
 			selectedResolvedSpanKey = null;
+			await refreshRunSkills(runId);
 			await refreshRunTruth(runId);
 			connectRun(runId);
 			await refreshRunFiles(runId);
@@ -747,6 +907,72 @@ export function mountRunSurface(
 			searchingDocs = false;
 			update();
 		}
+	});
+
+	skillNameInput.addEventListener("change", () => {
+		const name = skillNameInput.value.trim();
+		state = selectRunSkill(state, name.length > 0 ? name : null);
+		update();
+	});
+
+	skillPreviewButton.addEventListener("click", async () => {
+		if (!state.run) {
+			return;
+		}
+		const fromInput = skillNameInput.value.trim();
+		const skillName =
+			fromInput.length > 0 ? fromInput : state.selectedSkillName ?? "";
+		if (skillName.length === 0) {
+			errorMessage = "skill name is required";
+			update();
+			return;
+		}
+		if (!state.skills.some((skill) => skill.name === skillName)) {
+			errorMessage = `unknown skill: ${skillName}`;
+			update();
+			return;
+		}
+		try {
+			previewingSkill = true;
+			errorMessage = "";
+			update();
+			const preview = await postRunSkillPreview(deps, state.run.runId, {
+				skillName,
+				args: skillArgsInput.value.trim() || undefined,
+			});
+			if (!preview) {
+				errorMessage = `skill not found: ${skillName}`;
+				return;
+			}
+			state = hydrateRunSkillPreview(state, preview);
+			skillNameInput.value = preview.skillName;
+		} catch (error) {
+			errorMessage =
+				error instanceof Error ? error.message : "skill preview failed";
+		} finally {
+			previewingSkill = false;
+			update();
+		}
+	});
+
+	skillInsertButton.addEventListener("click", () => {
+		const fromInput = skillNameInput.value.trim();
+		const skillName =
+			fromInput.length > 0 ? fromInput : state.selectedSkillName ?? "";
+		if (skillName.length === 0) {
+			errorMessage = "skill name is required";
+			update();
+			return;
+		}
+		if (!state.skills.some((skill) => skill.name === skillName)) {
+			errorMessage = `unknown skill: ${skillName}`;
+			update();
+			return;
+		}
+		commandInput.value = toSkillCommandText(skillName, skillArgsInput.value);
+		state = selectRunSkill(state, skillName);
+		errorMessage = "";
+		update();
 	});
 
 	commandForm.addEventListener("submit", async (event) => {

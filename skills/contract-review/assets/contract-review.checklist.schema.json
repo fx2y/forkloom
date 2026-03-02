@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "contract_review_checklist_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "clauses", "risks", "redlines"],
+  "properties": {
+    "kind": { "const": "contract_review_checklist_v1" },
+    "status": { "enum": ["ok", "needs_input"] },
+    "clauses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "severity", "citation"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["low", "medium", "high"] },
+          "citation": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "redlines": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  }
+}

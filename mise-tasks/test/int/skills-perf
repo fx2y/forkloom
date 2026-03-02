@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq rg
+
+mkdir -p .cache/spec08
+
+pnpm exec tsx scripts/harness/skill-lazy-perf.ts .cache/spec08/skills-perf.json
+
+jq -e '
+  .status == "ok" and
+  .skillCount >= 1000 and
+  .prefixReads >= .skillCount and
+  .fullReads == 1 and
+  .coldMs <= .coldBudgetMs and
+  .warmMs <= .warmBudgetMs
+' .cache/spec08/skills-perf.json >/dev/null
+
+rg -n "readPrefixBytes|read-skill-file|references/|assets/|available_skills|cold|warm" \
+  apps/api/src/skill scripts/harness mise-tasks/test/int/skills-perf \
+  > .cache/spec08/cy8-perf.scan.txt
+
+write_mark "test:int:skills-perf"
+echo "test:int:skills-perf ok"

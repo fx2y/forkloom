@@ -87,7 +87,7 @@ outputs = [".cache/mise-marks/check__type.ok"]
 
 [tasks."check:unit"]
 run = "bash ./mise-tasks/check/unit"
-sources = ["src/**/*.ts", "apps/**/*.ts", "apps/**/*.css", "apps/**/*.html", "packages/**/*.ts", "tests/unit/**/*.ts", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
+sources = ["src/**/*.ts", "apps/**/*.ts", "apps/**/*.css", "apps/**/*.html", "packages/**/*.ts", "tests/unit/**/*.ts", "skills/**/*.md", "skills/**/*.json", "skills/**/*.sh", "package.json", "pnpm-lock.yaml", "mise-tasks/check/unit"]
 outputs = [".cache/mise-marks/check__unit.ok"]
 
 [tasks."check:contract"]
@@ -102,8 +102,8 @@ outputs = [".cache/mise-marks/check__lesson-guard.ok"]
 
 [tasks."check:scope-guard"]
 run = "bash ./mise-tasks/check/scope-guard"
-sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "README.md", "docs/adr/**/*.md", "docs/runbook/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "mise-tasks/check/scope-guard"]
-outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt"]
+sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "apps/web/src/**/*.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "skills/**/*.md", "README.md", "docs/adr/**/*.md", "docs/runbook/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "spec-0/08-spec.md", "mise-tasks/check/scope-guard"]
+outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt", ".cache/spec08/scope-guard.skill-wire.txt", ".cache/spec08/scope-guard.skills-route-violations.txt", ".cache/spec08/scope-guard.skill-kind.ast.txt", ".cache/spec08/scope-guard.innerhtml.scan.txt", ".cache/spec08/scope-guard.pack.scan.txt"]
 
 [tasks.check]
 depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard", "check:scope-guard"]
@@ -261,6 +261,22 @@ depends = ["svc:health", "test:int:doc-surface", "test:int:doc-corpus", "fault:d
 sources = [".mise.toml", "scripts/harness/spec07-sql.ts", "scripts/harness/run-doc-checklist.ts", "tests/unit/spec07-sql.test.ts", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/doc-checklist", "package.json", "pnpm-lock.yaml"]
 outputs = [".cache/mise-marks/test__int__doc-checklist.ok", ".cache/spec07/doc-checklist.report.json", ".cache/spec07/cy10-dag.scan.txt", ".cache/spec07/cy10-docs.scan.txt", ".cache/spec07/final-proof-index.txt"]
 
+[tasks."test:int:skills-validate"]
+run = "bash ./mise-tasks/test/int/skills-validate"
+sources = ["apps/api/src/skill/**/*.ts", "apps/api/src/run/**/*.ts", "apps/api/src/http/**/*.ts", "apps/web/src/**/*.ts", "apps/web/test/**/*.ts", "tests/unit/**/*skill*.test.ts", "tests/unit/run-*.test.ts", "tests/unit/actor-service.test.ts", "tests/unit/spec08-sql.test.ts", "scripts/harness/skills-validate.ts", "scripts/harness/spec08-sql.ts", "skills/**/*.md", "skills/**/*.json", "skills/**/*.sh", "mise-tasks/test/int/skills-validate", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__skills-validate.ok", ".cache/spec08/skills-validate.json", ".cache/spec08/skills.available.xml", ".cache/spec08/cy6-policy.scan.txt", ".cache/spec08/cy6-contract.scan.txt", ".cache/spec08/cy6-invoice.scan.txt", ".cache/spec08/cy7-actions.scan.txt", ".cache/spec08/cy7-reducer.scan.txt", ".cache/spec08/cy7-ui.scan.txt", ".cache/spec08/cy7-queue.scan.txt", ".cache/spec08/cy8-kind-scan.ast.txt"]
+
+[tasks."test:int:skills-perf"]
+run = "bash ./mise-tasks/test/int/skills-perf"
+sources = ["apps/api/src/skill/**/*.ts", "scripts/harness/skill-lazy-perf.ts", "skills/**/*.md", "skills/**/*.json", "skills/**/*.sh", "mise-tasks/test/int/skills-perf", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__skills-perf.ok", ".cache/spec08/skills-perf.json", ".cache/spec08/cy8-perf.scan.txt"]
+
+[tasks."test:int:skills-checklist"]
+run = "bash ./mise-tasks/test/int/skills-checklist"
+depends = ["test:int:skills-validate", "test:int:skills-perf", "check:scope-guard"]
+sources = [".mise.toml", "scripts/harness/spec08-sql.ts", "scripts/harness/run-skill-checklist.ts", "tests/unit/spec08-sql.test.ts", "spec-0/08-htn.sqlite", "spec-0/08-tasks.sqlite", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/skills-checklist", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__skills-checklist.ok", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/final-proof-index.txt"]
+
 [tasks."test:int:doc-force"]
 run = [
   "mise run --force test:int:doc-config",
@@ -299,7 +315,10 @@ run = [
   "mise run test:int:doc-search",
   "mise run test:int:doc-surface",
   "mise run test:int:doc-corpus",
-  "mise run test:int:doc-checklist"
+  "mise run test:int:doc-checklist",
+  "mise run test:int:skills-validate",
+  "mise run test:int:skills-perf",
+  "mise run test:int:skills-checklist"
 ]
 
 [tasks."test:int:force"]
@@ -329,7 +348,10 @@ run = [
   "mise run --force test:int:doc-search",
   "mise run --force test:int:doc-surface",
   "mise run --force test:int:doc-corpus",
-  "mise run --force test:int:doc-checklist"
+  "mise run --force test:int:doc-checklist",
+  "mise run --force test:int:skills-validate",
+  "mise run --force test:int:skills-perf",
+  "mise run --force test:int:skills-checklist"
 ]
 
 [tasks."golden:canonicalize"]
@@ -354,6 +376,12 @@ depends = ["test:int:doc-checklist"]
 sources = [".cache/spec07/final-proof-index.txt", "spec-0/07-htn.sqlite", "mise-tasks/golden/doc"]
 outputs = [".cache/mise-marks/golden__doc.ok", ".cache/spec07/final-proof-index.txt"]
 
+[tasks."golden:skills"]
+run = "bash ./mise-tasks/golden/skills"
+depends = ["test:int:skills-checklist"]
+sources = [".cache/spec08/final-proof-index.txt", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-perf.json", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/skills.available.xml", "fixtures/golden/skills.available.xml", "mise-tasks/golden/skills"]
+outputs = [".cache/mise-marks/golden__skills.ok", ".cache/spec08/final-proof-index.txt"]
+
 [tasks."golden:accept"]
 run = "bash ./mise-tasks/golden/accept"
 depends = ["golden:canonicalize"]
@@ -361,7 +389,7 @@ sources = [".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/accept
 outputs = [".cache/mise-marks/golden__accept.ok", "fixtures/golden/sample.session.canon.jsonl"]
 
 [tasks.golden]
-depends = ["golden:diff", "golden:truth", "golden:doc"]
+depends = ["golden:diff", "golden:truth", "golden:doc", "golden:skills"]
 
 [tasks."fault:kill-resume"]
 run = "bash ./mise-tasks/fault/kill-resume"

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm rg ast-grep jq
+
+mkdir -p .cache/spec08
+
+pnpm exec tsx scripts/harness/skills-validate.ts \
+  .cache/spec08/skills-validate.json \
+  .cache/spec08/skills.available.xml
+
+pnpm exec vitest run \
+  tests/unit/skill-packs.test.ts \
+  tests/unit/run-request-parsers.test.ts \
+  tests/unit/run-public-surface.test.ts \
+  tests/unit/actor-service.test.ts \
+  tests/unit/spec08-sql.test.ts
+
+(
+  cd apps/web
+  pnpm exec vitest run -c vitest.config.ts \
+    src/state/run-reducer.test.ts \
+    src/run-client.test.ts \
+    test/e2e-run-sandbox.test.ts
+)
+
+rg -n "policy-qa|searchDocs|resolveSpan|citations" \
+  apps/api/src skills tests > .cache/spec08/cy6-policy.scan.txt
+rg -n "contract-review|ingestDoc|searchDocs|redline|checklist" \
+  apps/api/src skills tests > .cache/spec08/cy6-contract.scan.txt
+rg -n "invoice-extract|csv|reconcile|ingestDoc|executeDocOcr" \
+  apps/api/src skills tests > .cache/spec08/cy6-invoice.scan.txt
+rg -n "meeting-to-actions|enqueueActorTick|mailbox commands are forbidden" \
+  apps/api/src skills tests > .cache/spec08/cy7-actions.scan.txt
+rg -n "skill" apps/web/src/run-client.ts apps/web/src/state/run-reducer.ts \
+  > .cache/spec08/cy7-reducer.scan.txt
+rg -n "WILL-RUN|skill|autocomplete|commandText" apps/web/src/run-surface.ts \
+  > .cache/spec08/cy7-ui.scan.txt
+rg -n "enqueueActorTick|normalizeMailboxText|/skill:" apps/api/src apps/web/src \
+  > .cache/spec08/cy7-queue.scan.txt
+
+ast-grep --lang typescript -p '{ kind: "skill" }' \
+  apps/api/src/http apps/api/src/run apps/web/src \
+  > .cache/spec08/cy8-kind-scan.ast.txt || true
+if [[ -s .cache/spec08/cy8-kind-scan.ast.txt ]]; then
+  echo "explicit kind=skill is forbidden" >&2
+  exit 1
+fi
+
+jq -e '.status == "ok" and (.loadedPacks|length) == 4' \
+  .cache/spec08/skills-validate.json >/dev/null
+
+write_mark "test:int:skills-validate"
+echo "test:int:skills-validate ok"
