@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { hashBytes } from "@forkloom/shared";
 import { dedupeSorted, resolveSkillPath, toSkillRelativePath } from "./paths";
 
 export type SkillScriptOutputFile = {
@@ -33,6 +34,7 @@ export async function runSkillScript(input: {
 	const scriptRelative = normalizeScriptPath(skillDir, input.scriptPath);
 	const maxBytesOut = Math.max(1, input.maxBytesOut ?? 256_000);
 	const startedAt = new globalThis.Date().toISOString();
+	const outputSnapshotBefore = await snapshotOutputFiles(skillDir);
 
 	let stdoutTail = Buffer.alloc(0);
 	let stderrTail = Buffer.alloc(0);
@@ -72,7 +74,7 @@ export async function runSkillScript(input: {
 		clearTimeout(timer);
 	}
 	const endedAt = new globalThis.Date().toISOString();
-	const outputFiles = await listOutputFiles(skillDir);
+	const outputFiles = await listOutputFilesDelta(skillDir, outputSnapshotBefore);
 	const status =
 		timedOut || exitCode === 137
 			? "aborted"
@@ -116,28 +118,57 @@ function retainTail(
 	return appended.subarray(appended.length - maxBytesOut);
 }
 
-async function listOutputFiles(
+type OutputSnapshotEntry = {
+	body: Buffer;
+	sha256: string;
+};
+
+type OutputSnapshot = Map<string, OutputSnapshotEntry>;
+
+async function listOutputFilesDelta(
 	skillDir: string,
+	before: OutputSnapshot,
 ): Promise<SkillScriptOutputFile[]> {
+	const after = await snapshotOutputFiles(skillDir);
+	const changed: SkillScriptOutputFile[] = [];
+	const sorted = dedupeSorted([...after.keys()]);
+	for (const relativePath of sorted) {
+		const next = after.get(relativePath);
+		if (!next) {
+			continue;
+		}
+		const prior = before.get(relativePath);
+		if (prior && prior.sha256 === next.sha256) {
+			continue;
+		}
+		changed.push({
+			path: relativePath,
+			body: next.body,
+		});
+	}
+	return changed;
+}
+
+async function snapshotOutputFiles(skillDir: string): Promise<OutputSnapshot> {
 	const outDir = resolve(skillDir, "out");
+	const snapshot: OutputSnapshot = new Map();
 	if (!(await isDirectory(outDir))) {
-		return [];
+		return snapshot;
 	}
 	const files: string[] = [];
 	await walkFiles(outDir, files);
-	const sorted = dedupeSorted(files);
-	const output: SkillScriptOutputFile[] = [];
-	for (const file of sorted) {
+	for (const file of dedupeSorted(files)) {
 		const relative = toSkillRelativePath(skillDir, file);
 		if (!relative) {
 			continue;
 		}
-		output.push({
-			path: relative,
-			body: await readFile(file),
+		const body = await readFile(file);
+		snapshot.set(relative, {
+			body,
+			sha256: hashBytes(body),
 		});
 	}
-	return output;
+	return snapshot;
 }
 
 async function walkFiles(dirPath: string, out: string[]): Promise<void> {

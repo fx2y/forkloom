@@ -1,10 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	executeSkillPlanDurably,
+	parseSkillArgs,
 	readSkillFileRequest,
 	resolveSkillPath,
 	runSkillScript,
@@ -52,6 +59,17 @@ describe("skill L3 runtime", () => {
 			expect(() => resolveSkillPath(skillDir, "../../etc/passwd")).toThrow(
 				"skill path escape",
 			);
+			const outside = await mkdtemp(join(tmpdir(), "skill-outside-"));
+			try {
+				await writeFile(join(outside, "secret.txt"), "nope");
+				await symlink(outside, join(skillDir, "references", "outside"));
+				expect(() =>
+					resolveSkillPath(skillDir, "references/outside/secret.txt"),
+				).toThrow("skill path escape via symlink");
+			} finally {
+				await rm(outside, { recursive: true, force: true });
+			}
+
 			await expect(
 				readSkillFileRequest({
 					skillPath,
@@ -107,6 +125,52 @@ describe("skill L3 runtime", () => {
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
+	});
+
+	it("does not re-emit stale out/* files from prior executions", async () => {
+		const root = await mkdtemp(join(tmpdir(), "skill-runner-delta-"));
+		try {
+			const skillDir = join(root, "policy-qa");
+			const skillPath = join(skillDir, "SKILL.md");
+			await mkdir(join(skillDir, "scripts"), { recursive: true });
+			await mkdir(join(skillDir, "out"), { recursive: true });
+			await writeFile(join(skillDir, "out", "stale.txt"), "stale");
+			await writeFile(
+				skillPath,
+				"---\nname: policy-qa\ndescription: policy\n---\n",
+			);
+			await writeFile(
+				join(skillDir, "scripts", "run.sh"),
+				[
+					"#!/usr/bin/env bash",
+					"set -euo pipefail",
+					"mkdir -p out",
+					'echo "fresh:$1" > out/fresh.txt',
+				].join("\n"),
+				"utf8",
+			);
+			const run = await runSkillScript({
+				skillPath,
+				scriptPath: "scripts/run.sh",
+				args: ["alpha"],
+			});
+			expect(run.status).toBe("done");
+			expect(run.outputFiles.map((file) => file.path)).toEqual(["out/fresh.txt"]);
+			expect(run.outputFiles[0]?.body.toString("utf8").trim()).toBe("fresh:alpha");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("parses /skill args with shell quoting semantics", () => {
+		expect(parseSkillArgs("")).toEqual([]);
+		expect(parseSkillArgs("a b")).toEqual(["a", "b"]);
+		expect(parseSkillArgs("\"alpha beta\" gamma")).toEqual([
+			"alpha beta",
+			"gamma",
+		]);
+		expect(parseSkillArgs("'a b' \"c d\" e\\ f")).toEqual(["a b", "c d", "e f"]);
+		expect(() => parseSkillArgs("\"unterminated")).toThrow("unmatched quote");
 	});
 
 	it("persists script stdout/stderr/files through existing artifact+ledger seams", async () => {

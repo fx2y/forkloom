@@ -2,7 +2,11 @@ import {
 	buildGenericStepHashes,
 	buildGenericStepPayload,
 } from "../workflow/step-hash";
-import { runSkillScript } from "./bash-runner";
+import {
+	type SkillScriptRunResult,
+	runSkillScript,
+} from "./bash-runner";
+import { parseSkillArgs } from "./args";
 import type { SkillExecutionPlan } from "./types";
 
 type ArtifactWriter = {
@@ -39,6 +43,15 @@ type RunTruthWriter = {
 export type DurableSkillExecDeps = {
 	artifactService: ArtifactWriter;
 	runService: RunTruthWriter;
+	runScript?:
+		| ((input: {
+				skillPath: string;
+				scriptPath: string;
+				args: string[];
+				timeoutMs?: number | undefined;
+				maxBytesOut?: number | undefined;
+		  }) => Promise<SkillScriptRunResult>)
+		| undefined;
 };
 
 export type SkillExecLedgerRow = {
@@ -65,10 +78,11 @@ export async function executeSkillPlanDurably(input: {
 	if (scripts.length === 0) {
 		return [];
 	}
-	const args = splitArgs(input.plan.argsText);
+	const args = parseSkillArgs(input.plan.argsText);
+	const runScript = input.deps.runScript ?? runSkillScript;
 	const rows: SkillExecLedgerRow[] = [];
 	for (const [index, scriptPath] of scripts.entries()) {
-		const run = await runSkillScript({
+		const run = await runScript({
 			skillPath: input.plan.skillPath,
 			scriptPath,
 			args,
@@ -210,12 +224,4 @@ export async function executeSkillPlanDurably(input: {
 		}
 	}
 	return rows;
-}
-
-function splitArgs(argsText: string): string[] {
-	const trimmed = argsText.trim();
-	if (trimmed.length === 0) {
-		return [];
-	}
-	return trimmed.split(/\s+/g);
 }

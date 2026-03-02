@@ -9,7 +9,8 @@ mkdir -p .cache/spec08
 
 pnpm exec tsx scripts/harness/skills-validate.ts \
   .cache/spec08/skills-validate.json \
-  .cache/spec08/skills.available.xml
+  .cache/spec08/skills.available.xml \
+  .cache/spec08/skills-pack-proof.json
 
 pnpm exec vitest run \
   tests/unit/skill-packs.test.ts \
@@ -51,6 +52,14 @@ fi
 
 jq -e '.status == "ok" and (.loadedPacks|length) == 4' \
   .cache/spec08/skills-validate.json >/dev/null
+jq -e '.dynamicPacks|length == 4' .cache/spec08/skills-validate.json >/dev/null
+jq -e '.status == "ok" and (.proofs|length) == 4' \
+  .cache/spec08/skills-pack-proof.json >/dev/null
+jq -e '.status == "ok" and .skillExecStepCount >= 1' \
+  .cache/spec08/skills-live-proof.json >/dev/null
+
+rg -n "skill_exec|skills-live-proof" scripts/harness/run-skill-live.ts \
+  > .cache/spec08/cy8-skill-live.scan.txt
 
 write_mark "test:int:skills-validate"
 echo "test:int:skills-validate ok"

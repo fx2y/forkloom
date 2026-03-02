@@ -263,10 +263,10 @@ describe("web run sandbox flow", () => {
 					{ status: 202, headers: { "content-type": "application/json" } },
 				);
 			}
-			if (url === `/runs/${runId}/skills`) {
-				return new Response(
-					JSON.stringify({
-						skills: [
+				if (url === `/runs/${runId}/skills`) {
+					return new Response(
+						JSON.stringify({
+							skills: [
 							{
 								skillId: "policy-qa",
 								name: "policy-qa",
@@ -274,14 +274,24 @@ describe("web run sandbox flow", () => {
 								path: "/skills/policy-qa/SKILL.md",
 								scope: "workspace",
 								hidden: false,
-								menuVisible: true,
-								allowedTools: ["Read", "Bash"],
-							},
-						],
-					}),
-					{ status: 200, headers: { "content-type": "application/json" } },
-				);
-			}
+									menuVisible: true,
+									allowedTools: ["Read", "Bash"],
+								},
+								{
+									skillId: "hidden-workflow",
+									name: "hidden-workflow",
+									description: "Hidden from picker",
+									path: "/skills/hidden-workflow/SKILL.md",
+									scope: "workspace",
+									hidden: false,
+									menuVisible: false,
+									allowedTools: ["Read"],
+								},
+							],
+						}),
+						{ status: 200, headers: { "content-type": "application/json" } },
+					);
+				}
 			if (
 				url === `/runs/${runId}/skills/preview` &&
 				init?.method === "POST"
@@ -461,11 +471,19 @@ describe("web run sandbox flow", () => {
 				root.querySelector("[data-run-provenance]")?.textContent,
 			).toContain("run_command#1");
 		});
-		await vi.waitFor(() => {
-			expect(root.querySelector("[data-run-skill-list]")?.textContent).toContain(
-				"policy-qa",
+			await vi.waitFor(() => {
+				expect(root.querySelector("[data-run-skill-list]")?.textContent).toContain(
+					"policy-qa",
+				);
+			});
+			expect(root.querySelector("[data-run-skill-list]")?.textContent).not.toContain(
+				"hidden-workflow",
 			);
-		});
+			const skillOptions = Array.from(
+				root.querySelectorAll<HTMLOptionElement>("[data-run-skill-options] option"),
+			).map((option) => option.value);
+			expect(skillOptions).toContain("policy-qa");
+			expect(skillOptions).not.toContain("hidden-workflow");
 
 		const skillNameInput = root.querySelector<HTMLInputElement>(
 			"[data-run-skill-name]",

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -12,6 +13,9 @@ export type Spec08ChecklistReport = {
 	taskAllDone: boolean;
 	requiredTaskMissing: string[];
 	requiredTaskNotDone: string[];
+	skillsValidateProofOk: boolean;
+	packsDynamicProofOk: boolean;
+	skillLiveProofOk: boolean;
 };
 
 const REQUIRED_TASK_IDS = [
@@ -44,12 +48,35 @@ async function queryJson(
 	return JSON.parse(trimmed) as Array<Record<string, unknown>>;
 }
 
+async function readProofJson(
+	path: string,
+): Promise<Record<string, unknown> | null> {
+	try {
+		const content = await readFile(path, "utf8");
+		const parsed = JSON.parse(content) as unknown;
+		return parsed && typeof parsed === "object"
+			? (parsed as Record<string, unknown>)
+			: null;
+	} catch {
+		return null;
+	}
+}
+
 export async function collectSpec08ChecklistReport(input: {
 	htnDbPath?: string;
 	tasksDbPath?: string;
+	validateReportPath?: string;
+	packProofPath?: string;
+	skillLiveProofPath?: string;
 } = {}): Promise<Spec08ChecklistReport> {
 	const htnDbPath = input.htnDbPath ?? "spec-0/08-htn.sqlite";
 	const tasksDbPath = input.tasksDbPath ?? "spec-0/08-tasks.sqlite";
+	const validateReportPath =
+		input.validateReportPath ?? ".cache/spec08/skills-validate.json";
+	const packProofPath =
+		input.packProofPath ?? ".cache/spec08/skills-pack-proof.json";
+	const skillLiveProofPath =
+		input.skillLiveProofPath ?? ".cache/spec08/skills-live-proof.json";
 
 	const reqRows = await queryJson(
 		htnDbPath,
@@ -76,12 +103,36 @@ export async function collectSpec08ChecklistReport(input: {
 	const requiredTaskNotDone = REQUIRED_TASK_IDS.filter(
 		(id) => requiredById.get(id) != null && requiredById.get(id) !== "done",
 	);
+	const validateReport = await readProofJson(validateReportPath);
+	const packProof = await readProofJson(packProofPath);
+	const skillLiveProof = await readProofJson(skillLiveProofPath);
+	const skillsValidateProofOk =
+		validateReport?.status === "ok" &&
+		typeof validateReport?.xmlBytes === "number" &&
+		Number(validateReport.xmlBytes) > 0 &&
+		Array.isArray(validateReport?.dynamicPacks) &&
+		validateReport.dynamicPacks.length >= 4;
+	const packsDynamicProofOk =
+		packProof?.status === "ok" &&
+		Array.isArray(packProof?.proofs) &&
+		packProof.proofs.length >= 4;
+	const skillLiveProofOk =
+		skillLiveProof?.status === "ok" &&
+		(typeof skillLiveProof?.runStatus === "string" &&
+			["running", "done", "failed", "aborted"].includes(
+				String(skillLiveProof.runStatus),
+			)) &&
+		typeof skillLiveProof?.skillExecStepCount === "number" &&
+		Number(skillLiveProof.skillExecStepCount) >= 1;
 
 	const status =
 		reqFullCoverMiss === 0 &&
 		taskAllDone &&
 		requiredTaskMissing.length === 0 &&
-		requiredTaskNotDone.length === 0
+		requiredTaskNotDone.length === 0 &&
+		skillsValidateProofOk &&
+		packsDynamicProofOk &&
+		skillLiveProofOk
 			? "ok"
 			: "fail";
 	return {
@@ -93,6 +144,9 @@ export async function collectSpec08ChecklistReport(input: {
 		taskAllDone,
 		requiredTaskMissing,
 		requiredTaskNotDone,
+		skillsValidateProofOk,
+		packsDynamicProofOk,
+		skillLiveProofOk,
 	};
 }
 
@@ -112,5 +166,8 @@ export function formatSpec08ChecklistSummary(
 		`task_all_done=${report.taskAllDone ? 1 : 0}`,
 		`required_missing=${report.requiredTaskMissing.length}`,
 		`required_not_done=${report.requiredTaskNotDone.length}`,
+		`validate_proof_ok=${report.skillsValidateProofOk ? 1 : 0}`,
+		`pack_proof_ok=${report.packsDynamicProofOk ? 1 : 0}`,
+		`skill_live_ok=${report.skillLiveProofOk ? 1 : 0}`,
 	].join(", ");
 }

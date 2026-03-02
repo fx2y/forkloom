@@ -1,17 +1,33 @@
-import { relative, resolve, sep } from "node:path";
+import { lstatSync, realpathSync, statSync } from "node:fs";
+import { dirname, relative, resolve, sep } from "node:path";
 
 const MARKDOWN_LINK_PATTERN = /\[[^\]]*]\(([^)]+)\)/g;
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+\-.]*:/i;
 
 export function resolveSkillPath(skillDir: string, relPath: string): string {
 	const root = resolve(skillDir);
+	const rootReal = resolveExistingRealPath(root);
 	const rel = relPath.trim();
 	if (rel.length === 0) {
 		throw new Error("skill relative path is required");
 	}
 	const candidate = resolve(root, rel);
-	if (candidate === root || !candidate.startsWith(`${root}${sep}`)) {
+	if (candidate === root || !isPathWithin(root, candidate)) {
 		throw new Error(`skill path escape: ${relPath}`);
+	}
+	const nearestExisting = findNearestExistingAncestor(candidate);
+	const nearestReal = realpathSync(nearestExisting);
+	if (!isPathWithin(rootReal, nearestReal)) {
+		throw new Error(`skill path escape via symlink: ${relPath}`);
+	}
+	if (pathExists(candidate)) {
+		const candidateStat = lstatSync(candidate);
+		if (candidateStat.isSymbolicLink()) {
+			const candidateReal = realpathSync(candidate);
+			if (!isPathWithin(rootReal, candidateReal)) {
+				throw new Error(`skill path symlink points outside root: ${relPath}`);
+			}
+		}
 	}
 	return candidate;
 }
@@ -81,4 +97,36 @@ function normalizeLinkTarget(target: string): string {
 	const noBrackets = trimmed.replace(/^<|>$/g, "");
 	const noTitle = noBrackets.split(/\s+/)[0] ?? "";
 	return noTitle.split(/[?#]/)[0] ?? "";
+}
+
+function isPathWithin(root: string, candidate: string): boolean {
+	return candidate === root || candidate.startsWith(`${root}${sep}`);
+}
+
+function pathExists(path: string): boolean {
+	try {
+		statSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function findNearestExistingAncestor(path: string): string {
+	let current = path;
+	while (!pathExists(current)) {
+		const parent = dirname(current);
+		if (parent === current) {
+			throw new Error(`path has no existing ancestor: ${path}`);
+		}
+		current = parent;
+	}
+	return current;
+}
+
+function resolveExistingRealPath(path: string): string {
+	if (!pathExists(path)) {
+		throw new Error(`skill root not found: ${path}`);
+	}
+	return realpathSync(path);
 }

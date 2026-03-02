@@ -643,7 +643,8 @@ export function mountRunSurface(
 	const renderSkills = () => {
 		clearNode(skillListNode);
 		clearNode(skillOptionsNode);
-		for (const skill of state.skills) {
+		const menuSkills = state.skills.filter((skill) => skill.menuVisible);
+		for (const skill of menuSkills) {
 			const option = document.createElement("option");
 			option.value = skill.name;
 			option.label = skill.description;
@@ -667,21 +668,21 @@ export function mountRunSurface(
 			pick.textContent =
 				state.selectedSkillName === skill.name ? "Selected" : "Select";
 			pick.disabled = state.selectedSkillName === skill.name;
-			pick.addEventListener("click", () => {
-				state = selectRunSkill(state, skill.name);
-				skillNameInput.value = skill.name;
-				update();
-			});
+				pick.addEventListener("click", () => {
+					state = selectRunSkill(state, skill.name);
+					skillNameInput.value = skill.name;
+					update();
+				});
 
-			row.append(left, pick);
-			skillListNode.append(row);
-		}
-		if (state.skills.length === 0) {
-			const empty = document.createElement("li");
-			empty.className = "hint";
-			empty.textContent = "No registered skills for this run.";
-			skillListNode.append(empty);
-		}
+				row.append(left, pick);
+				skillListNode.append(row);
+			}
+			if (menuSkills.length === 0) {
+				const empty = document.createElement("li");
+				empty.className = "hint";
+				empty.textContent = "No registered skills for this run.";
+				skillListNode.append(empty);
+			}
 
 		if (state.selectedSkillName) {
 			skillNameInput.value = state.selectedSkillName;

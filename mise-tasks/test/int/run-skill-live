@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm docker curl
+
+docker compose restart api >/dev/null
+
+mkdir -p .cache/spec08
+pnpm exec tsx scripts/harness/run-skill-live.ts
+pnpm exec vitest run tests/int/run-skill-live.test.ts
+
+write_mark "test:int:run-skill-live"
+echo "test:int:run-skill-live ok"

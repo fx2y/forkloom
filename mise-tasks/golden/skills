@@ -12,9 +12,14 @@ fi
 
 for needle in \
   "skills_validate_status=ok" \
+  "skills_pack_proof_status=ok" \
   "skills_perf_status=ok" \
+  "skills_live_proof_status=ok" \
   "skills_checklist_status=ok" \
   "req_full_cover_miss=0" \
+  "validate_proof_ok=1" \
+  "pack_proof_ok=1" \
+  "skill_live_ok=1" \
   "task_all_done=1"; do
   if ! rg -q "$needle" .cache/spec08/final-proof-index.txt; then
     echo "final-proof-index missing: $needle" >&2
@@ -23,8 +28,10 @@ for needle in \
 done
 
 jq -e '.status == "ok"' .cache/spec08/skills-validate.json >/dev/null
+jq -e '.status == "ok"' .cache/spec08/skills-pack-proof.json >/dev/null
 jq -e '.status == "ok"' .cache/spec08/skills-perf.json >/dev/null
 jq -e '.status == "ok"' .cache/spec08/skills-checklist.report.json >/dev/null
+jq -e '.status == "ok"' .cache/spec08/skills-live-proof.json >/dev/null
 
 if [[ ! -f fixtures/golden/skills.available.xml ]]; then
   echo "missing skills XML golden fixture: fixtures/golden/skills.available.xml" >&2

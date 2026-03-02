@@ -28,7 +28,9 @@ export {
 	type SkillFileReadResult,
 } from "./lazy";
 export { runSkillScript } from "./bash-runner";
+export { createSandboxSkillRunner } from "./sandbox-runner";
 export { executeSkillPlanDurably, type SkillExecLedgerRow } from "./runtime";
+export { parseSkillArgs } from "./args";
 export { readPrefixBytes, SkillRegistry } from "./registry";
 export { buildAvailableSkillsXml } from "./xml";
 export type {

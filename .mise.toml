@@ -261,10 +261,17 @@ depends = ["svc:health", "test:int:doc-surface", "test:int:doc-corpus", "fault:d
 sources = [".mise.toml", "scripts/harness/spec07-sql.ts", "scripts/harness/run-doc-checklist.ts", "tests/unit/spec07-sql.test.ts", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/doc-checklist", "package.json", "pnpm-lock.yaml"]
 outputs = [".cache/mise-marks/test__int__doc-checklist.ok", ".cache/spec07/doc-checklist.report.json", ".cache/spec07/cy10-dag.scan.txt", ".cache/spec07/cy10-docs.scan.txt", ".cache/spec07/final-proof-index.txt"]
 
+[tasks."test:int:run-skill-live"]
+run = "bash ./mise-tasks/test/int/run-skill-live"
+depends = ["svc:health"]
+sources = ["apps/api/src/skill/**/*.ts", "apps/api/src/workflow/run-sandbox.ts", "apps/api/src/sandbox/**/*.ts", "scripts/harness/live-support.ts", "scripts/harness/run-live-support.ts", "scripts/harness/run-skill-live.ts", "tests/int/run-skill-live.test.ts", "mise-tasks/test/int/run-skill-live", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__run-skill-live.ok", ".cache/spec08/skills-live-proof.json"]
+
 [tasks."test:int:skills-validate"]
 run = "bash ./mise-tasks/test/int/skills-validate"
-sources = ["apps/api/src/skill/**/*.ts", "apps/api/src/run/**/*.ts", "apps/api/src/http/**/*.ts", "apps/web/src/**/*.ts", "apps/web/test/**/*.ts", "tests/unit/**/*skill*.test.ts", "tests/unit/run-*.test.ts", "tests/unit/actor-service.test.ts", "tests/unit/spec08-sql.test.ts", "scripts/harness/skills-validate.ts", "scripts/harness/spec08-sql.ts", "skills/**/*.md", "skills/**/*.json", "skills/**/*.sh", "mise-tasks/test/int/skills-validate", "package.json", "pnpm-lock.yaml"]
-outputs = [".cache/mise-marks/test__int__skills-validate.ok", ".cache/spec08/skills-validate.json", ".cache/spec08/skills.available.xml", ".cache/spec08/cy6-policy.scan.txt", ".cache/spec08/cy6-contract.scan.txt", ".cache/spec08/cy6-invoice.scan.txt", ".cache/spec08/cy7-actions.scan.txt", ".cache/spec08/cy7-reducer.scan.txt", ".cache/spec08/cy7-ui.scan.txt", ".cache/spec08/cy7-queue.scan.txt", ".cache/spec08/cy8-kind-scan.ast.txt"]
+depends = ["test:int:run-skill-live"]
+sources = ["apps/api/src/skill/**/*.ts", "apps/api/src/run/**/*.ts", "apps/api/src/http/**/*.ts", "apps/web/src/**/*.ts", "apps/web/test/**/*.ts", "tests/int/run-skill-live.test.ts", "tests/unit/**/*skill*.test.ts", "tests/unit/run-*.test.ts", "tests/unit/actor-service.test.ts", "tests/unit/spec08-sql.test.ts", "scripts/harness/skills-validate.ts", "scripts/harness/run-skill-live.ts", "scripts/harness/spec08-sql.ts", "skills/**/*.md", "skills/**/*.json", "skills/**/*.sh", "mise-tasks/test/int/skills-validate", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__skills-validate.ok", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-pack-proof.json", ".cache/spec08/skills.available.xml", ".cache/spec08/cy6-policy.scan.txt", ".cache/spec08/cy6-contract.scan.txt", ".cache/spec08/cy6-invoice.scan.txt", ".cache/spec08/cy7-actions.scan.txt", ".cache/spec08/cy7-reducer.scan.txt", ".cache/spec08/cy7-ui.scan.txt", ".cache/spec08/cy7-queue.scan.txt", ".cache/spec08/cy8-kind-scan.ast.txt", ".cache/spec08/cy8-skill-live.scan.txt"]
 
 [tasks."test:int:skills-perf"]
 run = "bash ./mise-tasks/test/int/skills-perf"
@@ -274,7 +281,7 @@ outputs = [".cache/mise-marks/test__int__skills-perf.ok", ".cache/spec08/skills-
 [tasks."test:int:skills-checklist"]
 run = "bash ./mise-tasks/test/int/skills-checklist"
 depends = ["test:int:skills-validate", "test:int:skills-perf", "check:scope-guard"]
-sources = [".mise.toml", "scripts/harness/spec08-sql.ts", "scripts/harness/run-skill-checklist.ts", "tests/unit/spec08-sql.test.ts", "spec-0/08-htn.sqlite", "spec-0/08-tasks.sqlite", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/skills-checklist", "package.json", "pnpm-lock.yaml"]
+sources = [".mise.toml", "scripts/harness/spec08-sql.ts", "scripts/harness/run-skill-checklist.ts", "tests/unit/spec08-sql.test.ts", ".cache/spec08/skills-live-proof.json", ".cache/spec08/skills-pack-proof.json", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-perf.json", "spec-0/08-htn.sqlite", "spec-0/08-tasks.sqlite", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/skills-checklist", "package.json", "pnpm-lock.yaml"]
 outputs = [".cache/mise-marks/test__int__skills-checklist.ok", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/final-proof-index.txt"]
 
 [tasks."test:int:doc-force"]
@@ -316,6 +323,7 @@ run = [
   "mise run test:int:doc-surface",
   "mise run test:int:doc-corpus",
   "mise run test:int:doc-checklist",
+  "mise run test:int:run-skill-live",
   "mise run test:int:skills-validate",
   "mise run test:int:skills-perf",
   "mise run test:int:skills-checklist"
@@ -349,6 +357,7 @@ run = [
   "mise run --force test:int:doc-surface",
   "mise run --force test:int:doc-corpus",
   "mise run --force test:int:doc-checklist",
+  "mise run --force test:int:run-skill-live",
   "mise run --force test:int:skills-validate",
   "mise run --force test:int:skills-perf",
   "mise run --force test:int:skills-checklist"
@@ -379,7 +388,7 @@ outputs = [".cache/mise-marks/golden__doc.ok", ".cache/spec07/final-proof-index.
 [tasks."golden:skills"]
 run = "bash ./mise-tasks/golden/skills"
 depends = ["test:int:skills-checklist"]
-sources = [".cache/spec08/final-proof-index.txt", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-perf.json", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/skills.available.xml", "fixtures/golden/skills.available.xml", "mise-tasks/golden/skills"]
+sources = [".cache/spec08/final-proof-index.txt", ".cache/spec08/skills-live-proof.json", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-pack-proof.json", ".cache/spec08/skills-perf.json", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/skills.available.xml", "fixtures/golden/skills.available.xml", "mise-tasks/golden/skills"]
 outputs = [".cache/mise-marks/golden__skills.ok", ".cache/spec08/final-proof-index.txt"]
 
 [tasks."golden:accept"]
