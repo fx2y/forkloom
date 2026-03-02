@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
 	type PiPromptInput,
 	RpcPiSessionPort,
+	waitForPiIdle,
 } from "../../apps/api/src/pi/session-port";
 
 type CommandEnvelope = {
@@ -160,5 +161,34 @@ describe("RpcPiSessionPort streaming behavior", () => {
 		expect(existsSync(sessionFile)).toBe(true);
 		expect(readFileSync(sessionFile, "utf8")).toContain('"type":"session"');
 		rmSync(sessionDir, { recursive: true, force: true });
+	});
+
+	it("waitForPiIdle does not return on transient initial idle state", async () => {
+		let stateIndex = 0;
+		const states = [
+			{ isStreaming: false, pending: 0 },
+			{ isStreaming: true, pending: 1 },
+			{ isStreaming: false, pending: 0 },
+			{ isStreaming: false, pending: 0 },
+		] as const;
+
+		await waitForPiIdle({
+			drainEvents: () => [],
+			getState: async () => {
+				const fallback = states.at(-1);
+				if (!fallback) {
+					throw new Error("missing fallback state");
+				}
+				const current = states[stateIndex] ?? fallback;
+				stateIndex += 1;
+				return current;
+			},
+			pollMs: 1,
+			timeoutMs: 500,
+			minWaitMs: 0,
+			idleGraceMs: 2,
+		});
+
+		expect(stateIndex).toBeGreaterThanOrEqual(3);
 	});
 });

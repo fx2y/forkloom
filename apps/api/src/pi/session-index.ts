@@ -32,7 +32,9 @@ function asSessionEntry(value: unknown, lineNo: number): SessionEntryRecord {
 	}
 	const id = value.id;
 	const type = value.type;
-	const parentId = value.parentId;
+	const parentIdRaw = value.parentId;
+	const parentId =
+		parentIdRaw === null || parentIdRaw === undefined ? undefined : parentIdRaw;
 	if (typeof id !== "string" || id.length === 0) {
 		throw new Error(`session index: line ${lineNo} has invalid id`);
 	}
@@ -158,6 +160,12 @@ export function parseSessionJsonl(content: string): SessionTreeIndex {
 		}
 		const entry = asSessionEntry(parsed, index + 1);
 		if (byId.has(entry.id)) {
+			const existing = byId.get(entry.id);
+			// PI RPC adapters may materialize a provisional session header before the
+			// upstream process flushes its own header; keep the first and ignore repeats.
+			if (existing?.type === "session" && entry.type === "session") {
+				continue;
+			}
 			throw new Error(`session index: duplicate entry id=${entry.id}`);
 		}
 		entries.push(entry);

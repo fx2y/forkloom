@@ -22,7 +22,11 @@ export type {
 } from "./rpc-client";
 export { MockPiProviderManager } from "./mock-provider";
 export type { MockPiProviderLease } from "./mock-provider";
-export { createPiSessionPort, RpcPiSessionPort } from "./session-port";
+export {
+	createPiSessionPort,
+	RpcPiSessionPort,
+	waitForPiIdle,
+} from "./session-port";
 export type {
 	CreatePiSessionInput,
 	PiImageInput,

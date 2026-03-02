@@ -47,4 +47,23 @@ describe("PiRpcClient", () => {
 		expect(events).toEqual([{ type: "agent_event", data: { chunk: "x" } }]);
 		await client.close();
 	});
+
+	it("returns the settled latest response when duplicate ids arrive", async () => {
+		const process = new FakePiProcess();
+		const client = new PiRpcClient({ process, responseTimeoutMs: 1_000 });
+
+		process.stdout.write(
+			`${JSON.stringify({ type: "response", id: "cmd-1", success: true, data: {} })}\n`,
+		);
+		setTimeout(() => {
+			process.stdout.write(
+				`${JSON.stringify({ type: "response", id: "cmd-1", success: false, error: "late failure" })}\n`,
+			);
+		}, 30);
+
+		const response = await client.waitResponse("cmd-1", { settleMs: 100 });
+		expect(response.success).toBe(false);
+		expect(response.error).toBe("late failure");
+		await client.close();
+	});
 });

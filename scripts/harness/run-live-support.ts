@@ -76,7 +76,7 @@ export function makeRunSpec(input: {
 	userMsg: string;
 	attachments?: string[] | undefined;
 	scope?: RunSpec["scope"] | undefined;
-	profile?: "safe" | "priv" | undefined;
+	profile?: RunSpec["profile"] | undefined;
 }): RunSpec {
 	const spec: RunSpec = {
 		runId: createRunId(),

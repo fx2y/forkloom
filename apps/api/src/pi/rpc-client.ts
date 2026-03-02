@@ -36,6 +36,10 @@ export type PiRpcClientDeps = {
 	closeTimeoutMs?: number | undefined;
 };
 
+export type WaitResponseOptions = {
+	settleMs?: number | undefined;
+};
+
 export type SpawnPiRpcInput = {
 	provider: string;
 	model: string;
@@ -94,6 +98,7 @@ export class PiRpcClient {
 	private readonly responseTimeoutMs: number;
 	private readonly closeTimeoutMs: number;
 	private readonly responseById: Record<string, PiRpcResponse>;
+	private readonly responseUpdatedAtById: Record<string, number>;
 	private readonly eventQueue: PiRpcEvent[];
 	private readonly lines: readline.Interface;
 
@@ -102,6 +107,7 @@ export class PiRpcClient {
 		this.responseTimeoutMs = deps.responseTimeoutMs ?? 30_000;
 		this.closeTimeoutMs = deps.closeTimeoutMs ?? 1_000;
 		this.responseById = Object.create(null) as Record<string, PiRpcResponse>;
+		this.responseUpdatedAtById = Object.create(null) as Record<string, number>;
 		this.eventQueue = [];
 		this.lines = readline.createInterface({ input: this.process.stdout });
 		this.lines.on("line", (line) => {
@@ -112,6 +118,7 @@ export class PiRpcClient {
 			const parsed = JSON.parse(trimmed) as unknown;
 			if (isRpcResponse(parsed) && typeof parsed.id === "string") {
 				this.responseById[parsed.id] = parsed;
+				this.responseUpdatedAtById[parsed.id] = Date.now();
 				return;
 			}
 			if (isRecord(parsed)) {
@@ -124,12 +131,22 @@ export class PiRpcClient {
 		this.process.stdin.write(`${JSON.stringify(payload)}\n`);
 	}
 
-	async waitResponse(id: string): Promise<PiRpcResponse> {
+	async waitResponse(
+		id: string,
+		options: WaitResponseOptions = {},
+	): Promise<PiRpcResponse> {
+		const settleMs = options.settleMs ?? 0;
 		const deadline = Date.now() + this.responseTimeoutMs;
 		while (Date.now() < deadline) {
 			const found = this.responseById[id];
 			if (found) {
+				const updatedAt = this.responseUpdatedAtById[id] ?? 0;
+				if (settleMs > 0 && Date.now() - updatedAt < settleMs) {
+					await sleep(10);
+					continue;
+				}
 				delete this.responseById[id];
+				delete this.responseUpdatedAtById[id];
 				return found;
 			}
 			await sleep(25);

@@ -7,6 +7,7 @@ import {
 	type PiRpcPayload,
 	type PiRpcResponse,
 	type SpawnPiRpcInput,
+	type WaitResponseOptions,
 	spawnPiRpcProcess,
 } from "./rpc-client";
 
@@ -36,10 +37,76 @@ export type PiSessionStats = Record<string, unknown>;
 
 type PiRpcClientLike = {
 	send(payload: PiRpcPayload): void;
-	waitResponse(id: string): Promise<PiRpcResponse>;
+	waitResponse(
+		id: string,
+		options?: WaitResponseOptions | undefined,
+	): Promise<PiRpcResponse>;
 	drainEvents(): PiRpcEvent[];
 	close(): Promise<void>;
 };
+
+async function sleep(ms: number): Promise<void> {
+	await new Promise<void>((resolveSleep) => {
+		setTimeout(resolveSleep, ms);
+	});
+}
+
+export async function waitForPiIdle(
+	input: {
+		drainEvents: () => PiRpcEvent[];
+		getState: () => Promise<Pick<PiSessionState, "isStreaming" | "pending">>;
+		onEvent?: ((event: PiRpcEvent) => Promise<void> | void) | undefined;
+		pollMs?: number | undefined;
+		timeoutMs?: number | undefined;
+		minWaitMs?: number | undefined;
+		idleGraceMs?: number | undefined;
+	} = {
+		drainEvents: () => [],
+		getState: async () => ({ isStreaming: false, pending: 0 }),
+	},
+): Promise<void> {
+	const pollMs = input.pollMs ?? 50;
+	const timeoutMs = input.timeoutMs ?? 30_000;
+	const minWaitMs = input.minWaitMs ?? 250;
+	const idleGraceMs = input.idleGraceMs ?? 200;
+	const startedAt = Date.now();
+	const deadline = startedAt + timeoutMs;
+	let sawActivity = false;
+	let idleSince: number | null = null;
+
+	while (Date.now() < deadline) {
+		const events = input.drainEvents();
+		if (events.length > 0) {
+			sawActivity = true;
+			idleSince = null;
+		}
+		for (const event of events) {
+			if (input.onEvent) {
+				await input.onEvent(event);
+			}
+		}
+
+		const state = await input.getState();
+		const isIdle = !state.isStreaming && state.pending === 0;
+		if (!isIdle) {
+			sawActivity = true;
+			idleSince = null;
+		} else {
+			const now = Date.now();
+			const minObserved = sawActivity || now - startedAt >= minWaitMs;
+			if (minObserved) {
+				idleSince ??= now;
+				if (now - idleSince >= idleGraceMs) {
+					return;
+				}
+			}
+		}
+
+		await sleep(pollMs);
+	}
+
+	throw new Error("timed out waiting for pi stream idle state");
+}
 
 export interface PiSessionPort {
 	prompt(input: PiPromptInput): Promise<void>;
@@ -58,6 +125,8 @@ export interface PiSessionPort {
 		pollMs?: number | undefined;
 		timeoutMs?: number | undefined;
 		onEvent?: ((event: PiRpcEvent) => Promise<void> | void) | undefined;
+		minWaitMs?: number | undefined;
+		idleGraceMs?: number | undefined;
 	}): Promise<void>;
 	close(): Promise<void>;
 }
@@ -147,10 +216,13 @@ export class RpcPiSessionPort implements PiSessionPort {
 	private async rpcCommand(
 		command: string,
 		payload: Omit<PiRpcPayload, "id" | "type"> = {},
+		options?: { settleMs?: number | undefined },
 	): Promise<Record<string, unknown>> {
 		const id = this.nextId(command);
 		this.rpc.send({ ...payload, id, type: command });
-		const response = await this.rpc.waitResponse(id);
+		const response = await this.rpc.waitResponse(id, {
+			settleMs: options?.settleMs,
+		});
 		return assertSuccess(command, response);
 	}
 
@@ -161,11 +233,17 @@ export class RpcPiSessionPort implements PiSessionPort {
 				"prompt during active stream requires streamingBehavior (steer|followUp)",
 			);
 		}
-		await this.rpcCommand("prompt", {
-			message: input.message,
-			images: input.images,
-			streamingBehavior: input.streamingBehavior,
-		});
+		await this.rpcCommand(
+			"prompt",
+			{
+				message: input.message,
+				images: input.images,
+				streamingBehavior: input.streamingBehavior,
+			},
+			{
+				settleMs: 250,
+			},
+		);
 	}
 
 	async steer(message: string): Promise<void> {
@@ -225,30 +303,18 @@ export class RpcPiSessionPort implements PiSessionPort {
 		pollMs?: number | undefined;
 		timeoutMs?: number | undefined;
 		onEvent?: ((event: PiRpcEvent) => Promise<void> | void) | undefined;
+		minWaitMs?: number | undefined;
+		idleGraceMs?: number | undefined;
 	}): Promise<void> {
-		const pollMs = options?.pollMs ?? 50;
-		const timeoutMs = options?.timeoutMs ?? 30_000;
-		const deadline = Date.now() + timeoutMs;
-
-		while (Date.now() < deadline) {
-			const events = this.rpc.drainEvents();
-			for (const event of events) {
-				if (options?.onEvent) {
-					await options.onEvent(event);
-				}
-			}
-
-			const state = await this.getState();
-			if (!state.isStreaming && state.pending === 0) {
-				return;
-			}
-
-			await new Promise((resolveSleep) => {
-				setTimeout(resolveSleep, pollMs);
-			});
-		}
-
-		throw new Error("timed out waiting for pi stream idle state");
+		await waitForPiIdle({
+			drainEvents: () => this.rpc.drainEvents(),
+			getState: () => this.getState(),
+			onEvent: options?.onEvent,
+			pollMs: options?.pollMs,
+			timeoutMs: options?.timeoutMs,
+			minWaitMs: options?.minWaitMs,
+			idleGraceMs: options?.idleGraceMs,
+		});
 	}
 
 	async close(): Promise<void> {

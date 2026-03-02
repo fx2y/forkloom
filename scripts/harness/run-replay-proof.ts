@@ -10,9 +10,24 @@ import {
 } from "./run-live-support";
 import { runReplayCheck } from "./run-replay";
 
+function replayTimeoutMs(): number {
+	const raw = process.env.RUN_REPLAY_TIMEOUT_MS;
+	if (!raw) {
+		return 300_000;
+	}
+	const parsed = Number.parseInt(raw, 10);
+	if (!Number.isFinite(parsed) || parsed < 30_000) {
+		throw new Error(
+			`RUN_REPLAY_TIMEOUT_MS must be integer >= 30000, got: ${raw}`,
+		);
+	}
+	return parsed;
+}
+
 async function main(): Promise<void> {
+	const timeoutMs = replayTimeoutMs();
 	await waitForApiHealthyStable({
-		timeoutMs: 120_000,
+		timeoutMs,
 		consecutiveSuccesses: 3,
 		pollIntervalMs: 500,
 		requireDeps: true,
@@ -29,11 +44,11 @@ async function main(): Promise<void> {
 		payload: { text: "replay proof command" },
 	});
 	const truth = await waitForReplayablePayload(spec.runId, {
-		timeoutMs: 120_000,
+		timeoutMs,
 		pollIntervalMs: 500,
 	});
 	const terminalState = await waitForRunTerminalState(spec.runId, {
-		timeoutMs: 120_000,
+		timeoutMs,
 		pollIntervalMs: 500,
 	});
 	await runReplayCheck({

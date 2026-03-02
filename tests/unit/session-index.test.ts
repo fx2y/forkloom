@@ -46,6 +46,32 @@ describe("parseSessionJsonl", () => {
 			),
 		).toThrow("dangling parent");
 	});
+
+	it("ignores duplicate session headers with the same id", () => {
+		const parsed = parseSessionJsonl(
+			[
+				'{"type":"session","id":"root"}',
+				'{"type":"session","id":"root"}',
+				'{"type":"assistant","id":"a1","parentId":"root"}',
+			].join("\n"),
+		);
+
+		expect(parsed.entryCount).toBe(2);
+		expect(parsed.rootId).toBe("root");
+		expect(parsed.leafId).toBe("a1");
+	});
+
+	it("accepts null parentId on root-level entries", () => {
+		const parsed = parseSessionJsonl(
+			[
+				'{"type":"session","id":"root"}',
+				'{"type":"model_change","id":"m1","parentId":null}',
+			].join("\n"),
+		);
+
+		expect(parsed.entryCount).toBe(2);
+		expect(parsed.rootId).toBe("root");
+	});
 });
 
 describe("assertToolCallResultAdjacency", () => {
