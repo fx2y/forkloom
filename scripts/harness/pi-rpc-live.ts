@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import readline from "node:readline";
 import { prepareWritablePiHome } from "../../apps/api/src/pi/session-factory";
+import { ensureSessionFileExists } from "../../apps/api/src/pi/session-file";
 
 type RpcResponse = {
 	type: string;
@@ -147,6 +148,7 @@ async function runPiRpc(
 ): Promise<{ sessionFile: string; sessionFileExists: boolean; lines: number }> {
 	const responses = new Map<string, RpcResponse>();
 	let stateSessionFile = "";
+	let stateSessionId = "";
 
 	const piBin = resolve("node_modules", ".bin", "pi");
 	const pi = spawn(
@@ -173,8 +175,12 @@ async function runPiRpc(
 			responses.set(msg.id, msg);
 			if (msg.command === "get_state" && msg.success) {
 				const sessionFile = msg.data?.sessionFile;
+				const sessionId = msg.data?.sessionId;
 				if (typeof sessionFile === "string") {
 					stateSessionFile = sessionFile;
+				}
+				if (typeof sessionId === "string" && sessionId.length > 0) {
+					stateSessionId = sessionId;
 				}
 			}
 		}
@@ -247,6 +253,13 @@ async function runPiRpc(
 	if (!stateSessionFile) {
 		throw new Error("pi state did not return sessionFile");
 	}
+	if (!stateSessionId) {
+		throw new Error("pi state did not return sessionId");
+	}
+	await ensureSessionFileExists({
+		sessionFile: stateSessionFile,
+		sessionId: stateSessionId,
+	});
 
 	const sessionFileExists = existsSync(stateSessionFile);
 	const rawSession = sessionFileExists

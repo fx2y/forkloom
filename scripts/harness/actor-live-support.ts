@@ -48,6 +48,30 @@ export async function fetchActorState(actorId: string): Promise<ActorState> {
 	});
 }
 
+export async function waitForActorStatus(
+	actorId: string,
+	status: ActorState["status"],
+	options: {
+		timeoutMs?: number | undefined;
+		pollMs?: number | undefined;
+	} = {},
+): Promise<ActorState> {
+	const timeoutMs = options.timeoutMs ?? 30_000;
+	const pollMs = options.pollMs ?? 250;
+	const deadline = Date.now() + timeoutMs;
+	let lastState: ActorState | null = null;
+	while (Date.now() < deadline) {
+		lastState = await fetchActorState(actorId);
+		if (lastState.status === status) {
+			return lastState;
+		}
+		await new Promise((resolveSleep) => setTimeout(resolveSleep, pollMs));
+	}
+	throw new Error(
+		`timed out waiting actor ${actorId} status=${status}; last=${lastState?.status ?? "unknown"}`,
+	);
+}
+
 export async function postActorMessage(
 	actorId: string,
 	payload: MailboxPost,

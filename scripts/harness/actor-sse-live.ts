@@ -1,9 +1,9 @@
 import {
 	ActorEventStream,
 	createActor,
-	fetchActorState,
 	makeActorSpec,
 	postActorMessage,
+	waitForActorStatus,
 	writeJson,
 } from "./actor-live-support";
 
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
 				prefixSeqs: toSeqList(prefix.events),
 				replaySeqs: toSeqList(replayTail.events),
 				secondTabSeqs: toSeqList(secondEvents),
-				actorState: await fetchActorState(actorId),
+				actorState: await waitForActorStatus(actorId, "idle"),
 			});
 		} finally {
 			replay.close();

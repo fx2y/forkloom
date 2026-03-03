@@ -6,4 +6,4 @@ paths: ["tests/**", "scripts/harness/**", "fixtures/**", "schema/**", "docker-co
 - **Fault**: Real DBOS crash/recovery ONLY. 0 hash/row diffs. Synthetic drills REJECTED.
 - **Latch**: Close MUST be non-vacuous (req miss 0, validate/pack/live booleans 1). Absence of error != green.
 - **Proofs**: NO manual UI signoffs. Packs demand dynamic-output proofs. Real RPC proof stays in `test:int:pi-rpc-live`.
-- **Triage**: Ops SQL (`test:int:ops-sql`) ALWAYS FIRST.
+- **Triage**: Ops SQL (`test:int:ops-sql`) ALWAYS FIRST. Fail fast on API floor/reload/filter/theme/stream invariants.
