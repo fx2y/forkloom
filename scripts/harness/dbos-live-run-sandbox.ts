@@ -53,6 +53,8 @@ function sampleRun() {
 			scope: "team" as const,
 			userMsg: "ship it",
 			attachments: [{ sha256: "a".repeat(64) }],
+			orgId: "00000000-0000-0000-0000-000000000001",
+			writeTarget: "ws" as const,
 			profile: "safe" as const,
 		},
 		createdAt: "2026-02-28T00:00:00.000Z",

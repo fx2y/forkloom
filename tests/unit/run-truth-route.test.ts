@@ -48,6 +48,8 @@ describe("run truth route", () => {
 							scope: "team",
 							userMsg: "truth",
 							attachments: [],
+							orgId: "org-1",
+							writeTarget: "ws",
 						},
 						createdAt: "2026-03-01T00:00:00.000Z",
 						updatedAt: "2026-03-01T00:00:01.000Z",

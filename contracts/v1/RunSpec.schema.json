@@ -2,7 +2,14 @@
   "$id": "https://forkloom/contracts/v1/RunSpec.schema.json",
   "title": "RunSpec",
   "type": "object",
-  "required": ["runId", "scope", "userMsg", "attachments"],
+  "required": [
+    "runId",
+    "scope",
+    "userMsg",
+    "attachments",
+    "orgId",
+    "writeTarget"
+  ],
   "properties": {
     "runId": {
       "type": "string",
@@ -30,6 +37,22 @@
         "additionalProperties": false
       }
     },
+    "orgId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "wsId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "memberId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "writeTarget": {
+      "type": "string",
+      "enum": ["org", "ws", "member"]
+    },
     "workdirRef": {
       "type": "object",
       "required": ["sha256"],
@@ -50,5 +73,49 @@
       "enum": ["safe", "std", "priv"]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "writeTarget": {
+            "const": "org"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "wsId": false,
+          "memberId": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "writeTarget": {
+            "const": "ws"
+          }
+        }
+      },
+      "then": {
+        "required": ["wsId"],
+        "properties": {
+          "memberId": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "writeTarget": {
+            "const": "member"
+          }
+        }
+      },
+      "then": {
+        "required": ["wsId", "memberId"]
+      }
+    }
+  ],
   "additionalProperties": false
 }

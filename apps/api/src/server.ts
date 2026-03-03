@@ -19,6 +19,7 @@ import {
 } from "./durability";
 import { buildHealthHandler } from "./http/health";
 import { buildApiRouter } from "./http/routes";
+import { resolveScope, withScopeTx } from "./http/scope";
 import {
 	ExtensionService,
 	MockPiProviderManager,
@@ -385,6 +386,8 @@ async function bootstrap() {
 		artifactService: service,
 		actorService,
 		runService,
+		resolveScope,
+		withScopeTx,
 	});
 	app.get(
 		"/health",

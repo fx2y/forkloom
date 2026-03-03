@@ -13,6 +13,8 @@ function makeRun() {
 			scope: "team" as const,
 			userMsg: "ship it",
 			attachments: [],
+			orgId: "org-1",
+			writeTarget: "ws" as const,
 		},
 		createdAt: ISO,
 		updatedAt: ISO,

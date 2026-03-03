@@ -109,6 +109,10 @@ export type RunSpec = {
 	scope: RunScope;
 	userMsg: string;
 	attachments: RunArtifactRef[];
+	orgId: string;
+	wsId?: string;
+	memberId?: string;
+	writeTarget: "org" | "ws" | "member";
 	workdirRef?: RunArtifactRef;
 	modelPref?: string;
 	profile?: RunProfile;

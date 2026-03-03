@@ -29,6 +29,8 @@ describe("executeRunOnce step ledger", () => {
 							scope: "team",
 							userMsg: "ship",
 							attachments: [],
+							orgId: "org-1",
+							writeTarget: "ws",
 						},
 						createdAt: ISO,
 						updatedAt: ISO,

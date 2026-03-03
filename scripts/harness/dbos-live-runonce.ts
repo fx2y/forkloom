@@ -50,6 +50,8 @@ function sampleRun() {
 			scope: "team" as const,
 			userMsg: "reply with one concise line",
 			attachments: [{ sha256: "a".repeat(64) }],
+			orgId: "00000000-0000-0000-0000-000000000001",
+			writeTarget: "ws" as const,
 		},
 		createdAt: "2026-02-27T00:00:00.000Z",
 		updatedAt: "2026-02-27T00:00:00.000Z",

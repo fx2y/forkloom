@@ -20,6 +20,8 @@ function makeRunModel(overrides: Partial<RunModel> = {}): RunModel {
 			scope: "me",
 			userMsg: "hi",
 			attachments: [],
+			orgId: "org-1",
+			writeTarget: "member",
 		},
 		createdAt: BASE_TS,
 		updatedAt: BASE_TS,

@@ -65,6 +65,8 @@ function minSpec(overrides: Partial<RunSpecModel> = {}): RunSpecModel {
 		scope: "me",
 		userMsg: "hello",
 		attachments: [],
+		orgId: "org-1",
+		writeTarget: "member",
 		...overrides,
 	};
 }

@@ -36,6 +36,9 @@ describe("run-request-parsers", () => {
 			scope: "team",
 			userMsg: " hello ",
 			attachments: [{ sha256: "a".repeat(64) }],
+			orgId: "org-1",
+			writeTarget: "ws",
+			wsId: "ws-1",
 			workdirRef: { sha256: "b".repeat(64) },
 			modelPref: "gpt-4.1",
 		});
@@ -51,6 +54,9 @@ describe("run-request-parsers", () => {
 			scope: "team",
 			userMsg: "hello",
 			attachments: [],
+			orgId: "org-1",
+			writeTarget: "ws",
+			wsId: "ws-1",
 			profile: "safe",
 		});
 
@@ -64,6 +70,9 @@ describe("run-request-parsers", () => {
 				scope: "team",
 				userMsg: "hello",
 				attachments: [],
+				orgId: "org-1",
+				writeTarget: "ws",
+				wsId: "ws-1",
 			}),
 		).toThrow("invalid run payload:");
 		expect(() =>
@@ -72,6 +81,9 @@ describe("run-request-parsers", () => {
 				scope: "team",
 				userMsg: "   ",
 				attachments: [],
+				orgId: "org-1",
+				writeTarget: "ws",
+				wsId: "ws-1",
 			}),
 		).toThrow("userMsg is required");
 	});

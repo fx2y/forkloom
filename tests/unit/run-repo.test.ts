@@ -126,6 +126,8 @@ describe("PgRunRepo", () => {
 				scope: "team",
 				userMsg: "hello",
 				attachments: [],
+				orgId: "org-1",
+				writeTarget: "ws",
 			},
 		});
 
@@ -158,6 +160,8 @@ describe("PgRunRepo", () => {
 				scope: "team",
 				userMsg: "hello",
 				attachments: [],
+				orgId: "org-1",
+				writeTarget: "ws",
 			},
 		});
 

@@ -8,6 +8,7 @@ require_cmds rg ast-grep
 mkdir -p .cache/spec07
 mkdir -p .cache/spec08
 mkdir -p .cache/spec09
+mkdir -p .cache/spec10
 rg -n "No generalized observability|No extra event bus|No provenance DB" \
   spec-0/06-spec.md README.md docs/adr > .cache/spec07/scope-guard.c4-not-now.txt
 
@@ -158,6 +159,17 @@ for needle in "name: policy-qa" "name: contract-review" "name: invoice-extract" 
     exit 1
   fi
 done
+
+if rg -n "app\.(get|post|put|patch|delete)\(\"/(docs|extensions|packages|themes|reload)" apps/api/src/http > .cache/spec10/scope-guard.ext-route-violations.txt; then
+  echo "top-level frozen routes forbidden" >&2
+  exit 1
+fi
+
+ast-grep --lang typescript -p "RUN_C7_TOP_LEVEL_ROUTE_BANS" apps/api/src/run/public-surface.ts > .cache/spec10/scope-guard.ast.txt
+if [[ ! -s .cache/spec10/scope-guard.ast.txt ]]; then
+  echo "scope guard ast-grep found no C7 top-level route ban anchor" >&2
+  exit 1
+fi
 
 write_mark "check:scope-guard"
 echo "check:scope-guard ok"

@@ -83,6 +83,8 @@ export function makeRunSpec(input: {
 		scope: input.scope ?? "team",
 		userMsg: input.userMsg,
 		attachments: (input.attachments ?? []).map((sha256) => ({ sha256 })),
+		orgId: "00000000-0000-0000-0000-000000000001",
+		writeTarget: "ws",
 	};
 	if (input.profile) {
 		spec.profile = input.profile;

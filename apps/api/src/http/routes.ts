@@ -12,6 +12,9 @@ import {
 } from "./request-parsers";
 import { asyncHandler, mapError } from "./route-utils";
 import { attachRunRoutes } from "./run-routes";
+import { resolveScope } from "./scope";
+import type { resolveScope as resolveScopeFn, withScopeTx } from "./scope";
+import type { TenantScopeContext } from "../run/ports";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -19,9 +22,23 @@ export function buildApiRouter(deps: {
 	artifactService: ArtifactService;
 	actorService?: ActorService | undefined;
 	runService?: RunService | undefined;
+	resolveScope?: typeof resolveScopeFn | undefined;
+	withScopeTx?: typeof withScopeTx | undefined;
 }) {
 	const artifactService = deps.artifactService;
 	const app = express();
+
+	app.use((req, _res, next) => {
+		try {
+			if (deps.resolveScope) {
+				(req as Request & { tenantScope?: TenantScopeContext }).tenantScope =
+					deps.resolveScope(req);
+			}
+			next();
+		} catch (e) {
+			next(e);
+		}
+	});
 
 	app.post(
 		"/artifacts",

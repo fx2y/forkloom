@@ -80,6 +80,8 @@ function sampleRun(): RunModel {
 			scope: "team",
 			userMsg: "hello",
 			attachments: [{ sha256: "a".repeat(64) }, { sha256: "b".repeat(64) }],
+			orgId: "00000000-0000-0000-0000-000000000001",
+			writeTarget: "ws",
 			workdirRef: { sha256: "c".repeat(64) },
 			modelPref: "gpt-5-codex",
 		},

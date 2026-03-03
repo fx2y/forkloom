@@ -31,6 +31,13 @@ function parseRunScope(input: unknown): RunScope {
 	throw new HttpError(400, "scope must be one of me|team|org");
 }
 
+function parseWriteTarget(input: unknown): "org" | "ws" | "member" {
+	if (input === "org" || input === "ws" || input === "member") {
+		return input;
+	}
+	throw new HttpError(400, "writeTarget must be one of org|ws|member");
+}
+
 function parseRunProfile(input: unknown): RunProfile {
 	if (input === "safe" || input === "std" || input === "priv") {
 		return input;
@@ -54,11 +61,29 @@ export function parseRunCreatePayload(input: unknown): RunSpecModel {
 		throw new HttpError(400, "userMsg is required");
 	}
 
+	const orgId = String(record.orgId ?? "").trim();
+	if (orgId.length === 0) {
+		throw new HttpError(400, "orgId is required");
+	}
+	const wsId =
+		typeof record.wsId === "string" && record.wsId.trim()
+			? record.wsId.trim()
+			: undefined;
+	const memberId =
+		typeof record.memberId === "string" && record.memberId.trim()
+			? record.memberId.trim()
+			: undefined;
+	const writeTarget = parseWriteTarget(record.writeTarget);
+
 	return {
 		runId,
 		scope: parseRunScope(record.scope),
 		userMsg,
 		attachments: parseArtifactPointers(record.attachments),
+		orgId,
+		wsId,
+		memberId,
+		writeTarget,
 		workdirRef:
 			record.workdirRef == null
 				? undefined

@@ -6,6 +6,19 @@ import type {
 import type { RunEventKind } from "./event";
 
 export type RunScope = "me" | "team" | "org";
+export type WriteTarget = "org" | "ws" | "member";
+export type ScopeRank = 1 | 2 | 3;
+export type TenantScopeContext = {
+	orgId: string;
+	wsId?: string | undefined;
+	memberId?: string | undefined;
+	writeTarget: WriteTarget;
+};
+export const scopeRank: Record<WriteTarget, ScopeRank> = {
+	org: 1,
+	ws: 2,
+	member: 3,
+};
 export type RunProfile = "safe" | "std" | "priv";
 
 export type RunStatus = "queued" | "running" | "done" | "failed";
@@ -19,6 +32,10 @@ export type RunSpecModel = {
 	scope: RunScope;
 	userMsg: string;
 	attachments: ArtifactPointer[];
+	orgId: string;
+	wsId?: string | undefined;
+	memberId?: string | undefined;
+	writeTarget: WriteTarget;
 	workdirRef?: ArtifactPointer | undefined;
 	modelPref?: string | undefined;
 	profile?: RunProfile | undefined;

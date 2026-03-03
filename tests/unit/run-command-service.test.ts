@@ -13,6 +13,8 @@ function makeRun() {
 			scope: "team" as const,
 			userMsg: "ship it",
 			attachments: [],
+			orgId: "00000000-0000-0000-0000-000000000001",
+			writeTarget: "ws" as const,
 		},
 		createdAt: ISO,
 		updatedAt: ISO,
@@ -187,9 +189,10 @@ describe("RunService sandbox persist-first path", () => {
 			scope: "team",
 			userMsg: "ship it",
 			attachments: [],
+			orgId: "00000000-0000-0000-0000-000000000001",
+			writeTarget: "ws",
 			profile: "priv",
 		});
-
 		expect(started.command?.seq).toBe(1);
 		expect(launches).toEqual([]);
 		expect(events).toEqual([

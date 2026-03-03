@@ -95,8 +95,10 @@ describe("run reducer", () => {
 				spec: {
 					runId: RUN_ID,
 					scope: "team",
-					userMsg: "truth",
+					userMsg: "ship it",
 					attachments: [],
+					orgId: "org-1",
+					writeTarget: "ws",
 					profile: "safe",
 				},
 				createdAt: "2026-02-28T00:00:00.000Z",
