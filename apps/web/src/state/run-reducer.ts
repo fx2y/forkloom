@@ -111,6 +111,13 @@ function toTraceDetail(event: RunEvent): string {
 			const payloadEvent = event.payload.event;
 			if (typeof payloadEvent === "object" && payloadEvent !== null) {
 				const record = payloadEvent as Record<string, unknown>;
+				if (record.type === "tool_result" || record.kind === "tool_result") {
+					const toolName =
+						typeof record.toolName === "string" ? record.toolName : "tool";
+					if (toolName === "bash" || toolName === "skill_exec") {
+						return `${toolName} result (collapsed)`;
+					}
+				}
 				return String(record.kind ?? record.type ?? "pi_event");
 			}
 			return "pi_event";
@@ -334,6 +341,22 @@ export function reduceRunEvent(
 			event.payload.workspaceRef.sha256,
 			"workspace",
 		);
+	}
+	if (event.kind === "pi_event" && typeof event.payload.event === "object") {
+		const piEvent = event.payload.event as Record<string, unknown>;
+		const eventType = piEvent.type ?? piEvent.kind;
+		if (eventType === "tool_result") {
+			const result = piEvent.result;
+			if (result && typeof result === "object") {
+				const details = (result as Record<string, unknown>).details;
+				if (details && typeof details === "object") {
+					const artifactSha = (details as Record<string, unknown>).artifactSha;
+					if (typeof artifactSha === "string" && artifactSha.length > 0) {
+						artifacts = appendSha(artifacts, artifactSha, "artifact");
+					}
+				}
+			}
+		}
 	}
 
 	switch (event.kind) {

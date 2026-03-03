@@ -109,6 +109,25 @@ if rg -n "app\\.(get|post|put|patch|delete)\\(\"/(extensions|packages|themes|rel
   exit 1
 fi
 
+rg -n "registerProvider|providerRegistry|buildProviderOverrideRegistry|resolveProviderOverride" \
+  apps/api/src/pi/extensions/service.ts apps/api/src/pi/providers apps/api/src/pi/session-factory.ts \
+  > .cache/spec09/scope-guard.provider-seam.txt
+for needle in "registerProvider" "buildProviderOverrideRegistry" "resolveProviderOverride"; do
+  if ! rg -Fq "$needle" .cache/spec09/scope-guard.provider-seam.txt; then
+    echo "scope guard missing provider override seam anchor: $needle" >&2
+    exit 1
+  fi
+done
+
+rg -n "extensions/(will-run|artifact-widget|structured-wizard)/index.ts" \
+  spec-0/09-03-htn.yaml > .cache/spec09/scope-guard.flagship-scope.txt
+for path in "extensions/will-run/index.ts" "extensions/artifact-widget/index.ts" "extensions/structured-wizard/index.ts"; do
+  if [[ ! -f "$path" ]]; then
+    echo "scope guard missing flagship extension file: $path" >&2
+    exit 1
+  fi
+done
+
 ast-grep --lang typescript -p "RUN_C7_TOP_LEVEL_ROUTE_BANS" \
   apps/api/src/run/public-surface.ts > .cache/spec09/scope-guard.ext-ban.ast.txt
 if [[ ! -s .cache/spec09/scope-guard.ext-ban.ast.txt ]]; then

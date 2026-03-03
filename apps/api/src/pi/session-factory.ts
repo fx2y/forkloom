@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockPiProviderManager } from "./mock-provider";
 import {
+	resolveProviderOverride,
+	type ProviderOverride,
+} from "./providers/registry";
+import {
 	type CreatePiSessionInput,
 	type PiImageInput,
 	type PiPromptInput,
@@ -36,6 +40,7 @@ type SessionFactoryDeps = {
 		| undefined;
 	mockProviderManager?: MockPiProviderManager | undefined;
 	prepareRealHome?: (() => Promise<string>) | undefined;
+	providerOverrides?: Map<string, ProviderOverride> | undefined;
 };
 
 function toSessionScopeDir(cwd = process.cwd()): string {
@@ -177,6 +182,7 @@ export function createManagedPiSessionFactory(
 	const mockProviderManager =
 		deps.mockProviderManager ?? new MockPiProviderManager();
 	const prepareRealHome = deps.prepareRealHome ?? prepareWritablePiHome;
+	const providerOverrides = deps.providerOverrides;
 
 	return async (
 		overrides: ManagedPiSessionOverrides = {},
@@ -193,14 +199,24 @@ export function createManagedPiSessionFactory(
 			mockBootstrapTimeoutMs = baseMockBootstrapTimeoutMs,
 			...sessionOverrides
 		} = overrides;
-		const sessionInput = {
-			...baseSessionInput,
-			...sessionOverrides,
-		};
-		const realSessionInput = {
-			...sessionInput,
-			homeOverride: sessionInput.homeOverride ?? (await prepareRealHome()),
-		};
+			const sessionInput = {
+				...baseSessionInput,
+				...sessionOverrides,
+			};
+			const resolvedProvider = resolveProviderOverride({
+				provider: sessionInput.provider,
+				model: sessionInput.model,
+				extraEnv: sessionInput.extraEnv,
+				homeOverride: sessionInput.homeOverride,
+				overrides: providerOverrides,
+			});
+			const realSessionInput = {
+				...sessionInput,
+				provider: resolvedProvider.provider,
+				model: resolvedProvider.model,
+				extraEnv: resolvedProvider.extraEnv,
+				homeOverride: resolvedProvider.homeOverride ?? (await prepareRealHome()),
+			};
 		let realSession: PiSessionPort | null = null;
 
 		try {

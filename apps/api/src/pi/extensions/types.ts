@@ -49,6 +49,7 @@ export type ExtensionHookPayloadMap = {
 	session_start: {
 		runId: string;
 		sessionId?: string | undefined;
+		branchEntries?: ExtensionStateEntry[] | undefined;
 	};
 	before_agent_start: {
 		runId: string;
@@ -75,10 +76,12 @@ export type ExtensionHookPayloadMap = {
 	session_tree: {
 		runId: string;
 		sessionId?: string | undefined;
+		branchEntries?: ExtensionStateEntry[] | undefined;
 	};
 	session_fork: {
 		runId: string;
 		sessionId?: string | undefined;
+		branchEntries?: ExtensionStateEntry[] | undefined;
 	};
 	session_before_compact: {
 		runId: string;
@@ -185,5 +188,11 @@ export type ExtensionHostHooks = {
 	): Promise<ExtensionToolCallDecision>;
 	emitToolResult(
 		payload: ExtensionHookPayloadMap["tool_result"],
+	): Promise<void>;
+	emitSessionTree(
+		payload: ExtensionHookPayloadMap["session_tree"],
+	): Promise<void>;
+	emitSessionFork(
+		payload: ExtensionHookPayloadMap["session_fork"],
 	): Promise<void>;
 };

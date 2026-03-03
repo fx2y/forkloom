@@ -345,6 +345,28 @@ export class ExtensionService implements ExtensionHostHooks {
 		await this.emit("tool_result", payload);
 	}
 
+	async emitSessionTree(
+		payload: ExtensionHookPayloadMap["session_tree"],
+	): Promise<void> {
+		await this.emit("session_tree", payload);
+	}
+
+	async emitSessionFork(
+		payload: ExtensionHookPayloadMap["session_fork"],
+	): Promise<void> {
+		await this.emit("session_fork", payload);
+	}
+
+	getRegisteredProviders(): Array<{
+		ownerId: string;
+		definition: ExtensionProviderDefinition;
+	}> {
+		return [...this.providerRegistry.values()].map((entry) => ({
+			ownerId: entry.ownerId,
+			definition: entry.definition,
+		}));
+	}
+
 	private clearRegistries(): void {
 		this.modules.length = 0;
 		this.toolRegistry.clear();

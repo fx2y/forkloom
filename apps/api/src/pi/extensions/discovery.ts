@@ -144,6 +144,7 @@ export function defaultExtensionRoots(input?: {
 	return [
 		resolve(homeDir, ".pi/agent/extensions"),
 		resolve(cwd, ".pi/extensions"),
+		resolve(cwd, "extensions"),
 	];
 }
 

@@ -5,6 +5,7 @@ export {
 } from "./discovery";
 export { ExtensionService } from "./service";
 export type { ExtensionServiceOptions } from "./service";
+export { createBranchStateLog } from "./state-log";
 export type {
 	ExtensionApi,
 	ExtensionCommandDefinition,

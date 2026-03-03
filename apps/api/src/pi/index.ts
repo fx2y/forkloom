@@ -52,6 +52,7 @@ export {
 	defaultExtensionRoots,
 	defaultExtensionSettingsFiles,
 	ExtensionService,
+	createBranchStateLog,
 } from "./extensions";
 export {
 	applyFilterRules,
@@ -68,6 +69,19 @@ export {
 	setResourceEnabled,
 	writePackageSettingsFile,
 } from "./packages";
+export {
+	resolveActiveTheme,
+	sortThemeCandidates,
+	parseTheme,
+	validateTheme,
+	ThemeService,
+	watchActiveThemeFile,
+} from "./themes";
+export {
+	buildProviderOverrideRegistry,
+	parseProviderOverride,
+	resolveProviderOverride,
+} from "./providers";
 export type {
 	ExtensionApi,
 	ExtensionCommandDefinition,
@@ -97,3 +111,14 @@ export type {
 	PackageSettingsModel,
 	ResolvedPackageSource,
 } from "./packages";
+export type {
+	ThemeCandidate,
+	ThemeColorKey,
+	ThemeDefinition,
+	ThemeResolveInput,
+	ThemeRuntimeSnapshot,
+	ThemeServiceOptions,
+	ThemeValidationResult,
+	ThemeVarKey,
+} from "./themes";
+export type { ProviderOverride, ProviderOverrideValue } from "./providers";

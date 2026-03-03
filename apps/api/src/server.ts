@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
@@ -22,6 +22,8 @@ import { buildApiRouter } from "./http/routes";
 import {
 	ExtensionService,
 	MockPiProviderManager,
+	ThemeService,
+	buildProviderOverrideRegistry,
 	createManagedPiSessionFactory,
 	loadMergedPackageSettings,
 	probePiSession,
@@ -57,6 +59,33 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(__dirname, "../migrations");
 const SANDBOX_PI_CLI_PATH =
 	"/runtime/node_modules/@mariozechner/pi-coding-agent/dist/cli.js";
+
+type ThemeNameConfig = {
+	theme?: string | undefined;
+	themes?: string[] | undefined;
+	noThemes?: boolean | undefined;
+};
+
+async function readThemeSelectionFromSettings(
+	settingsPath: string,
+): Promise<ThemeNameConfig> {
+	try {
+		const raw = await readFile(settingsPath, "utf8");
+		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		return {
+			theme: typeof parsed.theme === "string" ? parsed.theme : undefined,
+			themes: Array.isArray(parsed.themes)
+				? parsed.themes.filter(
+						(value): value is string =>
+							typeof value === "string" && value.trim().length > 0,
+					)
+				: undefined,
+			noThemes: parsed.noThemes === true,
+		};
+	} catch {
+		return {};
+	}
+}
 
 async function bootstrap() {
 	const config = loadConfig();
@@ -108,14 +137,6 @@ async function bootstrap() {
 		stepRunner: new InlineStepRunner(),
 	});
 	const mockProviderManager = new MockPiProviderManager();
-	const createPiSession = createManagedPiSessionFactory(
-		{
-			provider: config.piProvider,
-			model: config.piModel,
-			strictReal: config.piStrictReal,
-		},
-		{ mockProviderManager },
-	);
 
 	const workflowLauncher = new LazyDbosRunWorkflowLauncher();
 	const docService = new DocService({ repo: docRepo });
@@ -127,10 +148,63 @@ async function bootstrap() {
 	});
 	const extensionService = new ExtensionService();
 	await extensionService.loadAll();
+	const providerOverrides = buildProviderOverrideRegistry({
+		providers: extensionService.getRegisteredProviders(),
+		onWarning: (message) => {
+			console.warn(JSON.stringify({ msg: "provider-override-warning", message }));
+		},
+	});
+	const createPiSession = createManagedPiSessionFactory(
+		{
+			provider: config.piProvider,
+			model: config.piModel,
+			strictReal: config.piStrictReal,
+		},
+		{ mockProviderManager, providerOverrides },
+	);
 	const mergedPackageSettings = await loadMergedPackageSettings({
 		globalSettingsPath: config.piGlobalSettingsPath,
 		projectSettingsPath: config.piProjectSettingsPath,
 	});
+	const globalThemeConfig = await readThemeSelectionFromSettings(
+		config.piGlobalSettingsPath,
+	);
+	const projectThemeConfig = await readThemeSelectionFromSettings(
+		config.piProjectSettingsPath,
+	);
+	const themeCandidates = [
+		{
+			source: "builtin" as const,
+			name: "forkloom-default",
+			path: resolve(process.cwd(), "apps/api/src/pi/themes/builtin/default.json"),
+		},
+		...mergedPackageSettings.merged.flatMap((entry) =>
+			(entry.themes ?? [])
+				.filter((path) => path.endsWith(".json"))
+				.map((path) => ({
+					source: "package" as const,
+					name: path,
+					path: resolve(entry.resolved.kind === "local" ? entry.resolved.path : process.cwd(), path),
+				})),
+		),
+		...(globalThemeConfig.themes ?? []).map((path) => ({
+			source: "global" as const,
+			name: path,
+			path: resolve(dirname(config.piGlobalSettingsPath), path),
+		})),
+		...(projectThemeConfig.themes ?? []).map((path) => ({
+			source: "project" as const,
+			name: path,
+			path: resolve(dirname(config.piProjectSettingsPath), path),
+		})),
+	];
+	const themeService = new ThemeService();
+	themeService.setCandidates(themeCandidates);
+	themeService.setSelection({
+		settingsTheme: projectThemeConfig.theme ?? globalThemeConfig.theme,
+		disableThemes: projectThemeConfig.noThemes ?? globalThemeConfig.noThemes,
+	});
+	await themeService.reloadSelection();
 	const startupReconcile = await reconcileMissingPackages({
 		entries: mergedPackageSettings.merged,
 		isInstalled: async (entry) => {
@@ -156,6 +230,7 @@ async function bootstrap() {
 			attempts: startupReconcile.attempts,
 			installed: startupReconcile.installed,
 			remainingMissing: startupReconcile.remainingMissing,
+			activeTheme: themeService.getSnapshot().activeThemeName,
 		}),
 	);
 	const docIngestWorkflowLauncher = new LazyDbosDocIngestWorkflowLauncher();
@@ -309,10 +384,11 @@ async function bootstrap() {
 		sandboxRepo,
 		actorRepo,
 		docRepo,
-		actorProcessor,
-		extensionService,
-	};
-}
+			actorProcessor,
+			extensionService,
+			themeService,
+		};
+	}
 
 async function main(): Promise<void> {
 	const {
@@ -325,6 +401,7 @@ async function main(): Promise<void> {
 		docRepo,
 		actorProcessor,
 		extensionService,
+		themeService,
 	} = await bootstrap();
 
 	const server = app.listen(config.port, () => {
@@ -354,10 +431,11 @@ async function main(): Promise<void> {
 			await sandboxRepo.close();
 			await actorRepo.close();
 			await docRepo.close();
-			await actorProcessor.closeAll();
-			await extensionService.unloadAll();
-			await shutdownDbos();
-		})();
+				await actorProcessor.closeAll();
+				await extensionService.unloadAll();
+				themeService.close();
+				await shutdownDbos();
+			})();
 		return closing;
 	};
 

@@ -227,4 +227,29 @@ describe("run reducer", () => {
 			"scripts/emit-policy-answer.sh",
 		]);
 	});
+
+	it("collapses noisy tool_result traces and appends artifact pointer from pi_event", () => {
+		const seeded = hydrateRunState(initialRunViewState, {
+			runId: RUN_ID,
+			status: "running",
+			startedAt: "2026-02-28T00:00:00.000Z",
+			dbosWfId: RUN_ID,
+			artifacts: [],
+		});
+		const reduced = reduceRunEvent(seeded, {
+			runId: RUN_ID,
+			seq: 1,
+			t: "2026-02-28T00:00:01.000Z",
+			kind: "pi_event",
+			payload: {
+				event: {
+					type: "tool_result",
+					toolName: "skill_exec",
+					result: { details: { artifactSha: "a".repeat(64) } },
+				},
+			},
+		});
+		expect(reduced.trace[0]?.detail).toBe("skill_exec result (collapsed)");
+		expect(reduced.artifacts.some((entry) => entry.key.endsWith("a".repeat(64)))).toBe(true);
+	});
 });
