@@ -1,11 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-	mkdir,
-	mkdtemp,
-	rm,
-	symlink,
-	writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -155,8 +149,12 @@ describe("skill L3 runtime", () => {
 				args: ["alpha"],
 			});
 			expect(run.status).toBe("done");
-			expect(run.outputFiles.map((file) => file.path)).toEqual(["out/fresh.txt"]);
-			expect(run.outputFiles[0]?.body.toString("utf8").trim()).toBe("fresh:alpha");
+			expect(run.outputFiles.map((file) => file.path)).toEqual([
+				"out/fresh.txt",
+			]);
+			expect(run.outputFiles[0]?.body.toString("utf8").trim()).toBe(
+				"fresh:alpha",
+			);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
@@ -165,12 +163,16 @@ describe("skill L3 runtime", () => {
 	it("parses /skill args with shell quoting semantics", () => {
 		expect(parseSkillArgs("")).toEqual([]);
 		expect(parseSkillArgs("a b")).toEqual(["a", "b"]);
-		expect(parseSkillArgs("\"alpha beta\" gamma")).toEqual([
+		expect(parseSkillArgs('"alpha beta" gamma')).toEqual([
 			"alpha beta",
 			"gamma",
 		]);
-		expect(parseSkillArgs("'a b' \"c d\" e\\ f")).toEqual(["a b", "c d", "e f"]);
-		expect(() => parseSkillArgs("\"unterminated")).toThrow("unmatched quote");
+		expect(parseSkillArgs("'a b' \"c d\" e\\ f")).toEqual([
+			"a b",
+			"c d",
+			"e f",
+		]);
+		expect(() => parseSkillArgs('"unterminated')).toThrow("unmatched quote");
 	});
 
 	it("persists script stdout/stderr/files through existing artifact+ledger seams", async () => {

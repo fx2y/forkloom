@@ -1,11 +1,4 @@
-import {
-	cp,
-	mkdir,
-	mkdtemp,
-	readFile,
-	rm,
-	writeFile,
-} from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -109,7 +102,9 @@ async function provePackOutputsDynamic(input: {
 	skillsRoot: string;
 	proofPath: string;
 }): Promise<PackDynamicProof[]> {
-	const sandboxRoot = await mkdtemp(resolve(tmpdir(), "forkloom-skill-pack-proof-"));
+	const sandboxRoot = await mkdtemp(
+		resolve(tmpdir(), "forkloom-skill-pack-proof-"),
+	);
 	try {
 		const testSkillsRoot = resolve(sandboxRoot, "skills");
 		await cp(input.skillsRoot, testSkillsRoot, { recursive: true });
@@ -197,15 +192,23 @@ export async function runSkillsValidate(input: {
 		xmlBytes: Buffer.byteLength(xml, "utf8"),
 		packProofPath: input.packProofPath,
 	};
-	await writeJson(input.reportPath, report as unknown as Record<string, unknown>);
+	await writeJson(
+		input.reportPath,
+		report as unknown as Record<string, unknown>,
+	);
 	return report;
 }
 
 async function main(): Promise<void> {
 	const reportPath = process.argv[2] ?? ".cache/spec08/skills-validate.json";
 	const xmlPath = process.argv[3] ?? ".cache/spec08/skills.available.xml";
-	const packProofPath = process.argv[4] ?? ".cache/spec08/skills-pack-proof.json";
-	const report = await runSkillsValidate({ reportPath, xmlPath, packProofPath });
+	const packProofPath =
+		process.argv[4] ?? ".cache/spec08/skills-pack-proof.json";
+	const report = await runSkillsValidate({
+		reportPath,
+		xmlPath,
+		packProofPath,
+	});
 	console.log(
 		`skills-validate ${report.status}: ${report.loadedPacks.join(",")} xml=${report.xmlPath}`,
 	);

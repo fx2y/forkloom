@@ -62,13 +62,15 @@ async function readProofJson(
 	}
 }
 
-export async function collectSpec08ChecklistReport(input: {
-	htnDbPath?: string;
-	tasksDbPath?: string;
-	validateReportPath?: string;
-	packProofPath?: string;
-	skillLiveProofPath?: string;
-} = {}): Promise<Spec08ChecklistReport> {
+export async function collectSpec08ChecklistReport(
+	input: {
+		htnDbPath?: string;
+		tasksDbPath?: string;
+		validateReportPath?: string;
+		packProofPath?: string;
+		skillLiveProofPath?: string;
+	} = {},
+): Promise<Spec08ChecklistReport> {
 	const htnDbPath = input.htnDbPath ?? "spec-0/08-htn.sqlite";
 	const tasksDbPath = input.tasksDbPath ?? "spec-0/08-tasks.sqlite";
 	const validateReportPath =
@@ -99,7 +101,9 @@ export async function collectSpec08ChecklistReport(input: {
 	const requiredById = new Map(
 		requiredRows.map((row) => [String(row.id), String(row.status)]),
 	);
-	const requiredTaskMissing = REQUIRED_TASK_IDS.filter((id) => !requiredById.has(id));
+	const requiredTaskMissing = REQUIRED_TASK_IDS.filter(
+		(id) => !requiredById.has(id),
+	);
 	const requiredTaskNotDone = REQUIRED_TASK_IDS.filter(
 		(id) => requiredById.get(id) != null && requiredById.get(id) !== "done",
 	);
@@ -118,10 +122,10 @@ export async function collectSpec08ChecklistReport(input: {
 		packProof.proofs.length >= 4;
 	const skillLiveProofOk =
 		skillLiveProof?.status === "ok" &&
-		(typeof skillLiveProof?.runStatus === "string" &&
-			["running", "done", "failed", "aborted"].includes(
-				String(skillLiveProof.runStatus),
-			)) &&
+		typeof skillLiveProof?.runStatus === "string" &&
+		["running", "done", "failed", "aborted"].includes(
+			String(skillLiveProof.runStatus),
+		) &&
 		typeof skillLiveProof?.skillExecStepCount === "number" &&
 		Number(skillLiveProof.skillExecStepCount) >= 1;
 

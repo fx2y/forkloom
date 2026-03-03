@@ -1,19 +1,18 @@
 # forkloom AGENT Policy
-**Doctrine**: `mise` + `fnox` ONLY. NO `.env`. NO `make`/`npm` scripts. `MISE_EXPERIMENTAL=1`.
+**Law**: `mise`+`fnox` ONLY. NO `.env`/`make`/`npm`. `MISE_EXPERIMENTAL=1`.
 
-## 1. Architecture & Code Law
-- **Orchestration**: `.mise.toml` DAG is absolute law. If a lane isn't in the DAG, it doesn't exist.
-- **API Surface**: Schema = Truth. `/runs/:id/*` ONLY. BANNED: Top-level nouns (`/docs`, `/artifacts`), `Sandbox*` leaks. `/runs/:id/truth` is the ONLY canonical audit payload.
-- **Compute**: Docker ONLY in `apps/api/src/sandbox`. Host paths = container absolutes.
-- **Durability (DBOS)**: Replay determinism is absolute. Step outputs MUST serialize to JSON. No process-local handles across steps. Repo txn seam `recordStepLedger` MUST be atomic.
-- **Storage**: CAS is law. Reserve-first SQL -> store CAS blob -> rollback on fail. One storage substrate. `artifact_alias` is a logical key, NOT a blob namespace.
-- **ID Law**: Centralize hash generators (e.g., `docSha`, `chunkId`). Normalize BEFORE hashing. Ad hoc hash assembly is a regression.
-- **UI**: ZERO `innerHTML` (XSS-safe). Infinite SSE (client owns reconnect cursor). Strict state derivation.
+## 1. Arch & Boundaries
+- **API**: Schema=Truth. `/runs/:id/*` ONLY. BANNED: Top-level nouns (`/docs`, `/skills`), `Sandbox*` leaks. `v0` frozen. 5-noun freeze enforced.
+- **Compute/Skill**: `skill_exec` via sandbox `RunnerBackend` ONLY. NO host bash. L3 reads jailed (`realpath`/`lstat`). L1 registry reads prefix bytes ONLY.
+- **Logic**: Pure TS modules. Core logic isolated from HTTP/shell. Single hash/canonical source in `@forkloom/shared`.
 
-## 2. Dev & Ops Loop
-- **Init**: `mise trust && mise install && mise prep && mise run bootstrap`
-- **Verify DAG**: `ci:force` = `check` -> `int` -> `golden` -> `fault` -> `sys` -> `bench`.
-- **Live Edits**: NO hot-reload. Edit TS -> restart `api` -> block on `/health` -> run proofs.
-- **Fault/Crash**: DBOS crash proofs MUST execute real SIGKILL + DBOS recovery with ZERO hash/row diffs. Synthetic drills are NON-PROOF.
-- **Triage**: Ops SQL (`test:int:ops-sql`) FIRST for RCA.
-- **Gates**: Code changes without tests/rule deltas fail `check:lesson-guard`. Merge demands non-vacuous SQL checklists + golden replay proofs.
+## 2. Durability & State
+- **Storage**: CAS is absolute. Reserve-first SQL -> store blob -> rollback on fail. 1 storage substrate.
+- **DBOS**: Replay determinism law. Step outputs=JSON. 1 JSON `recordStepLedger` row per step. NO local handles.
+- **UI**: 100% `innerHTML`-free (text-node ONLY). Infinite SSE (client cursor). Reducer-owned state (strict graph derivation).
+
+## 3. Dev, Ops & Verification
+- **DAG**: `.mise.toml` is absolute. Lane not in DAG = non-existent. Non-exec scripts in `mise-tasks/`.
+- **Probes**: Bounded stability polling (`wait_for_url`/`waitFor`) MANDATORY. NO single-shot curl.
+- **Gates**: `ci:force` sequential. `check:lesson-guard` demands rule deltas. NO manual UI-only checks.
+- **Proofs**: DBOS crash demands real SIGKILL+recovery (0 hash/row diffs). Close latch MUST be non-vacuous (booleans+reqs). Packs need dynamic-output proofs.

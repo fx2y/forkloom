@@ -27,7 +27,9 @@ export function renderActivatedSkillPrompt(
 	const body = stripSkillFrontmatter(skillMarkdown);
 	const rendered = body.replaceAll(SKILL_ARGUMENTS_TOKEN, args).trim();
 	if (!body.includes(SKILL_ARGUMENTS_TOKEN) && args.length > 0) {
-		return rendered.length > 0 ? `${rendered}\n\nUser: ${args}` : `User: ${args}`;
+		return rendered.length > 0
+			? `${rendered}\n\nUser: ${args}`
+			: `User: ${args}`;
 	}
 	return rendered;
 }
@@ -44,5 +46,8 @@ function stripSkillFrontmatter(skillMarkdown: string): string {
 	if (closingIndex <= 0) {
 		return normalized.trim();
 	}
-	return lines.slice(closingIndex + 1).join("\n").trim();
+	return lines
+		.slice(closingIndex + 1)
+		.join("\n")
+		.trim();
 }

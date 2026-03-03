@@ -2,9 +2,9 @@
 paths: ["apps/api/**", "contracts/**", "packages/contracts/**"]
 ---
 # API & Contract Law
-- **Namespace**: `/runs/:id/*` ONLY. Top-level nouns (`/docs`) and `Sandbox*` leaks BANNED.
-- **Skills Wire**: `/skills` + `/skill:*` are UI-local aliases only; if HTTP exists, it must stay nested under `/runs/:id/skills*`.
-- **Schema=Truth**: `v0` frozen, `v1` additive. Typegen MUST be newline-stable.
-- **Storage**: CAS reserve-first SQL -> store blob -> rollback on fail.
-- **Durability**: DBOS step outputs MUST be JSON. NO cross-step process-local handles (e.g., PiSessionPort). `recordStepLedger` MUST be atomic.
-- **ID Law**: Hashes (`docSha`, `chunkId`) MUST use centralized generators. Normalize BEFORE hashing.
+- **Namespace**: `/runs/:id/*` ONLY. BANNED: `/skills`, `/docs`, top-level nouns. 5-noun freeze.
+- **Skills**: `/skill:*` text-only in prompt/followUp/steer. `v0` stays thin manifest. `available_skills` XML is escaped L1 projection.
+- **Jail**: L1 registry reads prefix bytes ONLY. L3 reads use `read-skill-file` with `realpath`/`lstat` jail.
+- **Sandbox**: `skill_exec` via `RunnerBackend` ONLY. NO host bash.
+- **Storage**: CAS reserve-first SQL -> blob store -> rollback. Meta validated at HTTP boundary.
+- **DBOS**: 1 JSON `recordStepLedger` row/step. NO process-local handles across steps.

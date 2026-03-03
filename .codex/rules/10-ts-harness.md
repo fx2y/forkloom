@@ -2,8 +2,8 @@
 paths: ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts"]
 ---
 # TS & Logic Law
-- **Types**: `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` MANDATORY.
-- **Purity**: Core logic must be pure. Inject I/O, time, RNG. Avoid boolean soup.
-- **Boundary**: HTTP routes parse/delegate ONLY. Zero business/storage logic in routes.
-- **Canon**: Sort keys, newline-normalize JSONL, strict hash via `@forkloom/shared`.
-- **Probes**: Blocking `wait_for_url` beats single-shot curl.
+- **Strictness**: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` MANDATORY.
+- **Purity**: Isolate core logic from HTTP/shell. Inject I/O, RNG, time.
+- **Canon**: Centralized `@forkloom/shared` for hash/sort/JSONL. Normalize BEFORE hashing.
+- **Parsers**: Explicit bounded splitters. NO direct yaml deps. Shell-aware quote/escape arg tokenizer.
+- **Probes**: Use bounded retry (`waitFor`, `wait_for_url`). NO single-shot curl.

@@ -25,8 +25,8 @@ import type {
 import type { StagedSandboxInput } from "../sandbox/input-staging";
 import type { ArtifactService } from "../service";
 import {
-	createSandboxSkillRunner,
 	type SkillPromptResolution,
+	createSandboxSkillRunner,
 	executeSkillPlanDurably,
 } from "../skill";
 import { buildRunPromptInput } from "./prompt";
@@ -519,19 +519,19 @@ export async function executeRunSandbox(
 		});
 		loadedPlan = { ...loadedPlan, sandbox: liveSandbox };
 
-			await steps.runStep("stageInputs", async () => {
-				if (replayPayload) {
-					stagedInputs = [];
-					return;
-				}
-				const sandbox = assertLoaded(loadedPlan).sandbox;
-				const inputMount =
-					sandbox.spec.mounts.find(
-						(mount) => mount.kind === "inputs" && mount.dest === "/inputs",
-					)?.source ?? sandbox.spec.piHomeHostDir;
-				const staged = await materializeSandboxInputs({
-					runId,
-					attachments: assertLoaded(loadedPlan).run.spec.attachments,
+		await steps.runStep("stageInputs", async () => {
+			if (replayPayload) {
+				stagedInputs = [];
+				return;
+			}
+			const sandbox = assertLoaded(loadedPlan).sandbox;
+			const inputMount =
+				sandbox.spec.mounts.find(
+					(mount) => mount.kind === "inputs" && mount.dest === "/inputs",
+				)?.source ?? sandbox.spec.piHomeHostDir;
+			const staged = await materializeSandboxInputs({
+				runId,
+				attachments: assertLoaded(loadedPlan).run.spec.attachments,
 				inputRoot: inputMount,
 				appendRunId: false,
 				artifactService: deps.artifactService,
@@ -563,30 +563,30 @@ export async function executeRunSandbox(
 				readCommandText(loaded.command),
 			);
 			resolvedSkillText = resolved.text;
-				if (!resolved.execution || resolved.execution.scripts.length === 0) {
-					return {
-						skillName: resolved.execution?.skillName ?? null,
-						scripts: 0,
-					};
-				}
-				await executeSkillPlanDurably({
-					runId,
-					commandSeq: loaded.command.seq,
-					commandKind: loaded.command.kind,
-					plan: resolved.execution,
-					deps: {
-						artifactService: deps.artifactService,
-						runService: deps.runService,
-						runScript: createSandboxSkillRunner({
-							backend: deps.backend,
-							sandbox: loaded.sandbox,
-							runId,
-							commandSeq: loaded.command.seq,
-						}),
-					},
-					timeoutMs: loaded.sandbox.spec.timeoutSec * 1_000,
-					maxBytesOut: loaded.sandbox.spec.maxBytesOut,
-				});
+			if (!resolved.execution || resolved.execution.scripts.length === 0) {
+				return {
+					skillName: resolved.execution?.skillName ?? null,
+					scripts: 0,
+				};
+			}
+			await executeSkillPlanDurably({
+				runId,
+				commandSeq: loaded.command.seq,
+				commandKind: loaded.command.kind,
+				plan: resolved.execution,
+				deps: {
+					artifactService: deps.artifactService,
+					runService: deps.runService,
+					runScript: createSandboxSkillRunner({
+						backend: deps.backend,
+						sandbox: loaded.sandbox,
+						runId,
+						commandSeq: loaded.command.seq,
+					}),
+				},
+				timeoutMs: loaded.sandbox.spec.timeoutSec * 1_000,
+				maxBytesOut: loaded.sandbox.spec.maxBytesOut,
+			});
 			return {
 				skillName: resolved.execution.skillName,
 				scripts: resolved.execution.scripts.length,

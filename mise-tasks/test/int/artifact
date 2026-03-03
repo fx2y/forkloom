@@ -9,8 +9,12 @@ mkdir -p .cache/test-int
 INPUT=.cache/test-int/artifact.input
 cp fixtures/sessions/sample.session.jsonl "$INPUT"
 
-curl -fsS -F "file=@$INPUT" "http://localhost:8080/artifacts" > .cache/test-int/artifact.meta.1.json
-curl -fsS -F "file=@$INPUT" "http://localhost:8080/artifacts" > .cache/test-int/artifact.meta.2.json
+curl_api() {
+  curl --retry 6 --retry-all-errors --retry-delay 1 -fsS "$@"
+}
+
+curl_api -F "file=@$INPUT" "http://localhost:8080/artifacts" > .cache/test-int/artifact.meta.1.json
+curl_api -F "file=@$INPUT" "http://localhost:8080/artifacts" > .cache/test-int/artifact.meta.2.json
 
 HASH1=$(jq -r '.sha256' .cache/test-int/artifact.meta.1.json)
 HASH2=$(jq -r '.sha256' .cache/test-int/artifact.meta.2.json)
@@ -19,7 +23,7 @@ if [[ "$HASH1" != "$HASH2" || -z "$HASH1" ]]; then
   exit 1
 fi
 
-curl -fsS "http://localhost:8080/artifacts/$HASH1" > .cache/test-int/artifact.download.bin
+curl_api "http://localhost:8080/artifacts/$HASH1" > .cache/test-int/artifact.download.bin
 FETCH_HASH=$(python3 - <<'PY'
 import hashlib
 with open(".cache/test-int/artifact.download.bin","rb") as f:
@@ -31,7 +35,7 @@ if [[ "$FETCH_HASH" != "$HASH1" ]]; then
   exit 1
 fi
 
-curl -fsS "http://localhost:8080/artifacts/$HASH1/meta" > .cache/test-int/artifact.meta.get.json
+curl_api "http://localhost:8080/artifacts/$HASH1/meta" > .cache/test-int/artifact.meta.get.json
 META_HASH=$(jq -r '.sha256' .cache/test-int/artifact.meta.get.json)
 if [[ "$META_HASH" != "$HASH1" ]]; then
   echo "meta endpoint sha mismatch" >&2
@@ -39,7 +43,7 @@ if [[ "$META_HASH" != "$HASH1" ]]; then
 fi
 
 PARENT_SHA=$(printf 'b%.0s' {1..64})
-curl -fsS -X POST "http://localhost:8080/artifacts/$HASH1/link" \
+curl_api -X POST "http://localhost:8080/artifacts/$HASH1/link" \
   -H "content-type: application/json" \
   -d "{\"parent\":\"$PARENT_SHA\",\"meta\":{\"ingest.note\":\"linked\"}}" > .cache/test-int/artifact.meta.link.json
 
@@ -48,7 +52,7 @@ if [[ "$(jq -r '.meta["ingest.note"]' .cache/test-int/artifact.meta.link.json)" 
   exit 1
 fi
 
-HTTP_CODE=$(curl -sS -o /tmp/artifact.sha.err -w "%{http_code}" \
+HTTP_CODE=$(curl --retry 6 --retry-all-errors --retry-delay 1 -sS -o /tmp/artifact.sha.err -w "%{http_code}" \
   -H "content-type: application/octet-stream" \
   -H "x-sha256: $(printf 'c%.0s' {1..64})" \
   --data-binary @"$INPUT" \
@@ -60,7 +64,7 @@ if [[ "$HTTP_CODE" != "400" ]]; then
 fi
 
 echo "checking raw upload..."
-RAW_META=$(curl -fsS -H "content-type: text/plain" --data-binary "raw content" "http://localhost:8080/artifacts")
+RAW_META=$(curl_api -H "content-type: text/plain" --data-binary "raw content" "http://localhost:8080/artifacts")
 RAW_SHA=$(echo "$RAW_META" | jq -r '.sha256')
 if [[ -z "$RAW_SHA" ]]; then
   echo "raw upload failed" >&2
@@ -68,7 +72,7 @@ if [[ -z "$RAW_SHA" ]]; then
 fi
 
 echo "checking overwrite 409 protection..."
-HTTP_CODE=$(curl -sS -o /tmp/artifact.overwrite.err -w "%{http_code}" \
+HTTP_CODE=$(curl --retry 6 --retry-all-errors --retry-delay 1 -sS -o /tmp/artifact.overwrite.err -w "%{http_code}" \
   -H "content-type: text/plain" \
   --data-binary "raw content" \
   "http://localhost:8080/artifacts?force=1")
@@ -79,7 +83,7 @@ if [[ "$HTTP_CODE" != "409" ]]; then
 fi
 
 echo "checking meta key contract on upload..."
-HTTP_CODE=$(curl -sS -o /tmp/artifact.meta.invalid.upload.err -w "%{http_code}" \
+HTTP_CODE=$(curl --retry 6 --retry-all-errors --retry-delay 1 -sS -o /tmp/artifact.meta.invalid.upload.err -w "%{http_code}" \
   -F "file=@$INPUT" \
   -F 'meta={"BadKey":"bad"}' \
   "http://localhost:8080/artifacts")
@@ -90,7 +94,7 @@ if [[ "$HTTP_CODE" != "400" ]]; then
 fi
 
 echo "checking meta key contract on link..."
-HTTP_CODE=$(curl -sS -o /tmp/artifact.meta.invalid.link.err -w "%{http_code}" \
+HTTP_CODE=$(curl --retry 6 --retry-all-errors --retry-delay 1 -sS -o /tmp/artifact.meta.invalid.link.err -w "%{http_code}" \
   -X POST "http://localhost:8080/artifacts/$HASH1/link" \
   -H "content-type: application/json" \
   -d '{"meta":{"BadKey":"bad"}}')

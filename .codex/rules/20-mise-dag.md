@@ -2,7 +2,7 @@
 paths: [".mise.toml", "mise-tasks/**", "scripts/lib/**/*.sh", "README.md"]
 ---
 # Orchestration Law
-- **DAG**: `.mise.toml` is the ONLY orchestrator. If it's not a DAG node, it doesn't exist.
-- **Scripts**: `mise-tasks/` only. Must be non-executable.
-- **Flow**: NO aggregate `--force`. Use explicit `test:sys`, `ci:force`.
-- **Health**: `svc:health` MUST fail fast on missing dependencies (e.g., Postgres `vector`). Boot failures on missing env bridges (e.g., `ZAI_KEY`) are MANDATORY.
+- **DAG**: `.mise.toml` is ONLY orchestrator. Unlisted = non-existent.
+- **Scripts**: `mise-tasks/` MUST be non-executable.
+- **Pipeline**: Sequential `ci:force`. NO aggregate `--force`. Local mock for compose pi; real proof in `test:int`.
+- **Boot**: Secret checks in `bootstrap:secrets`. Bounded polling for `/health` post-restart. Fast-fail on missing deps.

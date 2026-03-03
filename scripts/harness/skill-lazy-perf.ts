@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,24 +23,31 @@ function nowMs(): number {
 	return Number(process.hrtime.bigint() / 1_000_000n);
 }
 
-async function writeSyntheticSkills(root: string, count: number): Promise<void> {
+async function writeSyntheticSkills(
+	root: string,
+	count: number,
+): Promise<void> {
 	for (let i = 0; i < count; i += 1) {
 		const name = `skill-${String(i).padStart(4, "0")}`;
 		const dir = join(root, name);
 		await mkdir(join(dir, "scripts"), { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			[
+			`${[
 				"---",
 				`name: ${name}`,
 				`description: synthetic ${name} for cold/warm registry scan`,
 				"---",
 				"# synthetic",
 				"Run [script](scripts/run.sh) with $ARGUMENTS.",
-			].join("\n") + "\n",
+			].join("\n")}\n`,
 			"utf8",
 		);
-		await writeFile(join(dir, "scripts", "run.sh"), "#!/usr/bin/env bash\n", "utf8");
+		await writeFile(
+			join(dir, "scripts", "run.sh"),
+			"#!/usr/bin/env bash\n",
+			"utf8",
+		);
 	}
 }
 
@@ -53,7 +60,8 @@ export async function runSkillLazyPerf(input: {
 	const skillCount = Math.max(100, input.skillCount ?? DEFAULT_SKILL_COUNT);
 	const coldBudgetMs = Math.max(
 		200,
-		input.coldBudgetMs ?? Number(process.env.SKILL_SCAN_COLD_BUDGET_MS ?? 1_000),
+		input.coldBudgetMs ??
+			Number(process.env.SKILL_SCAN_COLD_BUDGET_MS ?? 1_000),
 	);
 	const warmBudgetMs = Math.max(
 		50,
@@ -87,7 +95,9 @@ export async function runSkillLazyPerf(input: {
 		const warmMs = nowMs() - warmStart;
 
 		if (coldList.length !== skillCount || warmList.length !== skillCount) {
-			throw new Error(`unexpected list size cold=${coldList.length} warm=${warmList.length} expected=${skillCount}`);
+			throw new Error(
+				`unexpected list size cold=${coldList.length} warm=${warmList.length} expected=${skillCount}`,
+			);
 		}
 
 		await service.resolvePromptText({
@@ -99,13 +109,19 @@ export async function runSkillLazyPerf(input: {
 			throw new Error(`prefix read underflow: ${prefixReads} < ${skillCount}`);
 		}
 		if (fullReads !== 1) {
-			throw new Error(`full body read count must be 1 after single activation, got ${fullReads}`);
+			throw new Error(
+				`full body read count must be 1 after single activation, got ${fullReads}`,
+			);
 		}
 		if (coldMs > coldBudgetMs) {
-			throw new Error(`cold scan budget exceeded: ${coldMs}ms > ${coldBudgetMs}ms`);
+			throw new Error(
+				`cold scan budget exceeded: ${coldMs}ms > ${coldBudgetMs}ms`,
+			);
 		}
 		if (warmMs > warmBudgetMs) {
-			throw new Error(`warm scan budget exceeded: ${warmMs}ms > ${warmBudgetMs}ms`);
+			throw new Error(
+				`warm scan budget exceeded: ${warmMs}ms > ${warmBudgetMs}ms`,
+			);
 		}
 
 		const report: SkillPerfReport = {
@@ -119,7 +135,10 @@ export async function runSkillLazyPerf(input: {
 			prefixReads,
 			fullReads,
 		};
-		await writeJson(input.reportPath, report as unknown as Record<string, unknown>);
+		await writeJson(
+			input.reportPath,
+			report as unknown as Record<string, unknown>,
+		);
 		return report;
 	} finally {
 		await rm(root, { recursive: true, force: true });

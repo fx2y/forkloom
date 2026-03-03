@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
@@ -38,9 +39,12 @@ async function listScriptFiles(skillDir: string): Promise<string[]> {
 }
 
 async function walkFiles(dirPath: string, out: string[]): Promise<void> {
-	let entries: Awaited<ReturnType<typeof readdir>> = [];
+	let entries: Dirent<string>[];
 	try {
-		entries = await readdir(dirPath, { withFileTypes: true });
+		entries = await readdir(dirPath, {
+			withFileTypes: true,
+			encoding: "utf8",
+		});
 	} catch {
 		return;
 	}

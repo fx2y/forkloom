@@ -2,7 +2,8 @@
 paths: ["tests/**", "scripts/harness/**", "fixtures/**", "schema/**", "docker-compose.yml"]
 ---
 # Verification & Fault
-- **Pipeline**: `check:*` -> `test:int:*` -> `golden:*` -> `fault:*` -> `test:sys` -> `bench:*`.
-- **Fault Proofs**: MUST use real DBOS workflows. SIGKILL -> recover. Requires ZERO hash/row diffs. Synthetic drills are NON-PROOF.
-- **Checklists**: MUST be non-vacuous. Fail on `no_done_parses` and missing done-state invariants. Absence of errors != green.
-- **Triage**: Run ops SQL (`test:int:ops-sql`) BEFORE re-running flows.
+- **Flow**: `check:*`->`test:int:*`->`golden:*`->`fault:*`->`test:sys`->`bench:*`.
+- **Fault**: Real DBOS crash/recovery ONLY. 0 hash/row diffs. Synthetic drills REJECTED.
+- **Latch**: Close MUST be non-vacuous (req miss 0, validate/pack/live booleans 1). Absence of error != green.
+- **Proofs**: NO manual UI signoffs. Packs demand dynamic-output proofs. Real RPC proof stays in `test:int:pi-rpc-live`.
+- **Triage**: Ops SQL (`test:int:ops-sql`) ALWAYS FIRST.

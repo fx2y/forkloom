@@ -2,6 +2,7 @@
 paths: ["**/*"]
 ---
 # Global Doctrine
-- **Tools**: `mise` + `fnox` ONLY. `.env` and `npm/make` scripts BANNED.
-- **Enforcement**: `check:lesson-guard` requires rule deltas for logic changes. `check:scope-guard` blocks out-of-scope edits.
-- **Determinism**: Immutable CAS + pure TS logic > opaque shell.
+- **Tools**: `mise`+`fnox` ONLY. `.env`/`make`/`npm` scripts BANNED.
+- **Enforcement**: `check:lesson-guard` demands policy deltas. `check:scope-guard` blocks scope drift.
+- **Determinism**: Pure TS > shell. Immutable CAS. Output captures `out/*` delta ONLY (exclude stale).
+- **Collision**: Deterministic first-wins (scope+order).

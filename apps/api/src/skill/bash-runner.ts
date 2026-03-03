@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { Dirent } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { hashBytes } from "@forkloom/shared";
@@ -6,7 +7,7 @@ import { dedupeSorted, resolveSkillPath, toSkillRelativePath } from "./paths";
 
 export type SkillScriptOutputFile = {
 	path: string;
-	body: Buffer;
+	body: Buffer<ArrayBufferLike>;
 };
 
 export type SkillScriptRunResult = {
@@ -36,8 +37,8 @@ export async function runSkillScript(input: {
 	const startedAt = new globalThis.Date().toISOString();
 	const outputSnapshotBefore = await snapshotOutputFiles(skillDir);
 
-	let stdoutTail = Buffer.alloc(0);
-	let stderrTail = Buffer.alloc(0);
+	let stdoutTail: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+	let stderrTail: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 	let stdoutBytes = 0;
 	let stderrBytes = 0;
 	let timedOut = false;
@@ -74,7 +75,10 @@ export async function runSkillScript(input: {
 		clearTimeout(timer);
 	}
 	const endedAt = new globalThis.Date().toISOString();
-	const outputFiles = await listOutputFilesDelta(skillDir, outputSnapshotBefore);
+	const outputFiles = await listOutputFilesDelta(
+		skillDir,
+		outputSnapshotBefore,
+	);
 	const status =
 		timedOut || exitCode === 137
 			? "aborted"
@@ -119,7 +123,7 @@ function retainTail(
 }
 
 type OutputSnapshotEntry = {
-	body: Buffer;
+	body: Buffer<ArrayBufferLike>;
 	sha256: string;
 };
 
@@ -172,9 +176,12 @@ async function snapshotOutputFiles(skillDir: string): Promise<OutputSnapshot> {
 }
 
 async function walkFiles(dirPath: string, out: string[]): Promise<void> {
-	let entries: Awaited<ReturnType<typeof readdir>> = [];
+	let entries: Dirent<string>[];
 	try {
-		entries = await readdir(dirPath, { withFileTypes: true });
+		entries = await readdir(dirPath, {
+			withFileTypes: true,
+			encoding: "utf8",
+		});
 	} catch {
 		return;
 	}

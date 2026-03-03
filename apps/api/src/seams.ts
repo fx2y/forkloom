@@ -32,7 +32,8 @@ export const API_SEAMS: Record<ApiSeamName, ApiSeam> = {
 	skill: {
 		owner: "skill registry domain",
 		root: "apps/api/src/skill",
-		intent: "skill manifest normalization, discovery, and preview before run/http wiring",
+		intent:
+			"skill manifest normalization, discovery, and preview before run/http wiring",
 		canImportFrom: [],
 	},
 	run: {

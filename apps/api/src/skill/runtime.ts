@@ -2,28 +2,25 @@ import {
 	buildGenericStepHashes,
 	buildGenericStepPayload,
 } from "../workflow/step-hash";
-import {
-	type SkillScriptRunResult,
-	runSkillScript,
-} from "./bash-runner";
 import { parseSkillArgs } from "./args";
+import { type SkillScriptRunResult, runSkillScript } from "./bash-runner";
 import type { SkillExecutionPlan } from "./types";
 
 type ArtifactWriter = {
 	putArtifact(input: {
-		body: Buffer;
+		body: Buffer<ArrayBufferLike>;
 		mime: string;
 		type: "raw" | "trace";
-		meta?: Record<string, string> | undefined;
+		meta: Record<string, string>;
 	}): Promise<{ sha256: string }>;
 };
 
 type RunTruthWriter = {
-	linkArtifact(runId: string, sha256: string, kind: string): Promise<void>;
+	linkArtifact(runId: string, sha256: string, kind: string): Promise<unknown>;
 	appendArtifactWritten(
 		runId: string,
 		input: { sha256: string; kind: string },
-	): Promise<void>;
+	): Promise<unknown>;
 	recordStepLedger(input: {
 		runId: string;
 		stepName: string;
@@ -37,7 +34,7 @@ type RunTruthWriter = {
 		artifactShas: string[];
 		note: string;
 		payload: Record<string, unknown>;
-	}): Promise<void>;
+	}): Promise<unknown>;
 };
 
 export type DurableSkillExecDeps = {

@@ -41,7 +41,9 @@ describe("spec08 skill packs", () => {
 			roots: [{ scope: "workspace", path: REPO_SKILLS_ROOT }],
 		});
 		const names = (await service.listSkills()).map((entry) => entry.name);
-		expect(names).toEqual([...PACKS].sort((left, right) => left.localeCompare(right)));
+		expect(names).toEqual(
+			[...PACKS].sort((left, right) => left.localeCompare(right)),
+		);
 		for (const pack of PACKS) {
 			const preview = await service.previewSkill({ skillName: pack });
 			expect(preview).not.toBeNull();
@@ -68,9 +70,10 @@ describe("spec08 skill packs", () => {
 			]);
 			expect(
 				JSON.parse(
-					pickOutput(policyRun.outputFiles, "out/policy-qa.answer.json").toString(
-						"utf8",
-					),
+					pickOutput(
+						policyRun.outputFiles,
+						"out/policy-qa.answer.json",
+					).toString("utf8"),
 				) as { kind?: string },
 			).toMatchObject({ kind: "policy_qa_answer_v1" });
 
@@ -106,9 +109,10 @@ describe("spec08 skill packs", () => {
 			]);
 			expect(
 				JSON.parse(
-					pickOutput(invoiceRun.outputFiles, "out/invoice-reconcile.json").toString(
-						"utf8",
-					),
+					pickOutput(
+						invoiceRun.outputFiles,
+						"out/invoice-reconcile.json",
+					).toString("utf8"),
 				) as { kind?: string },
 			).toMatchObject({ kind: "invoice_reconcile_v1" });
 
@@ -124,9 +128,10 @@ describe("spec08 skill packs", () => {
 			]);
 			expect(
 				JSON.parse(
-					pickOutput(actionsRun.outputFiles, "out/meeting-actions.json").toString(
-						"utf8",
-					),
+					pickOutput(
+						actionsRun.outputFiles,
+						"out/meeting-actions.json",
+					).toString("utf8"),
 				) as { kind?: string },
 			).toMatchObject({ kind: "meeting_actions_v1" });
 			expect(

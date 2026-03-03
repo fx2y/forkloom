@@ -1,6 +1,8 @@
 import type { Request } from "express";
 import { describe, expect, it } from "vitest";
 import {
+	RUN_SKILL_TEXT_COMMAND_KINDS,
+	RUN_SKILL_TEXT_COMMAND_PREFIX,
 	parseRunCommandPayload,
 	parseRunCreatePayload,
 	parseRunCursor,
@@ -9,8 +11,6 @@ import {
 	parseRunDocSearchPayload,
 	parseRunFileExportPayload,
 	parseRunSkillPreviewPayload,
-	RUN_SKILL_TEXT_COMMAND_KINDS,
-	RUN_SKILL_TEXT_COMMAND_PREFIX,
 } from "../../apps/api/src/http/run-request-parsers";
 
 function makeRequest(input: {
@@ -121,9 +121,9 @@ describe("run-request-parsers", () => {
 		expect(() => parseRunCommandPayload({ kind: "skill" })).toThrow(
 			"kind must be one of",
 		);
-		expect(() => parseRunCommandPayload({ kind: "prompt", payload: {} })).toThrow(
-			"prompt payload.text is required",
-		);
+		expect(() =>
+			parseRunCommandPayload({ kind: "prompt", payload: {} }),
+		).toThrow("prompt payload.text is required");
 	});
 
 	it("parses /skill invocations in text command payloads", () => {
@@ -169,7 +169,9 @@ describe("run-request-parsers", () => {
 			skillName: "policy-qa",
 			args: "invoice.pdf",
 		});
-		expect(() => parseRunSkillPreviewPayload({})).toThrow("skillName is required");
+		expect(() => parseRunSkillPreviewPayload({})).toThrow(
+			"skillName is required",
+		);
 		expect(() =>
 			parseRunSkillPreviewPayload({
 				skillName: "Policy-QA",

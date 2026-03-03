@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { hashBytes } from "@forkloom/shared";
@@ -210,9 +211,12 @@ async function walkSkillTree(
 	out: string[],
 	seen: Set<string>,
 ): Promise<void> {
-	let entries: Awaited<ReturnType<typeof readdir>> = [];
+	let entries: Dirent<string>[];
 	try {
-		entries = await readdir(dirPath, { withFileTypes: true });
+		entries = await readdir(dirPath, {
+			withFileTypes: true,
+			encoding: "utf8",
+		});
 	} catch {
 		return;
 	}

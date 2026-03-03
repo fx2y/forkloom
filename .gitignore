@@ -47,7 +47,7 @@ AGENTS.local.md
 spec-*/
 !spec-0/
 spec-0/*
-!spec-0/08*
+!spec-0/09*
 # spec-0/*.md
 !spec-0/00-learnings.sqlite
 # !spec-0/tutorial/

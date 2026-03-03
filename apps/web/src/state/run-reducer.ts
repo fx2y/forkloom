@@ -262,7 +262,7 @@ export function hydrateRunSkills(
 		state.selectedSkillName &&
 		sorted.some((skill) => skill.name === state.selectedSkillName)
 			? state.selectedSkillName
-			: sorted[0]?.name ?? null;
+			: (sorted[0]?.name ?? null);
 	const selectedSkillPreview =
 		state.selectedSkillPreview &&
 		state.selectedSkillPreview.skillName === selectedSkillName

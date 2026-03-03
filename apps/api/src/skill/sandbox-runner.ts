@@ -1,7 +1,11 @@
+import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import type { ExecResult, RunnerBackend, SandboxModel } from "../sandbox";
-import type { SkillScriptOutputFile, SkillScriptRunResult } from "./bash-runner";
+import type {
+	SkillScriptOutputFile,
+	SkillScriptRunResult,
+} from "./bash-runner";
 import { resolveSkillPath, toSkillRelativePath } from "./paths";
 
 type SandboxSkillRunnerInput = {
@@ -42,9 +46,14 @@ export function createSandboxSkillRunner(
 		const filePayloads = await collectSkillFilePayloads(skillDir);
 		const timeoutSec = Math.max(
 			1,
-			Math.ceil((run.timeoutMs ?? input.sandbox.spec.timeoutSec * 1_000) / 1_000),
+			Math.ceil(
+				(run.timeoutMs ?? input.sandbox.spec.timeoutSec * 1_000) / 1_000,
+			),
 		);
-		const maxBytesOut = Math.max(1, run.maxBytesOut ?? input.sandbox.spec.maxBytesOut);
+		const maxBytesOut = Math.max(
+			1,
+			run.maxBytesOut ?? input.sandbox.spec.maxBytesOut,
+		);
 		const exec = await input.backend.exec(input.sandbox, {
 			cmd: buildScriptExecCommand({
 				containerSkillWorkDir,
@@ -59,7 +68,12 @@ export function createSandboxSkillRunner(
 		});
 		const outputFiles =
 			exec.status === "done"
-				? await listOutputFiles(input, containerSkillWorkDir, maxBytesOut, timeoutSec)
+				? await listOutputFiles(
+						input,
+						containerSkillWorkDir,
+						maxBytesOut,
+						timeoutSec,
+					)
 				: [];
 		return {
 			scriptPath: scriptRelative,
@@ -98,7 +112,9 @@ function toContainerSkillDir(
 	stageToken: string,
 	root: string,
 ): string {
-	return [root, SKILL_STAGE_ROOT, runId, String(commandSeq), stageToken].join("/");
+	return [root, SKILL_STAGE_ROOT, runId, String(commandSeq), stageToken].join(
+		"/",
+	);
 }
 
 async function collectSkillFilePayloads(
@@ -107,7 +123,9 @@ async function collectSkillFilePayloads(
 	const files: string[] = [];
 	await walkSkillFiles(skillDir, files);
 	const payloads: SkillFilePayload[] = [];
-	for (const absolutePath of files.sort((left, right) => left.localeCompare(right))) {
+	for (const absolutePath of files.sort((left, right) =>
+		left.localeCompare(right),
+	)) {
 		const relativePath = toSkillRelativePath(skillDir, absolutePath);
 		if (!relativePath) {
 			continue;
@@ -122,9 +140,12 @@ async function collectSkillFilePayloads(
 }
 
 async function walkSkillFiles(dirPath: string, out: string[]): Promise<void> {
-	let entries: Awaited<ReturnType<typeof readdir>> = [];
+	let entries: Dirent<string>[];
 	try {
-		entries = await readdir(dirPath, { withFileTypes: true });
+		entries = await readdir(dirPath, {
+			withFileTypes: true,
+			encoding: "utf8",
+		});
 	} catch {
 		return;
 	}
@@ -167,7 +188,9 @@ function buildScriptExecCommand(input: {
 	setupCommands.push('chmod -R u+rwX "$dst"');
 	setupCommands.push('cd "$dst"');
 	setupCommands.push('runner="$(command -v bash || command -v sh)"');
-	setupCommands.push(`"$runner" ${quoteShell(`./${input.scriptRelative}`)} "$@"`);
+	setupCommands.push(
+		`"$runner" ${quoteShell(`./${input.scriptRelative}`)} "$@"`,
+	);
 	return ["sh", "-lc", setupCommands.join("; "), "skill-script", ...input.args];
 }
 
@@ -178,7 +201,11 @@ async function listOutputFiles(
 	timeoutSec: number,
 ): Promise<SkillScriptOutputFile[]> {
 	const listed = await input.backend.exec(input.sandbox, {
-		cmd: ["sh", "-lc", "if [ -d out ]; then find out -type f | LC_ALL=C sort; fi"],
+		cmd: [
+			"sh",
+			"-lc",
+			"if [ -d out ]; then find out -type f | LC_ALL=C sort; fi",
+		],
 		cwd: containerSkillWorkDir,
 		stream: false,
 		timeoutSec,

@@ -668,26 +668,28 @@ export function mountRunSurface(
 			pick.textContent =
 				state.selectedSkillName === skill.name ? "Selected" : "Select";
 			pick.disabled = state.selectedSkillName === skill.name;
-				pick.addEventListener("click", () => {
-					state = selectRunSkill(state, skill.name);
-					skillNameInput.value = skill.name;
-					update();
-				});
+			pick.addEventListener("click", () => {
+				state = selectRunSkill(state, skill.name);
+				skillNameInput.value = skill.name;
+				update();
+			});
 
-				row.append(left, pick);
-				skillListNode.append(row);
-			}
-			if (menuSkills.length === 0) {
-				const empty = document.createElement("li");
-				empty.className = "hint";
-				empty.textContent = "No registered skills for this run.";
-				skillListNode.append(empty);
-			}
+			row.append(left, pick);
+			skillListNode.append(row);
+		}
+		if (menuSkills.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "hint";
+			empty.textContent = "No registered skills for this run.";
+			skillListNode.append(empty);
+		}
 
 		if (state.selectedSkillName) {
 			skillNameInput.value = state.selectedSkillName;
 		}
-		skillPreviewNode.textContent = prettySkillPreview(state.selectedSkillPreview);
+		skillPreviewNode.textContent = prettySkillPreview(
+			state.selectedSkillPreview,
+		);
 	};
 
 	const update = () => {
@@ -720,7 +722,10 @@ export function mountRunSurface(
 			? "Searching..."
 			: "Search citations";
 		skillPreviewButton.disabled =
-			previewingSkill || loadingSkills || run == null || state.skills.length === 0;
+			previewingSkill ||
+			loadingSkills ||
+			run == null ||
+			state.skills.length === 0;
 		skillPreviewButton.textContent = previewingSkill
 			? "Previewing..."
 			: loadingSkills
@@ -922,7 +927,7 @@ export function mountRunSurface(
 		}
 		const fromInput = skillNameInput.value.trim();
 		const skillName =
-			fromInput.length > 0 ? fromInput : state.selectedSkillName ?? "";
+			fromInput.length > 0 ? fromInput : (state.selectedSkillName ?? "");
 		if (skillName.length === 0) {
 			errorMessage = "skill name is required";
 			update();
@@ -959,7 +964,7 @@ export function mountRunSurface(
 	skillInsertButton.addEventListener("click", () => {
 		const fromInput = skillNameInput.value.trim();
 		const skillName =
-			fromInput.length > 0 ? fromInput : state.selectedSkillName ?? "";
+			fromInput.length > 0 ? fromInput : (state.selectedSkillName ?? "");
 		if (skillName.length === 0) {
 			errorMessage = "skill name is required";
 			update();

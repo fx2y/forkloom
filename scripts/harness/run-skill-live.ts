@@ -1,14 +1,14 @@
 import { pathToFileURL } from "node:url";
 import { waitForApiHealthyStable, writeJson } from "./live-support";
+import { sleep } from "./live-support";
 import {
+	createRun,
 	fetchArtifactBytes,
 	fetchRunState,
 	fetchRunTruth,
 	makeRunSpec,
 	queryRows,
-	createRun,
 } from "./run-live-support";
-import { sleep } from "./live-support";
 
 type SkillOutputArtifact = {
 	kind: string;
@@ -22,7 +22,9 @@ function skillTimeoutMs(): number {
 	}
 	const parsed = Number.parseInt(raw, 10);
 	if (!Number.isFinite(parsed) || parsed < 30_000) {
-		throw new Error(`RUN_SKILL_TIMEOUT_MS must be integer >= 30000, got: ${raw}`);
+		throw new Error(
+			`RUN_SKILL_TIMEOUT_MS must be integer >= 30000, got: ${raw}`,
+		);
 	}
 	return parsed;
 }
@@ -40,7 +42,9 @@ async function waitForSkillExecEvidence(
 	while (Date.now() < deadline) {
 		try {
 			const truth = await fetchRunTruth(runId);
-			const hasSkillExec = truth.links.some((link) => link.stepName === "skill_exec");
+			const hasSkillExec = truth.links.some(
+				(link) => link.stepName === "skill_exec",
+			);
 			const outputCount = truth.artifacts.filter(
 				(artifact) => artifact.kind === "skill_output_file",
 			).length;
@@ -52,7 +56,9 @@ async function waitForSkillExecEvidence(
 		}
 		await sleep(500);
 	}
-	throw new Error(`skill_exec evidence not ready before timeout for run ${runId}`);
+	throw new Error(
+		`skill_exec evidence not ready before timeout for run ${runId}`,
+	);
 }
 
 async function main(): Promise<void> {
@@ -71,7 +77,9 @@ async function main(): Promise<void> {
 	await createRun(spec);
 	const truth = await waitForSkillExecEvidence(spec.runId, timeoutMs);
 	const runState = await fetchRunState(spec.runId);
-	const skillLinks = truth.links.filter((link) => link.stepName === "skill_exec");
+	const skillLinks = truth.links.filter(
+		(link) => link.stepName === "skill_exec",
+	);
 	if (skillLinks.length === 0) {
 		throw new Error("missing skill_exec truth links");
 	}
@@ -90,7 +98,9 @@ async function main(): Promise<void> {
 	let actionsJson: Record<string, unknown> | null = null;
 	let followThroughJson: Record<string, unknown> | null = null;
 	for (const artifact of outputArtifacts) {
-		const parsed = await decodeJsonArtifact<Record<string, unknown>>(artifact.sha256);
+		const parsed = await decodeJsonArtifact<Record<string, unknown>>(
+			artifact.sha256,
+		);
 		if (parsed.kind === "meeting_actions_v1") {
 			actionsJson = parsed;
 		}
@@ -104,7 +114,9 @@ async function main(): Promise<void> {
 	if (!followThroughJson) {
 		throw new Error("missing meeting_follow_through_stub_v1 output artifact");
 	}
-	const actionRows = Array.isArray(actionsJson.actions) ? actionsJson.actions : [];
+	const actionRows = Array.isArray(actionsJson.actions)
+		? actionsJson.actions
+		: [];
 	if (actionRows.length < 2) {
 		throw new Error(`expected >=2 action rows, got ${actionRows.length}`);
 	}
@@ -114,9 +126,10 @@ async function main(): Promise<void> {
 
 	const dbRows = await queryRows<{
 		count: string;
-	}>(`select count(*)::text as count from steps where run_id = $1 and step_name='skill_exec';`, [
-		spec.runId,
-	]);
+	}>(
+		`select count(*)::text as count from steps where run_id = $1 and step_name='skill_exec';`,
+		[spec.runId],
+	);
 	const dbStepCount = Number.parseInt(dbRows[0]?.count ?? "0", 10);
 	if (!Number.isFinite(dbStepCount) || dbStepCount < 1) {
 		throw new Error(`missing skill_exec step row in DB for run ${spec.runId}`);
