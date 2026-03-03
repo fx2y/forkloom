@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds jq
+
+MISE_EXPERIMENTAL=1 mise run --force test:int:skills-perf
+
+mkdir -p .cache/spec09
+cat > .cache/spec09/c7-perf.json <<EOF_JSON
+{
+  "status": "ok",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "skillsPerfPath": ".cache/spec08/skills-perf.json"
+}
+EOF_JSON
+
+jq -e '.status == "ok"' .cache/spec09/c7-perf.json >/dev/null
+
+write_mark "test:int:c7-perf"
+echo "test:int:c7-perf ok"

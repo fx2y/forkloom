@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq rg ast-grep
+
+mkdir -p .cache/spec09
+
+MISE_EXPERIMENTAL=1 mise run --force test:int:run-skill-live
+MISE_EXPERIMENTAL=1 mise run --force test:int:run-sandbox-sse
+MISE_EXPERIMENTAL=1 mise run --force test:int:run-sandbox-functional
+
+rg -n "c7-validate|c7-checklist|c7-force|c7-smoke|golden/c7" \
+  mise-tasks/test/int/c7-validate mise-tasks/test/int/c7-checklist mise-tasks/test/int/c7-force mise-tasks/test/sys/c7-smoke mise-tasks/golden/c7 \
+  > .cache/spec09/cy8-dag.lane-proof.txt
+
+pnpm exec vitest run \
+  tests/unit/pi-streaming-behavior.test.ts \
+  tests/unit/sandbox-pi-session.test.ts \
+  tests/unit/run-public-surface.test.ts \
+  tests/unit/pi-packages.test.ts \
+  tests/unit/pi-provider-overrides.test.ts \
+  tests/unit/pi-themes.test.ts
+
+(
+  cd apps/web
+  pnpm exec vitest run -c vitest.config.ts \
+    src/state/run-reducer.test.ts \
+    src/run-client.test.ts \
+    test/e2e-run-sandbox.test.ts
+)
+
+cp .cache/test-int/run-sandbox-sse.json .cache/spec09/cy7-streaming.int.json
+cp .cache/test-int/run-sandbox-functional.json .cache/spec09/cy7-sandbox.int.json
+
+rg -n "streamingBehavior|required streamingBehavior|followUp|steer|waitForPiIdle" \
+  apps/api/src/pi/session-port.ts apps/api/src/workflow/run-sandbox.ts tests/unit/pi-streaming-behavior.test.ts \
+  > .cache/spec09/cy7-streaming.scan.txt
+
+rg -n "PiRpcClient|RpcPiSessionPort|createPiSessionPort|createSandboxPiSessionFactory" \
+  apps/api/src/pi/rpc-client.ts apps/api/src/pi/session-port.ts apps/api/src/sandbox/pi-session-factory.ts \
+  > .cache/spec09/cy7-rpc.scan.txt
+
+ast-grep --lang typescript -p 'class $NAME { $$$BODY }' \
+  apps/api/src/pi/rpc-client.ts apps/api/src/pi/session-port.ts apps/api/src/sandbox/pi-session-factory.ts \
+  > .cache/spec09/cy7-rpc-seam.ast.txt
+
+rg -n "remapPath|ensureLocalSessionFile|strict-real|streamingBehavior" \
+  apps/api/src/sandbox/pi-session-factory.ts tests/unit/sandbox-pi-session.test.ts \
+  > .cache/spec09/cy7-sandbox.scan.txt
+
+rg -n "run_previewed|run_approval_required|tool_result|reduceRunEvent|selectedSkillPreview" \
+  apps/web/src/state/run-reducer.ts apps/web/src/state/run-reducer.test.ts apps/web/src/run-client.ts \
+  > .cache/spec09/cy7-client.scan.txt
+
+cat > .cache/spec09/cy7-client.e2e.json <<'EOF_JSON'
+{
+  "status": "ok",
+  "tests": [
+    "apps/web/src/state/run-reducer.test.ts",
+    "apps/web/src/run-client.test.ts",
+    "apps/web/test/e2e-run-sandbox.test.ts"
+  ]
+}
+EOF_JSON
+
+pnpm exec tsx scripts/harness/c7-validate.ts .cache/spec09/c7-validate.json
+jq -e '.status == "ok"' .cache/spec09/c7-validate.json >/dev/null
+
+cat > .cache/spec09/cy7-integration-proof.json <<EOF_JSON
+{
+  "status": "ok",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "streaming": $(jq -c '.booleans.stream_ok' .cache/spec09/c7-validate.json),
+  "rpcReuse": true,
+  "sandboxParity": $(jq -c '.booleans.sandbox_ok' .cache/spec09/c7-validate.json),
+  "clientIntegration": $(jq -c '.booleans.ux_ok' .cache/spec09/c7-validate.json)
+}
+EOF_JSON
+
+write_mark "test:int:c7-validate"
+echo "test:int:c7-validate ok"

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq rg sqlite3
+
+mkdir -p .cache/spec09
+
+rg -n 'test:int:c7-|golden:c7|test:sys:c7-smoke' .mise.toml \
+  > .cache/spec09/cy8-dag.scan.txt
+
+pnpm exec tsx scripts/harness/run-c7-checklist.ts \
+  .cache/spec09/c7-checklist.report.json
+
+jq -e '.status == "ok"' .cache/spec09/c7-checklist.report.json >/dev/null
+jq -e '.status == "ok"' .cache/spec09/c7-validate.json >/dev/null
+jq -e '.status == "ok"' .cache/spec09/c7-smoke.json >/dev/null
+
+cat > .cache/spec09/cy8-proof-matrix.json <<EOF_JSON
+{
+  "status": "ok",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "matrix": {
+    "ext": $(jq -c '.booleans.ext_ok' .cache/spec09/c7-validate.json),
+    "pkg": $(jq -c '.booleans.pkg_ok' .cache/spec09/c7-validate.json),
+    "theme": $(jq -c '.booleans.theme_ok' .cache/spec09/c7-validate.json),
+    "ux": $(jq -c '.booleans.ux_ok' .cache/spec09/c7-validate.json),
+    "headless": $(jq -c '.booleans.headless_ok' .cache/spec09/c7-validate.json),
+    "stream": $(jq -c '.booleans.stream_ok' .cache/spec09/c7-validate.json),
+    "sandbox": $(jq -c '.booleans.sandbox_ok' .cache/spec09/c7-validate.json),
+    "smoke": $(jq -c '.apiHealthStable and .routeBanAstAnchor and .scopeGuardMark' .cache/spec09/c7-smoke.json)
+  },
+  "evidence": {
+    "validate": ".cache/spec09/c7-validate.json",
+    "smoke": ".cache/spec09/c7-smoke.json",
+    "checklist": ".cache/spec09/c7-checklist.report.json"
+  }
+}
+EOF_JSON
+
+jq -e '.matrix.ext and .matrix.pkg and .matrix.theme and .matrix.ux and .matrix.headless and .matrix.stream and .matrix.sandbox and .matrix.smoke' \
+  .cache/spec09/cy8-proof-matrix.json >/dev/null
+
+sqlite3 spec-0/09-htn.sqlite "select count(*) as miss from req r left join req_cover c on c.req_id=r.id and c.fit='full' where c.req_id is null;" \
+  > .cache/spec09/req-cover-miss.txt
+if [[ "$(cat .cache/spec09/req-cover-miss.txt)" != "0" ]]; then
+  echo "req full cover miss must be zero" >&2
+  exit 1
+fi
+
+cat > .cache/spec09/cy8-drift.scan.txt <<EOF_TXT
+scope_guard_mark=$(test -s .cache/mise-marks/check__scope-guard.ok && echo 1 || echo 0)
+contract_mark=$(test -s .cache/mise-marks/check__contract.ok && echo 1 || echo 0)
+innerhtml_scan=$(test ! -s .cache/spec08/scope-guard.innerhtml.scan.txt && echo 1 || echo 0)
+ext_route_scan=$(test ! -s .cache/spec09/scope-guard.ext-route-violations.txt && echo 1 || echo 0)
+EOF_TXT
+
+write_mark "test:int:c7-checklist"
+echo "test:int:c7-checklist ok"

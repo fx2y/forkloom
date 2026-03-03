@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+
+MISE_EXPERIMENTAL=1 mise run --force test:int:c7-validate
+MISE_EXPERIMENTAL=1 mise run --force test:sys:c7-smoke
+MISE_EXPERIMENTAL=1 mise run --force test:int:c7-checklist
+
+write_mark "test:int:c7-force"
+echo "test:int:c7-force ok"

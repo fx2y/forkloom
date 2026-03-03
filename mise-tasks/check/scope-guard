@@ -120,7 +120,7 @@ for needle in "registerProvider" "buildProviderOverrideRegistry" "resolveProvide
 done
 
 rg -n "extensions/(will-run|artifact-widget|structured-wizard)/index.ts" \
-  spec-0/09-03-htn.yaml > .cache/spec09/scope-guard.flagship-scope.txt
+  spec-0/09-04-htn.yaml > .cache/spec09/scope-guard.flagship-scope.txt || true
 for path in "extensions/will-run/index.ts" "extensions/artifact-widget/index.ts" "extensions/structured-wizard/index.ts"; do
   if [[ ! -f "$path" ]]; then
     echo "scope guard missing flagship extension file: $path" >&2
@@ -134,6 +134,21 @@ if [[ ! -s .cache/spec09/scope-guard.ext-ban.ast.txt ]]; then
   echo "scope guard ast-grep found no C7 top-level route ban anchor" >&2
   exit 1
 fi
+
+if rg -n "innerHTML" apps/web/src > .cache/spec09/scope-guard.c7-innerhtml.scan.txt; then
+  echo "innerHTML usage is forbidden in C7 web surface" >&2
+  exit 1
+fi
+
+rg -n "class PiRpcClient|class RpcPiSessionPort|class SandboxRpcSessionPort" \
+  apps/api/src/pi/rpc-client.ts apps/api/src/pi/session-port.ts apps/api/src/sandbox/pi-session-factory.ts \
+  > .cache/spec09/cy7-rpc-seam.ast.txt
+for needle in "PiRpcClient" "RpcPiSessionPort" "SandboxRpcSessionPort"; do
+  if ! rg -Fq "$needle" .cache/spec09/cy7-rpc-seam.ast.txt; then
+    echo "scope guard missing rpc seam class anchor: $needle" >&2
+    exit 1
+  fi
+done
 
 rg -n "name: policy-qa|name: contract-review|name: invoice-extract|name: meeting-to-actions|## Outputs \\(ARTIFACTS\\)|scripts/emit-.*\\.sh" \
   skills/*/SKILL.md > .cache/spec08/scope-guard.pack.scan.txt

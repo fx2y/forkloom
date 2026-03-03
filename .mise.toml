@@ -103,7 +103,7 @@ outputs = [".cache/mise-marks/check__lesson-guard.ok"]
 [tasks."check:scope-guard"]
 run = "bash ./mise-tasks/check/scope-guard"
 sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "apps/web/src/**/*.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "skills/**/*.md", "README.md", "docs/adr/**/*.md", "docs/runbook/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "spec-0/08-spec.md", "spec-0/09-spec.md", "mise-tasks/check/scope-guard"]
-outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt", ".cache/spec08/scope-guard.skill-wire.txt", ".cache/spec08/scope-guard.skills-route-violations.txt", ".cache/spec08/scope-guard.skill-kind.ast.txt", ".cache/spec08/scope-guard.innerhtml.scan.txt", ".cache/spec08/scope-guard.pack.scan.txt", ".cache/spec09/scope-guard.ext-wire.txt", ".cache/spec09/scope-guard.ext-route-violations.txt", ".cache/spec09/scope-guard.ext-ban.ast.txt"]
+outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt", ".cache/spec08/scope-guard.skill-wire.txt", ".cache/spec08/scope-guard.skills-route-violations.txt", ".cache/spec08/scope-guard.skill-kind.ast.txt", ".cache/spec08/scope-guard.innerhtml.scan.txt", ".cache/spec08/scope-guard.pack.scan.txt", ".cache/spec09/scope-guard.ext-wire.txt", ".cache/spec09/scope-guard.ext-route-violations.txt", ".cache/spec09/scope-guard.provider-seam.txt", ".cache/spec09/scope-guard.flagship-scope.txt", ".cache/spec09/scope-guard.ext-ban.ast.txt", ".cache/spec09/scope-guard.c7-innerhtml.scan.txt", ".cache/spec09/cy7-rpc-seam.ast.txt"]
 
 [tasks.check]
 depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard", "check:scope-guard"]
@@ -284,6 +284,30 @@ depends = ["test:int:skills-validate", "test:int:skills-perf", "check:scope-guar
 sources = [".mise.toml", "scripts/harness/spec08-sql.ts", "scripts/harness/run-skill-checklist.ts", "tests/unit/spec08-sql.test.ts", ".cache/spec08/skills-live-proof.json", ".cache/spec08/skills-pack-proof.json", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-perf.json", "spec-0/08-htn.sqlite", "spec-0/08-tasks.sqlite", "README.md", "docs/adr/**/*.md", "mise-tasks/check/scope-guard", "mise-tasks/test/int/skills-checklist", "package.json", "pnpm-lock.yaml"]
 outputs = [".cache/mise-marks/test__int__skills-checklist.ok", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/final-proof-index.txt"]
 
+[tasks."test:int:c7-validate"]
+run = "bash ./mise-tasks/test/int/c7-validate"
+depends = ["check:scope-guard", "check:contract", "svc:health"]
+sources = [".mise.toml", "apps/**/*.ts", "scripts/harness/c7-validate.ts", "tests/unit/**/*.ts", "apps/web/src/**/*.ts", "apps/web/test/**/*.ts", "mise-tasks/test/int/c7-validate", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__c7-validate.ok", ".cache/spec09/c7-validate.json", ".cache/spec09/cy7-streaming.scan.txt", ".cache/spec09/cy7-streaming.int.json", ".cache/spec09/cy7-rpc.scan.txt", ".cache/spec09/cy7-rpc-seam.ast.txt", ".cache/spec09/cy7-sandbox.scan.txt", ".cache/spec09/cy7-sandbox.int.json", ".cache/spec09/cy7-client.scan.txt", ".cache/spec09/cy7-client.e2e.json", ".cache/spec09/cy7-integration-proof.json", ".cache/spec09/cy8-dag.lane-proof.txt"]
+
+[tasks."test:int:c7-perf"]
+run = "bash ./mise-tasks/test/int/c7-perf"
+depends = ["test:int:skills-perf"]
+sources = [".cache/spec08/skills-perf.json", "mise-tasks/test/int/c7-perf"]
+outputs = [".cache/mise-marks/test__int__c7-perf.ok", ".cache/spec09/c7-perf.json"]
+
+[tasks."test:int:c7-checklist"]
+run = "bash ./mise-tasks/test/int/c7-checklist"
+depends = ["test:int:c7-validate", "test:sys:c7-smoke", "check:scope-guard"]
+sources = [".mise.toml", "scripts/harness/spec09-sql.ts", "scripts/harness/run-c7-checklist.ts", "tests/unit/spec09-sql.test.ts", ".cache/spec09/c7-validate.json", ".cache/spec09/c7-smoke.json", "spec-0/09-htn.sqlite", "spec-0/09-tasks.sqlite", "mise-tasks/test/int/c7-checklist", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__c7-checklist.ok", ".cache/spec09/c7-checklist.report.json", ".cache/spec09/cy8-dag.scan.txt", ".cache/spec09/cy8-proof-matrix.json", ".cache/spec09/cy8-drift.scan.txt", ".cache/spec09/req-cover-miss.txt"]
+
+[tasks."test:int:c7-force"]
+run = "bash ./mise-tasks/test/int/c7-force"
+depends = ["test:int:c7-checklist", "test:int:c7-perf"]
+sources = [".mise.toml", "mise-tasks/test/int/c7-force"]
+outputs = [".cache/mise-marks/test__int__c7-force.ok"]
+
 [tasks."test:int:doc-force"]
 run = [
   "mise run --force test:int:doc-config",
@@ -326,7 +350,10 @@ run = [
   "mise run test:int:run-skill-live",
   "mise run test:int:skills-validate",
   "mise run test:int:skills-perf",
-  "mise run test:int:skills-checklist"
+  "mise run test:int:skills-checklist",
+  "mise run test:int:c7-validate",
+  "mise run test:int:c7-perf",
+  "mise run test:int:c7-checklist"
 ]
 
 [tasks."test:int:force"]
@@ -360,7 +387,8 @@ run = [
   "mise run --force test:int:run-skill-live",
   "mise run --force test:int:skills-validate",
   "mise run --force test:int:skills-perf",
-  "mise run --force test:int:skills-checklist"
+  "mise run --force test:int:skills-checklist",
+  "mise run --force test:int:c7-force"
 ]
 
 [tasks."golden:canonicalize"]
@@ -391,6 +419,12 @@ depends = ["test:int:skills-checklist"]
 sources = [".cache/spec08/final-proof-index.txt", ".cache/spec08/skills-live-proof.json", ".cache/spec08/skills-validate.json", ".cache/spec08/skills-pack-proof.json", ".cache/spec08/skills-perf.json", ".cache/spec08/skills-checklist.report.json", ".cache/spec08/skills.available.xml", "fixtures/golden/skills.available.xml", "mise-tasks/golden/skills"]
 outputs = [".cache/mise-marks/golden__skills.ok", ".cache/spec08/final-proof-index.txt"]
 
+[tasks."golden:c7"]
+run = "bash ./mise-tasks/golden/c7"
+depends = ["test:int:c7-checklist"]
+sources = [".cache/spec09/c7-validate.json", ".cache/spec09/c7-checklist.report.json", ".cache/spec09/c7-smoke.json", ".cache/spec09/cy8-proof-matrix.json", ".cache/spec09/req-cover-miss.txt", "mise-tasks/golden/c7"]
+outputs = [".cache/mise-marks/golden__c7.ok", ".cache/spec09/final-proof-index.txt"]
+
 [tasks."golden:accept"]
 run = "bash ./mise-tasks/golden/accept"
 depends = ["golden:canonicalize"]
@@ -398,7 +432,7 @@ sources = [".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/accept
 outputs = [".cache/mise-marks/golden__accept.ok", "fixtures/golden/sample.session.canon.jsonl"]
 
 [tasks.golden]
-depends = ["golden:diff", "golden:truth", "golden:doc", "golden:skills"]
+depends = ["golden:diff", "golden:truth", "golden:doc", "golden:skills", "golden:c7"]
 
 [tasks."fault:kill-resume"]
 run = "bash ./mise-tasks/fault/kill-resume"
@@ -441,8 +475,14 @@ depends = ["bootstrap", "svc:health"]
 sources = [".mise.toml", "mise-tasks/test/sys/e2e", "src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "apps/**/*.ts", "packages/**/*.ts", "contracts/v0/**/*.json", "contracts/v1/**/*.json", "fixtures/**/*.jsonl", "schema/**/*.json", "docker-compose.yml"]
 outputs = [".cache/mise-marks/test__sys__e2e.ok"]
 
+[tasks."test:sys:c7-smoke"]
+run = "bash ./mise-tasks/test/sys/c7-smoke"
+depends = ["svc:health", "check:scope-guard"]
+sources = [".mise.toml", "apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "apps/web/src/**/*.ts", "mise-tasks/test/sys/c7-smoke"]
+outputs = [".cache/mise-marks/test__sys__c7-smoke.ok", ".cache/spec09/c7-smoke.json", ".cache/spec09/c7-smoke.ast.txt"]
+
 [tasks."test:sys"]
-depends = ["test:sys:e2e"]
+depends = ["test:sys:e2e", "test:sys:c7-smoke"]
 
 [tasks."ci:force"]
 run = [

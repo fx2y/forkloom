@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds curl jq ast-grep
+
+mkdir -p .cache/spec09
+
+wait_for_url_stable "api" "http://127.0.0.1:8080/health" /tmp/spec09-c7-health.json "-fsS" 120 3 1
+
+ast-grep --lang typescript -p 'RUN_C7_TOP_LEVEL_ROUTE_BANS' \
+  apps/api/src/run/public-surface.ts > .cache/spec09/c7-smoke.ast.txt
+if [[ ! -s .cache/spec09/c7-smoke.ast.txt ]]; then
+  echo "missing RUN_C7_TOP_LEVEL_ROUTE_BANS ast anchor" >&2
+  exit 1
+fi
+
+cat > .cache/spec09/c7-smoke.json <<EOF_JSON
+{
+  "status": "ok",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "apiHealthStable": true,
+  "routeBanAstAnchor": true,
+  "scopeGuardMark": $(test -s .cache/mise-marks/check__scope-guard.ok && echo true || echo false)
+}
+EOF_JSON
+
+jq -e '.status == "ok" and .apiHealthStable and .routeBanAstAnchor and .scopeGuardMark' \
+  .cache/spec09/c7-smoke.json >/dev/null
+
+write_mark "test:sys:c7-smoke"
+echo "test:sys:c7-smoke ok"

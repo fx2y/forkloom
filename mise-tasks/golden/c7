@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds jq rg
+
+mkdir -p .cache/spec09
+
+cat > .cache/spec09/final-proof-index.txt <<EOF_INDEX
+c7_validate=.cache/spec09/c7-validate.json
+c7_checklist=.cache/spec09/c7-checklist.report.json
+c7_smoke=.cache/spec09/c7-smoke.json
+proof_matrix=.cache/spec09/cy8-proof-matrix.json
+req_cover_miss=.cache/spec09/req-cover-miss.txt
+EOF_INDEX
+
+for path in \
+  .cache/spec09/c7-validate.json \
+  .cache/spec09/c7-checklist.report.json \
+  .cache/spec09/c7-smoke.json \
+  .cache/spec09/cy8-proof-matrix.json; do
+  if [[ ! -s "$path" ]]; then
+    echo "missing proof file: $path" >&2
+    exit 1
+  fi
+done
+
+jq -e '.status == "ok"' .cache/spec09/c7-validate.json >/dev/null
+jq -e '.status == "ok"' .cache/spec09/c7-checklist.report.json >/dev/null
+jq -e '.status == "ok"' .cache/spec09/c7-smoke.json >/dev/null
+jq -e '.status == "ok" and .matrix.ext and .matrix.pkg and .matrix.theme and .matrix.ux and .matrix.headless and .matrix.stream and .matrix.sandbox and .matrix.smoke' \
+  .cache/spec09/cy8-proof-matrix.json >/dev/null
+
+if [[ "$(cat .cache/spec09/req-cover-miss.txt)" != "0" ]]; then
+  echo "req-cover miss must be 0" >&2
+  exit 1
+fi
+
+for needle in \
+  "c7_validate=.cache/spec09/c7-validate.json" \
+  "c7_checklist=.cache/spec09/c7-checklist.report.json" \
+  "c7_smoke=.cache/spec09/c7-smoke.json" \
+  "proof_matrix=.cache/spec09/cy8-proof-matrix.json" \
+  "req_cover_miss=.cache/spec09/req-cover-miss.txt"; do
+  if ! rg -Fq "$needle" .cache/spec09/final-proof-index.txt; then
+    echo "final-proof-index missing: $needle" >&2
+    exit 1
+  fi
+done
+
+write_mark "golden:c7"
+echo "golden:c7 ok"
