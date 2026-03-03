@@ -40,6 +40,8 @@ export type AppConfig = {
 	skillPrefixBytes: number;
 	skillPromptMaxSkills: number;
 	skillPromptMaxDescriptionChars: number;
+	piGlobalSettingsPath: string;
+	piProjectSettingsPath: string;
 };
 
 function must(name: string): string {
@@ -127,6 +129,16 @@ function normalizePath(path: string, cwd: string, homeDir: string): string {
 	return resolve(cwd, path);
 }
 
+function buildPiSettingsPaths(cwd: string, homeDir: string): {
+	piGlobalSettingsPath: string;
+	piProjectSettingsPath: string;
+} {
+	return {
+		piGlobalSettingsPath: resolve(homeDir, ".pi/agent/settings.json"),
+		piProjectSettingsPath: resolve(cwd, ".pi/settings.json"),
+	};
+}
+
 function buildSkillRoots(cwd: string, homeDir: string): SkillRoot[] {
 	const defaults: Record<SkillScope, string[]> = {
 		org: [".forkloom/skills/org"],
@@ -161,6 +173,7 @@ function buildSkillRoots(cwd: string, homeDir: string): SkillRoot[] {
 export function loadConfig(): AppConfig {
 	const cwd = process.cwd();
 	const homeDir = homedir();
+	const settingsPaths = buildPiSettingsPaths(cwd, homeDir);
 	return {
 		port: parsePort(process.env.PORT, 8080),
 		databaseUrl: process.env.DATABASE_URL ?? must("DBOS_SYSTEM_DATABASE_URL"),
@@ -242,5 +255,6 @@ export function loadConfig(): AppConfig {
 			240,
 			"skill prompt description max chars",
 		),
+		...settingsPaths,
 	};
 }

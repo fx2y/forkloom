@@ -53,6 +53,21 @@ export {
 	defaultExtensionSettingsFiles,
 	ExtensionService,
 } from "./extensions";
+export {
+	applyFilterRules,
+	buildPackageResourceRegistry,
+	loadMergedPackageSettings,
+	mergeByIdentity,
+	parsePackageManifest,
+	parsePackageSettingsText,
+	PackageOps,
+	projectActiveResources,
+	readPackageSettingsFile,
+	reconcileMissingPackages,
+	resolvePackageSource,
+	setResourceEnabled,
+	writePackageSettingsFile,
+} from "./packages";
 export type {
 	ExtensionApi,
 	ExtensionCommandDefinition,
@@ -71,3 +86,14 @@ export type {
 	ExtensionToolDefinition,
 	ExtensionUi,
 } from "./extensions";
+export type {
+	MergedPackageSettingsEntry,
+	PackageFilterRules,
+	PackageInventoryRecord,
+	PackageManifestDescriptor,
+	PackageResourceKind,
+	PackageScope,
+	PackageSettingsEntry,
+	PackageSettingsModel,
+	ResolvedPackageSource,
+} from "./packages";

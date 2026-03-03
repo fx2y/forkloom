@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "@forkloom/shared";
@@ -22,7 +23,9 @@ import {
 	ExtensionService,
 	MockPiProviderManager,
 	createManagedPiSessionFactory,
+	loadMergedPackageSettings,
 	probePiSession,
+	reconcileMissingPackages,
 } from "./pi";
 import { PgArtifactRepo } from "./repo/postgres";
 import {
@@ -124,6 +127,37 @@ async function bootstrap() {
 	});
 	const extensionService = new ExtensionService();
 	await extensionService.loadAll();
+	const mergedPackageSettings = await loadMergedPackageSettings({
+		globalSettingsPath: config.piGlobalSettingsPath,
+		projectSettingsPath: config.piProjectSettingsPath,
+	});
+	const startupReconcile = await reconcileMissingPackages({
+		entries: mergedPackageSettings.merged,
+		isInstalled: async (entry) => {
+			if (entry.resolved.kind !== "local") {
+				return true;
+			}
+			try {
+				await lstat(entry.resolved.path);
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		install: async () => {
+			// npm/git installers are not wired yet; keep deterministic bounded retries.
+		},
+		maxRetries: 3,
+		pollMs: 200,
+	});
+	console.log(
+		JSON.stringify({
+			msg: "package-startup-reconcile",
+			attempts: startupReconcile.attempts,
+			installed: startupReconcile.installed,
+			remainingMissing: startupReconcile.remainingMissing,
+		}),
+	);
 	const docIngestWorkflowLauncher = new LazyDbosDocIngestWorkflowLauncher();
 	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const workflowSandboxBackend = new DockerBackend({
