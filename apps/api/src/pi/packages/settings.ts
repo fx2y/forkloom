@@ -43,7 +43,10 @@ function normalizePackageEntry(
 	}
 	return {
 		source: source.trim(),
-		extensions: asStringArray(value.extensions, `packages[${index}].extensions`),
+		extensions: asStringArray(
+			value.extensions,
+			`packages[${index}].extensions`,
+		),
 		skills: asStringArray(value.skills, `packages[${index}].skills`),
 		prompts: asStringArray(value.prompts, `packages[${index}].prompts`),
 		themes: asStringArray(value.themes, `packages[${index}].themes`),
@@ -117,7 +120,10 @@ export async function writePackageSettingsFile(input: {
 	) {
 		normalized.resourceState = input.model.resourceState;
 	}
-	await writeFile(`${resolve(input.path)}`, `${JSON.stringify(normalized, null, 2)}\n`);
+	await writeFile(
+		`${resolve(input.path)}`,
+		`${JSON.stringify(normalized, null, 2)}\n`,
+	);
 }
 
 export function mergeByIdentity(
@@ -190,7 +196,11 @@ export async function loadMergedPackageSettings(input: {
 
 	const merged = mergeByIdentity(
 		await resolveEntries(global.packages, "global", input.globalSettingsPath),
-		await resolveEntries(project.packages, "project", input.projectSettingsPath),
+		await resolveEntries(
+			project.packages,
+			"project",
+			input.projectSettingsPath,
+		),
 	);
 
 	return { merged, global, project };

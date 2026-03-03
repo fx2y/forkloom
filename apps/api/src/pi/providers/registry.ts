@@ -3,7 +3,7 @@ import type { ExtensionProviderDefinition } from "../extensions";
 export type ProviderOverrideValue = {
 	provider?: string | undefined;
 	model?: string | undefined;
-	extraEnv?: Record<string, string> | undefined;
+	extraEnv?: NodeJS.ProcessEnv | undefined;
 	homeOverride?: string | undefined;
 };
 
@@ -19,11 +19,11 @@ function asString(value: unknown): string | undefined {
 		: undefined;
 }
 
-function asStringRecord(value: unknown): Record<string, string> | undefined {
+function asStringRecord(value: unknown): NodeJS.ProcessEnv | undefined {
 	if (value == null || typeof value !== "object" || Array.isArray(value)) {
 		return undefined;
 	}
-	const out: Record<string, string> = {};
+	const out: NodeJS.ProcessEnv = {};
 	for (const [key, raw] of Object.entries(value)) {
 		if (typeof raw !== "string") {
 			continue;
@@ -89,13 +89,13 @@ export function buildProviderOverrideRegistry(input: {
 export function resolveProviderOverride(input: {
 	provider: string;
 	model: string;
-	extraEnv?: Record<string, string> | undefined;
+	extraEnv?: NodeJS.ProcessEnv | undefined;
 	homeOverride?: string | undefined;
 	overrides?: Map<string, ProviderOverride> | undefined;
 }): {
 	provider: string;
 	model: string;
-	extraEnv?: Record<string, string> | undefined;
+	extraEnv?: NodeJS.ProcessEnv | undefined;
 	homeOverride?: string | undefined;
 } {
 	const override = input.overrides?.get(input.provider);

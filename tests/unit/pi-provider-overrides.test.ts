@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createManagedPiSessionFactory } from "../../apps/api/src/pi/session-factory";
 import {
 	buildProviderOverrideRegistry,
 	resolveProviderOverride,
 } from "../../apps/api/src/pi/providers";
+import { createManagedPiSessionFactory } from "../../apps/api/src/pi/session-factory";
 
 describe("provider overrides", () => {
 	it("applies first-wins deterministic registry semantics", () => {

@@ -1,4 +1,8 @@
-export type PackageResourceKind = "extensions" | "skills" | "prompts" | "themes";
+export type PackageResourceKind =
+	| "extensions"
+	| "skills"
+	| "prompts"
+	| "themes";
 
 export const PACKAGE_RESOURCE_KINDS: PackageResourceKind[] = [
 	"extensions",

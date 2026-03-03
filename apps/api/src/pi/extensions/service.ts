@@ -276,6 +276,12 @@ export class ExtensionService implements ExtensionHostHooks {
 		};
 	}
 
+	readBranchEntries(): ExtensionStateEntry[] {
+		return this.modules.flatMap((module) =>
+			module.entries.map((entry) => ({ ...entry })),
+		);
+	}
+
 	async emitSessionStart(
 		payload: ExtensionHookPayloadMap["session_start"],
 	): Promise<void> {

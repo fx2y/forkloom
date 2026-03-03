@@ -1,7 +1,4 @@
-import {
-	readPackageSettingsFile,
-	writePackageSettingsFile,
-} from "./settings";
+import { readPackageSettingsFile, writePackageSettingsFile } from "./settings";
 import type { PackageInventoryRecord } from "./types";
 
 export function resourceStateKey(input: {

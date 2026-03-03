@@ -120,7 +120,7 @@ for needle in "registerProvider" "buildProviderOverrideRegistry" "resolveProvide
 done
 
 rg -n "extensions/(will-run|artifact-widget|structured-wizard)/index.ts" \
-  spec-0/09-04-htn.yaml > .cache/spec09/scope-guard.flagship-scope.txt || true
+  spec-0/09-05-htn.sqlite > .cache/spec09/scope-guard.flagship-scope.txt || true
 for path in "extensions/will-run/index.ts" "extensions/artifact-widget/index.ts" "extensions/structured-wizard/index.ts"; do
   if [[ ! -f "$path" ]]; then
     echo "scope guard missing flagship extension file: $path" >&2

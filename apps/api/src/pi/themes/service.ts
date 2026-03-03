@@ -1,18 +1,12 @@
 import { readFile } from "node:fs/promises";
-import {
-	resolveActiveTheme,
-	sortThemeCandidates,
-} from "./discovery";
+import { resolveActiveTheme, sortThemeCandidates } from "./discovery";
 import { parseTheme } from "./schema";
-import {
-	watchActiveThemeFile,
-	type ActiveThemeWatcher,
-} from "./watch";
 import type {
 	ThemeCandidate,
 	ThemeDefinition,
 	ThemeResolveInput,
 } from "./types";
+import { type ActiveThemeWatcher, watchActiveThemeFile } from "./watch";
 
 export type ThemeServiceOptions = {
 	readText?: ((path: string) => Promise<string>) | undefined;
@@ -20,7 +14,7 @@ export type ThemeServiceOptions = {
 		| ((input: {
 				path: string;
 				onReload: () => Promise<void> | void;
-			}) => ActiveThemeWatcher)
+		  }) => ActiveThemeWatcher)
 		| undefined;
 };
 
@@ -32,9 +26,10 @@ export type ThemeRuntimeSnapshot = {
 
 export class ThemeService {
 	private readonly readText: (path: string) => Promise<string>;
-	private readonly watchFile: (
-		input: { path: string; onReload: () => Promise<void> | void },
-	) => ActiveThemeWatcher;
+	private readonly watchFile: (input: {
+		path: string;
+		onReload: () => Promise<void> | void;
+	}) => ActiveThemeWatcher;
 	private candidates: ThemeCandidate[] = [];
 	private resolveInput: Omit<ThemeResolveInput, "candidates"> = {};
 	private active: ThemeCandidate | null = null;
@@ -98,7 +93,9 @@ export class ThemeService {
 		try {
 			payload = JSON.parse(text);
 		} catch (error) {
-			throw new Error(`theme invalid: parse failed (${path}): ${String(error)}`);
+			throw new Error(
+				`theme invalid: parse failed (${path}): ${String(error)}`,
+			);
 		}
 		return parseTheme(payload);
 	}

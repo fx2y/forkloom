@@ -1,4 +1,8 @@
-import { createBranchStateLog, type ExtensionApi } from "../../apps/api/src/pi";
+import {
+	createBranchStateLog,
+	type ExtensionApi,
+	type ExtensionHookPayloadMap,
+} from "../../apps/api/src/pi";
 
 const REQUIRED_KEYS = ["client", "deadline"] as const;
 
@@ -22,17 +26,21 @@ function sortedJson(value: Record<string, string>): string {
 	return JSON.stringify(out);
 }
 
-export default function registerStructuredWizard(api: ExtensionApi): void {
+export default function registerStructuredWizard(api: ExtensionApi): undefined {
 	const branchState = createBranchStateLog({
 		api,
 		key: "structured-wizard",
 		initial: { answers: {} as Record<string, string> },
 	});
 
-	const restore = (payload: {
-		branchEntries?: Array<{ ts: string; value: unknown }> | undefined;
-	}) => {
+	const restore = async (
+		payload:
+			| ExtensionHookPayloadMap["session_start"]
+			| ExtensionHookPayloadMap["session_tree"]
+			| ExtensionHookPayloadMap["session_fork"],
+	): Promise<undefined> => {
 		branchState.handleSessionEvent(payload);
+		return undefined;
 	};
 
 	api.on("session_start", restore);
@@ -43,10 +51,10 @@ export default function registerStructuredWizard(api: ExtensionApi): void {
 		const existing = parseExistingValues(event.text);
 		const missing = REQUIRED_KEYS.filter((key) => !existing[key]);
 		if (missing.length === 0) {
-			return;
+			return undefined;
 		}
 		if (!api.hasUI) {
-			return;
+			return undefined;
 		}
 		const answers: Record<string, string> = { ...existing };
 		for (const key of missing) {
@@ -60,4 +68,5 @@ export default function registerStructuredWizard(api: ExtensionApi): void {
 			text: `${event.text}\n[form:${sortedJson(answers)}]`,
 		};
 	});
+	return undefined;
 }

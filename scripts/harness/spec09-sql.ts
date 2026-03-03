@@ -59,6 +59,19 @@ async function readProofJson(
 	}
 }
 
+function asBooleanRecord(value: unknown): Record<string, boolean> | null {
+	if (value == null || typeof value !== "object" || Array.isArray(value)) {
+		return null;
+	}
+	const out: Record<string, boolean> = {};
+	for (const [key, entry] of Object.entries(value)) {
+		if (typeof entry === "boolean") {
+			out[key] = entry;
+		}
+	}
+	return Object.keys(out).length > 0 ? out : null;
+}
+
 export async function collectSpec09ChecklistReport(
 	input: {
 		htnDbPath?: string;
@@ -109,15 +122,26 @@ export async function collectSpec09ChecklistReport(
 
 	const c7ValidateProofOk = c7Validate?.status === "ok";
 	const c7SmokeProofOk = c7Smoke?.status === "ok";
+	const validateBooleans = asBooleanRecord(c7Validate?.booleans);
+	const smokeBoolean =
+		c7Smoke?.apiHealthStable === true &&
+		c7Smoke?.routeBanAstAnchor === true &&
+		c7Smoke?.scopeGuardMark === true;
+	const derivedMatrix: Record<string, boolean> = {
+		ext: validateBooleans?.ext_ok === true,
+		pkg: validateBooleans?.pkg_ok === true,
+		theme: validateBooleans?.theme_ok === true,
+		ux: validateBooleans?.ux_ok === true,
+		headless: validateBooleans?.headless_ok === true,
+		stream: validateBooleans?.stream_ok === true,
+		sandbox: validateBooleans?.sandbox_ok === true,
+		smoke: smokeBoolean,
+	};
+	const fileMatrix = asBooleanRecord(matrix?.matrix);
+	const effectiveMatrix = fileMatrix ?? derivedMatrix;
 	const proofMatrixOk =
-		matrix == null
-			? true
-			: matrix.status === "ok" &&
-				typeof matrix.matrix === "object" &&
-				matrix.matrix != null &&
-				Object.values(matrix.matrix as Record<string, unknown>).every(
-					(value) => value === true,
-				);
+		(matrix == null || matrix.status === "ok") &&
+		Object.values(effectiveMatrix).every((value) => value === true);
 
 	const status =
 		reqFullCoverMiss === 0 &&
@@ -125,7 +149,8 @@ export async function collectSpec09ChecklistReport(
 		requiredTaskMissing.length === 0 &&
 		requiredTaskNotDone.length === 0 &&
 		c7ValidateProofOk &&
-		c7SmokeProofOk
+		c7SmokeProofOk &&
+		proofMatrixOk
 			? "ok"
 			: "fail";
 

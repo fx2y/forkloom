@@ -1,7 +1,10 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { applyFilterRules } from "./filter";
-import { PACKAGE_RESOURCE_KINDS, type PackageManifestDescriptor } from "./types";
+import {
+	PACKAGE_RESOURCE_KINDS,
+	type PackageManifestDescriptor,
+} from "./types";
 
 type PackageJsonPi = {
 	extensions?: string[] | undefined;
@@ -32,7 +35,12 @@ function normalizeGlobInput(value: unknown, label: string): string[] {
 		if (typeof entry !== "string" || entry.trim().length === 0) {
 			throw new Error(`${label} must contain non-empty strings`);
 		}
-		out.push(entry.trim().replace(/\\/g, "/").replace(/^\.\/+/, ""));
+		out.push(
+			entry
+				.trim()
+				.replace(/\\/g, "/")
+				.replace(/^\.\/+/, ""),
+		);
 	}
 	return out;
 }
@@ -58,7 +66,7 @@ function globToRegex(pattern: string): RegExp {
 			}
 			continue;
 		}
-		if ("|\\{}()[\]^$+?. ".includes(char)) {
+		if ("|\\{}()[]^$+?. ".includes(char)) {
 			out += `\\${char}`;
 			continue;
 		}
@@ -106,7 +114,10 @@ async function walkFiles(root: string): Promise<string[]> {
 	return out;
 }
 
-function conventionRules(): Record<(typeof PACKAGE_RESOURCE_KINDS)[number], string[]> {
+function conventionRules(): Record<
+	(typeof PACKAGE_RESOURCE_KINDS)[number],
+	string[]
+> {
 	return {
 		extensions: ["extensions/**/*.ts", "extensions/**/*.js"],
 		skills: ["skills/**/SKILL.md"],
@@ -184,7 +195,9 @@ export async function parsePackageManifest(input: {
 	for (const kind of PACKAGE_RESOURCE_KINDS) {
 		const include = rules[kind].filter((entry) => !entry.startsWith("!"));
 		if (include.length !== rules[kind].length) {
-			throw new Error(`invalid ${kind} glob: ! exclusion is not valid in manifest`);
+			throw new Error(
+				`invalid ${kind} glob: ! exclusion is not valid in manifest`,
+			);
 		}
 		const candidates = allFiles.filter((file) =>
 			include.some((pattern) => globToRegex(pattern).test(file)),

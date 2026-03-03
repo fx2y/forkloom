@@ -1,4 +1,7 @@
-import type { PackageInventoryRecord, PackageManifestDescriptor } from "./types";
+import type {
+	PackageInventoryRecord,
+	PackageManifestDescriptor,
+} from "./types";
 
 export function buildPackageResourceRegistry(input: {
 	descriptors: Array<{

@@ -59,11 +59,13 @@ describe("pi themes", () => {
 		await writeFile(activePath, baseTheme, "utf8");
 		await writeFile(inactivePath, baseTheme, "utf8");
 
-		let onReload: (() => Promise<void> | void) | null = null;
+		const watcherState: {
+			onReload: (() => Promise<void> | void) | null;
+		} = { onReload: null };
 		const watched: string[] = [];
 		const service = new ThemeService({
 			watchFile: (input) => {
-				onReload = input.onReload;
+				watcherState.onReload = input.onReload;
 				watched.push(input.path);
 				return { close: () => undefined };
 			},
@@ -92,7 +94,11 @@ describe("pi themes", () => {
 			}),
 			"utf8",
 		);
-		await onReload?.();
+		expect(typeof watcherState.onReload).toBe("function");
+		if (!watcherState.onReload) {
+			throw new Error("watch callback missing");
+		}
+		await watcherState.onReload();
 		expect(service.getActiveTheme()?.vars.primary).toBe("#222");
 	});
 });

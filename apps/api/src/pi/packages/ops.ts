@@ -1,9 +1,9 @@
+import { resolvePackageSource } from "./resolver";
 import {
 	loadMergedPackageSettings,
 	readPackageSettingsFile,
 	writePackageSettingsFile,
 } from "./settings";
-import { resolvePackageSource } from "./resolver";
 import type { MergedPackageSettingsEntry, PackageScope } from "./types";
 
 function scopePath(input: {

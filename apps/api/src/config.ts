@@ -129,7 +129,10 @@ function normalizePath(path: string, cwd: string, homeDir: string): string {
 	return resolve(cwd, path);
 }
 
-function buildPiSettingsPaths(cwd: string, homeDir: string): {
+function buildPiSettingsPaths(
+	cwd: string,
+	homeDir: string,
+): {
 	piGlobalSettingsPath: string;
 	piProjectSettingsPath: string;
 } {

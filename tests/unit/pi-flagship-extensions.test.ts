@@ -49,7 +49,7 @@ describe("flagship extensions", () => {
 			text: "Please prepare proposal",
 		});
 		expect(out.text).toBe(
-			"Please prepare proposal\n[form:{\"client\":\"acme\",\"deadline\":\"2026-03-31\"}]",
+			'Please prepare proposal\n[form:{"client":"acme","deadline":"2026-03-31"}]',
 		);
 	});
 
@@ -74,7 +74,12 @@ describe("flagship extensions", () => {
 			commandKind: "prompt",
 			result: { details: { artifactSha: "a".repeat(64) } },
 		});
-		expect(setStatus).toHaveBeenCalledWith("artifact", expect.stringContaining("aaaaaaaaaaaa"));
-		expect(setWidget).toHaveBeenCalledWith("artifact", [`sha:${"a".repeat(64)}`]);
+		expect(setStatus).toHaveBeenCalledWith(
+			"artifact",
+			expect.stringContaining("aaaaaaaaaaaa"),
+		);
+		expect(setWidget).toHaveBeenCalledWith("artifact", [
+			`sha:${"a".repeat(64)}`,
+		]);
 	});
 });

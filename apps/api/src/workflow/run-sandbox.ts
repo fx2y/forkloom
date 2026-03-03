@@ -192,6 +192,25 @@ function readCommandText(command: RunCommandModel): string {
 	return text.trim();
 }
 
+async function emitSessionBootstrap(input: {
+	extensions?: ExtensionHostHooks | undefined;
+	runId: string;
+	sessionId?: string | undefined;
+}): Promise<void> {
+	if (!input.extensions) {
+		return;
+	}
+	const branchEntries = input.extensions.readBranchEntries?.();
+	const payload = {
+		runId: input.runId,
+		sessionId: input.sessionId,
+		branchEntries,
+	};
+	await input.extensions.emitSessionStart(payload);
+	await input.extensions.emitSessionTree(payload);
+	await input.extensions.emitSessionFork(payload);
+}
+
 function normalizeResultText(value: string): string {
 	const trimmed = value.trim();
 	return trimmed.length > 0 ? value : "[no assistant text]";
@@ -599,7 +618,7 @@ export async function executeRunSandbox(
 					reason: toolCallDecision.reason ?? "blocked by extension",
 				};
 			}
-			await executeSkillPlanDurably({
+			const skillRows = await executeSkillPlanDurably({
 				runId,
 				commandSeq: loaded.command.seq,
 				commandKind: loaded.command.kind,
@@ -617,6 +636,7 @@ export async function executeRunSandbox(
 				timeoutMs: loaded.sandbox.spec.timeoutSec * 1_000,
 				maxBytesOut: loaded.sandbox.spec.maxBytesOut,
 			});
+			const artifactShas = skillRows.flatMap((row) => row.artifactShas);
 			await deps.extensions?.emitToolResult({
 				runId,
 				toolName: "skill_exec",
@@ -625,6 +645,13 @@ export async function executeRunSandbox(
 					status: "executed",
 					skillName: resolved.execution.skillName,
 					scripts: resolved.execution.scripts.length,
+					details:
+						artifactShas.length === 0
+							? undefined
+							: {
+									artifactSha: artifactShas[0],
+									artifactShas,
+								},
 				},
 			});
 			return {
@@ -641,12 +668,11 @@ export async function executeRunSandbox(
 			const loaded = assertLoaded(loadedPlan);
 			if (loaded.run.status === "queued" && loaded.command.kind !== "approve") {
 				await deps.runService.beginRun(runId, { scope: loaded.run.spec.scope });
-				if (deps.extensions) {
-					await deps.extensions.emitSessionStart({
-						runId,
-						sessionId: loaded.run.piSessionId ?? undefined,
-					});
-				}
+				await emitSessionBootstrap({
+					extensions: deps.extensions,
+					runId,
+					sessionId: loaded.run.piSessionId ?? undefined,
+				});
 			}
 			switch (loaded.command.kind) {
 				case "approve":

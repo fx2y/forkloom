@@ -123,6 +123,25 @@ function clockIso(): string {
 	return new globalThis.Date().toISOString();
 }
 
+async function emitSessionBootstrap(input: {
+	extensions?: ExtensionHostHooks | undefined;
+	runId: string;
+	sessionId?: string | undefined;
+}): Promise<void> {
+	if (!input.extensions) {
+		return;
+	}
+	const branchEntries = input.extensions.readBranchEntries?.();
+	const payload = {
+		runId: input.runId,
+		sessionId: input.sessionId,
+		branchEntries,
+	};
+	await input.extensions.emitSessionStart(payload);
+	await input.extensions.emitSessionTree(payload);
+	await input.extensions.emitSessionFork(payload);
+}
+
 async function closePi(ctx: RunOnceContext): Promise<void> {
 	if (!ctx.pi) {
 		return;
@@ -210,12 +229,11 @@ export async function executeRunOnce(
 				throw new Error(`run not found: ${runId}`);
 			}
 			await deps.runService.beginRun(runId, { scope: run.spec.scope });
-			if (deps.extensions) {
-				await deps.extensions.emitSessionStart({
-					runId,
-					sessionId: run.piSessionId ?? undefined,
-				});
-			}
+			await emitSessionBootstrap({
+				extensions: deps.extensions,
+				runId,
+				sessionId: run.piSessionId ?? undefined,
+			});
 			return run;
 		});
 

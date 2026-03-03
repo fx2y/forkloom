@@ -147,11 +147,13 @@ async function bootstrap() {
 		promptMaxDescriptionChars: config.skillPromptMaxDescriptionChars,
 	});
 	const extensionService = new ExtensionService();
-	await extensionService.loadAll();
+	await extensionService.reload();
 	const providerOverrides = buildProviderOverrideRegistry({
 		providers: extensionService.getRegisteredProviders(),
 		onWarning: (message) => {
-			console.warn(JSON.stringify({ msg: "provider-override-warning", message }));
+			console.warn(
+				JSON.stringify({ msg: "provider-override-warning", message }),
+			);
 		},
 	});
 	const createPiSession = createManagedPiSessionFactory(
@@ -176,7 +178,10 @@ async function bootstrap() {
 		{
 			source: "builtin" as const,
 			name: "forkloom-default",
-			path: resolve(process.cwd(), "apps/api/src/pi/themes/builtin/default.json"),
+			path: resolve(
+				process.cwd(),
+				"apps/api/src/pi/themes/builtin/default.json",
+			),
 		},
 		...mergedPackageSettings.merged.flatMap((entry) =>
 			(entry.themes ?? [])
@@ -184,7 +189,12 @@ async function bootstrap() {
 				.map((path) => ({
 					source: "package" as const,
 					name: path,
-					path: resolve(entry.resolved.kind === "local" ? entry.resolved.path : process.cwd(), path),
+					path: resolve(
+						entry.resolved.kind === "local"
+							? entry.resolved.path
+							: process.cwd(),
+						path,
+					),
 				})),
 		),
 		...(globalThemeConfig.themes ?? []).map((path) => ({
@@ -208,18 +218,30 @@ async function bootstrap() {
 	const startupReconcile = await reconcileMissingPackages({
 		entries: mergedPackageSettings.merged,
 		isInstalled: async (entry) => {
-			if (entry.resolved.kind !== "local") {
-				return true;
-			}
-			try {
-				await lstat(entry.resolved.path);
-				return true;
-			} catch {
-				return false;
+			switch (entry.resolved.kind) {
+				case "local":
+					try {
+						await lstat(entry.resolved.path);
+						return true;
+					} catch {
+						return false;
+					}
+				case "npm":
+				case "git":
+					return false;
 			}
 		},
-		install: async () => {
-			// npm/git installers are not wired yet; keep deterministic bounded retries.
+		install: async (entry) => {
+			if (entry.resolved.kind !== "local") {
+				console.warn(
+					JSON.stringify({
+						msg: "package-startup-install-skip",
+						identity: entry.identity,
+						source: entry.source,
+						reason: "installer_not_wired",
+					}),
+				);
+			}
 		},
 		maxRetries: 3,
 		pollMs: 200,
@@ -384,11 +406,11 @@ async function bootstrap() {
 		sandboxRepo,
 		actorRepo,
 		docRepo,
-			actorProcessor,
-			extensionService,
-			themeService,
-		};
-	}
+		actorProcessor,
+		extensionService,
+		themeService,
+	};
+}
 
 async function main(): Promise<void> {
 	const {
@@ -431,11 +453,11 @@ async function main(): Promise<void> {
 			await sandboxRepo.close();
 			await actorRepo.close();
 			await docRepo.close();
-				await actorProcessor.closeAll();
-				await extensionService.unloadAll();
-				themeService.close();
-				await shutdownDbos();
-			})();
+			await actorProcessor.closeAll();
+			await extensionService.unloadAll();
+			themeService.close();
+			await shutdownDbos();
+		})();
 		return closing;
 	};
 

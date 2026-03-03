@@ -28,13 +28,7 @@ export type ThemeValidationResult =
 export type ThemeCandidate = {
 	name: string;
 	path: string;
-	source:
-		| "builtin"
-		| "global"
-		| "project"
-		| "package"
-		| "settings"
-		| "cli";
+	source: "builtin" | "global" | "project" | "package" | "settings" | "cli";
 };
 
 export type ThemeResolveInput = {

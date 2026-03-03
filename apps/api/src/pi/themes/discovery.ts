@@ -18,29 +18,33 @@ function toThemeNameFromPath(path: string): string {
 function normalizeCandidate(candidate: ThemeCandidate): ThemeCandidate {
 	return {
 		...candidate,
-		name: candidate.name.trim().length > 0
-			? candidate.name.trim()
-			: toThemeNameFromPath(candidate.path),
+		name:
+			candidate.name.trim().length > 0
+				? candidate.name.trim()
+				: toThemeNameFromPath(candidate.path),
 	};
 }
 
-export function sortThemeCandidates(candidates: ThemeCandidate[]): ThemeCandidate[] {
-	return [...candidates]
-		.map(normalizeCandidate)
-		.sort((left, right) => {
-			const sourceCmp = SOURCE_PRECEDENCE[left.source] - SOURCE_PRECEDENCE[right.source];
-			if (sourceCmp !== 0) {
-				return sourceCmp;
-			}
-			const nameCmp = left.name.localeCompare(right.name);
-			if (nameCmp !== 0) {
-				return nameCmp;
-			}
-			return left.path.localeCompare(right.path);
-		});
+export function sortThemeCandidates(
+	candidates: ThemeCandidate[],
+): ThemeCandidate[] {
+	return [...candidates].map(normalizeCandidate).sort((left, right) => {
+		const sourceCmp =
+			SOURCE_PRECEDENCE[left.source] - SOURCE_PRECEDENCE[right.source];
+		if (sourceCmp !== 0) {
+			return sourceCmp;
+		}
+		const nameCmp = left.name.localeCompare(right.name);
+		if (nameCmp !== 0) {
+			return nameCmp;
+		}
+		return left.path.localeCompare(right.path);
+	});
 }
 
-export function resolveActiveTheme(input: ThemeResolveInput): ThemeCandidate | null {
+export function resolveActiveTheme(
+	input: ThemeResolveInput,
+): ThemeCandidate | null {
 	if (input.disableThemes) {
 		return null;
 	}
@@ -49,7 +53,9 @@ export function resolveActiveTheme(input: ThemeResolveInput): ThemeCandidate | n
 		return null;
 	}
 	const selectedName =
-		input.cliTheme?.trim() || input.settingsTheme?.trim() || ordered[ordered.length - 1]?.name;
+		input.cliTheme?.trim() ||
+		input.settingsTheme?.trim() ||
+		ordered[ordered.length - 1]?.name;
 	if (!selectedName) {
 		return null;
 	}

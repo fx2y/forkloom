@@ -1,4 +1,8 @@
-import { createBranchStateLog, type ExtensionApi } from "../../apps/api/src/pi";
+import {
+	createBranchStateLog,
+	type ExtensionApi,
+	type ExtensionHookPayloadMap,
+} from "../../apps/api/src/pi";
 
 function isRiskyToolCall(toolName: string, input: Record<string, unknown>): boolean {
 	if (toolName === "skill_exec") {
@@ -20,17 +24,21 @@ function isRiskyToolCall(toolName: string, input: Record<string, unknown>): bool
 	return false;
 }
 
-export default function registerWillRunExtension(api: ExtensionApi): void {
+export default function registerWillRunExtension(api: ExtensionApi): undefined {
 	const branchState = createBranchStateLog({
 		api,
 		key: "will-run-gate",
 		initial: { blocked: 0, confirmed: 0 },
 	});
 
-	const restore = (payload: {
-		branchEntries?: Array<{ ts: string; value: unknown }> | undefined;
-	}) => {
+	const restore = async (
+		payload:
+			| ExtensionHookPayloadMap["session_start"]
+			| ExtensionHookPayloadMap["session_tree"]
+			| ExtensionHookPayloadMap["session_fork"],
+	): Promise<undefined> => {
 		branchState.handleSessionEvent(payload);
+		return undefined;
 	};
 
 	api.on("session_start", restore);
@@ -39,7 +47,7 @@ export default function registerWillRunExtension(api: ExtensionApi): void {
 
 	api.on("tool_call", async (event) => {
 		if (!isRiskyToolCall(event.toolName, event.input)) {
-			return;
+			return undefined;
 		}
 		if (!api.hasUI) {
 			const next = branchState.get();
@@ -53,6 +61,7 @@ export default function registerWillRunExtension(api: ExtensionApi): void {
 			return { block: true, reason: "denied" };
 		}
 		branchState.set({ ...next, confirmed: next.confirmed + 1 });
-		return;
+		return undefined;
 	});
+	return undefined;
 }

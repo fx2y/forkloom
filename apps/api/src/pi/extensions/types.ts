@@ -174,6 +174,7 @@ export type ExtensionToolCallDecision = {
 };
 
 export type ExtensionHostHooks = {
+	readBranchEntries?(): ExtensionStateEntry[];
 	emitSessionStart(
 		payload: ExtensionHookPayloadMap["session_start"],
 	): Promise<void>;
@@ -195,4 +196,5 @@ export type ExtensionHostHooks = {
 	emitSessionFork(
 		payload: ExtensionHookPayloadMap["session_fork"],
 	): Promise<void>;
+	reload?(): Promise<ExtensionReloadStatus>;
 };

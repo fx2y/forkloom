@@ -33,7 +33,10 @@ function normalizePath(value: string): string {
 	return value.replace(/\\/g, "/").replace(/^\.\/+/, "");
 }
 
-export function applyFilterRules(allPaths: string[], rules?: string[]): string[] {
+export function applyFilterRules(
+	allPaths: string[],
+	rules?: string[],
+): string[] {
 	const all = [...allPaths].map(normalizePath);
 	if (rules === undefined) {
 		return all;
@@ -43,7 +46,8 @@ export function applyFilterRules(allPaths: string[], rules?: string[]): string[]
 	}
 
 	const includes = rules.filter(
-		(rule) => !rule.startsWith("!") && !rule.startsWith("+") && !rule.startsWith("-"),
+		(rule) =>
+			!rule.startsWith("!") && !rule.startsWith("+") && !rule.startsWith("-"),
 	);
 	const excludes = rules
 		.filter((rule) => rule.startsWith("!"))
@@ -60,9 +64,12 @@ export function applyFilterRules(allPaths: string[], rules?: string[]): string[]
 		.filter((rule) => rule.length > 0)
 		.map(normalizePath);
 
-	let selected = includes.length === 0
-		? all
-		: all.filter((path) => includes.some((rule) => globToRegex(rule).test(path)));
+	let selected =
+		includes.length === 0
+			? all
+			: all.filter((path) =>
+					includes.some((rule) => globToRegex(rule).test(path)),
+				);
 
 	if (excludes.length > 0) {
 		selected = selected.filter(

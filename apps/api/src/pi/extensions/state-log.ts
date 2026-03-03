@@ -12,7 +12,10 @@ type StateEnvelope<T> = {
 	value: T;
 };
 
-function asStateEnvelope<T>(value: unknown, key: string): StateEnvelope<T> | null {
+function asStateEnvelope<T>(
+	value: unknown,
+	key: string,
+): StateEnvelope<T> | null {
 	if (value == null || typeof value !== "object") {
 		return null;
 	}
@@ -27,7 +30,10 @@ function asStateEnvelope<T>(value: unknown, key: string): StateEnvelope<T> | nul
 	};
 }
 
-function restoreFromEntries<T>(entries: ExtensionStateEntry[], key: string): T | null {
+function restoreFromEntries<T>(
+	entries: ExtensionStateEntry[],
+	key: string,
+): T | null {
 	let last: T | null = null;
 	for (const entry of entries) {
 		const parsed = asStateEnvelope<T>(entry.value, key);
@@ -67,7 +73,10 @@ export function createBranchStateLog<T>(input: {
 			return state;
 		},
 		handleSessionEvent(payload) {
-			const restored = restoreFromEntries<T>(payload.branchEntries ?? [], input.key);
+			const restored = restoreFromEntries<T>(
+				payload.branchEntries ?? [],
+				input.key,
+			);
 			if (restored != null) {
 				state = restored;
 			}

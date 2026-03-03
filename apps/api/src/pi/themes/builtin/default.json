@@ -1,16 +1,16 @@
 {
-  "$schema": "https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
-  "name": "forkloom-default",
-  "vars": {
-    "primary": "#0b7285",
-    "secondary": 245
-  },
-  "colors": {
-    "accent": "primary",
-    "border": "primary",
-    "text": "#1f2933",
-    "error": "#d90429",
-    "success": "#2b9348",
-    "bashMode": "#bc6c25"
-  }
+	"$schema": "https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+	"name": "forkloom-default",
+	"vars": {
+		"primary": "#0b7285",
+		"secondary": 245
+	},
+	"colors": {
+		"accent": "primary",
+		"border": "primary",
+		"text": "#1f2933",
+		"error": "#d90429",
+		"success": "#2b9348",
+		"bashMode": "#bc6c25"
+	}
 }

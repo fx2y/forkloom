@@ -44,7 +44,9 @@ describe("package settings merge", () => {
 		const globalSettingsPath = resolve(root, "home/.pi/agent/settings.json");
 		const projectSettingsPath = resolve(root, "workspace/.pi/settings.json");
 		await mkdir(resolve(root, "workspace/local/pkg-a"), { recursive: true });
-		await mkdir(resolve(root, "home/.pi/agent/local/pkg-a"), { recursive: true });
+		await mkdir(resolve(root, "home/.pi/agent/local/pkg-a"), {
+			recursive: true,
+		});
 		await writeJson(globalSettingsPath, {
 			packages: [
 				"npm:@org/pkg-a@1.0.0",
@@ -61,11 +63,13 @@ describe("package settings merge", () => {
 			globalSettingsPath,
 			projectSettingsPath,
 		});
-		expect(loaded.merged.map((entry) => [entry.identity, entry.scope])).toEqual([
-			["@org/pkg-a", "project"],
-			[resolve(root, "home/.pi/agent/local/pkg-a"), "global"],
-			["github.com/org/repo", "project"],
-		]);
+		expect(loaded.merged.map((entry) => [entry.identity, entry.scope])).toEqual(
+			[
+				["@org/pkg-a", "project"],
+				[resolve(root, "home/.pi/agent/local/pkg-a"), "global"],
+				["github.com/org/repo", "project"],
+			],
+		);
 	});
 });
 
@@ -116,7 +120,10 @@ describe("package ops", () => {
 			onUpdate: async (entry) =>
 				entry.source === "npm:@org/pkg-c" ? "npm:@org/pkg-c@latest" : null,
 		});
-		expect(updated.skippedPinned).toEqual(["@org/pkg-a", "github.com/org/repo"]);
+		expect(updated.skippedPinned).toEqual([
+			"@org/pkg-a",
+			"github.com/org/repo",
+		]);
 		const global = await readPackageSettingsFile(globalSettingsPath);
 		const project = await readPackageSettingsFile(projectSettingsPath);
 		expect(global.packages.map((entry) => entry.source)).toEqual([
@@ -154,11 +161,19 @@ describe("package manifest parser", () => {
 			version: "0.1.0",
 		});
 		await writeFile(resolve(pkgExplicit, "extensions/a.ts"), "export {};\n");
-		await writeFile(resolve(pkgExplicit, "skills/review/SKILL.md"), "# skill\n");
+		await writeFile(
+			resolve(pkgExplicit, "skills/review/SKILL.md"),
+			"# skill\n",
+		);
 		await writeFile(resolve(pkgConvention, "extensions/b.ts"), "export {};\n");
-		await writeFile(resolve(pkgConvention, "skills/review/SKILL.md"), "# skill\n");
+		await writeFile(
+			resolve(pkgConvention, "skills/review/SKILL.md"),
+			"# skill\n",
+		);
 		const explicit = await parsePackageManifest({ packageRoot: pkgExplicit });
-		const convention = await parsePackageManifest({ packageRoot: pkgConvention });
+		const convention = await parsePackageManifest({
+			packageRoot: pkgConvention,
+		});
 		expect(explicit.resources.extensions).toEqual(["extensions/a.ts"]);
 		expect(convention.resources.extensions).toEqual(["extensions/b.ts"]);
 		expect(convention.resources.skills).toEqual(["skills/review/SKILL.md"]);
@@ -181,9 +196,9 @@ describe("package manifest parser", () => {
 			dependencies: { "@mariozechner/pi-core": "^1.0.0" },
 			peerDependencies: {},
 		});
-		await expect(parsePackageManifest({ packageRoot: malformed })).rejects.toThrow(
-			"pi.extensions must be an array",
-		);
+		await expect(
+			parsePackageManifest({ packageRoot: malformed }),
+		).rejects.toThrow("pi.extensions must be an array");
 		await expect(parsePackageManifest({ packageRoot: policy })).rejects.toThrow(
 			"dependency policy violation",
 		);
@@ -270,7 +285,9 @@ describe("registry/filter/enable/startup", () => {
 			inventory: registry.filter((record) => record.kind === "extensions"),
 			resourceState: settings.resourceState,
 		});
-		expect(active.map((record) => record.path)).toEqual(["extensions/shared.ts"]);
+		expect(active.map((record) => record.path)).toEqual([
+			"extensions/shared.ts",
+		]);
 	});
 
 	it("retries startup install with bounded attempts", async () => {

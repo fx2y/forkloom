@@ -250,6 +250,8 @@ describe("run reducer", () => {
 			},
 		});
 		expect(reduced.trace[0]?.detail).toBe("skill_exec result (collapsed)");
-		expect(reduced.artifacts.some((entry) => entry.key.endsWith("a".repeat(64)))).toBe(true);
+		expect(
+			reduced.artifacts.some((entry) => entry.key.endsWith("a".repeat(64))),
+		).toBe(true);
 	});
 });

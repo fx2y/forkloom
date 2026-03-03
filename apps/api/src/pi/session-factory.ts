@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockPiProviderManager } from "./mock-provider";
 import {
-	resolveProviderOverride,
 	type ProviderOverride,
+	resolveProviderOverride,
 } from "./providers/registry";
 import {
 	type CreatePiSessionInput,
@@ -199,24 +199,24 @@ export function createManagedPiSessionFactory(
 			mockBootstrapTimeoutMs = baseMockBootstrapTimeoutMs,
 			...sessionOverrides
 		} = overrides;
-			const sessionInput = {
-				...baseSessionInput,
-				...sessionOverrides,
-			};
-			const resolvedProvider = resolveProviderOverride({
-				provider: sessionInput.provider,
-				model: sessionInput.model,
-				extraEnv: sessionInput.extraEnv,
-				homeOverride: sessionInput.homeOverride,
-				overrides: providerOverrides,
-			});
-			const realSessionInput = {
-				...sessionInput,
-				provider: resolvedProvider.provider,
-				model: resolvedProvider.model,
-				extraEnv: resolvedProvider.extraEnv,
-				homeOverride: resolvedProvider.homeOverride ?? (await prepareRealHome()),
-			};
+		const sessionInput = {
+			...baseSessionInput,
+			...sessionOverrides,
+		};
+		const resolvedProvider = resolveProviderOverride({
+			provider: sessionInput.provider,
+			model: sessionInput.model,
+			extraEnv: sessionInput.extraEnv,
+			homeOverride: sessionInput.homeOverride,
+			overrides: providerOverrides,
+		});
+		const realSessionInput = {
+			...sessionInput,
+			provider: resolvedProvider.provider,
+			model: resolvedProvider.model,
+			extraEnv: resolvedProvider.extraEnv,
+			homeOverride: resolvedProvider.homeOverride ?? (await prepareRealHome()),
+		};
 		let realSession: PiSessionPort | null = null;
 
 		try {

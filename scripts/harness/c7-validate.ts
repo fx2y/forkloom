@@ -36,6 +36,10 @@ type C7ValidateReport = {
 		streamingIntPath: string;
 		sandboxIntPath: string;
 		skillsLivePath: string;
+		flagshipProofPath: string;
+		packageProofPath: string;
+		themeProofPath: string;
+		uxProofPath: string;
 		streamRunId: string;
 		sandboxRunId: string;
 		headlessRunId: string;
@@ -47,16 +51,34 @@ async function readJson<T>(path: string): Promise<T> {
 	return JSON.parse(raw) as T;
 }
 
+async function readOptionalJson(
+	path: string,
+): Promise<Record<string, unknown> | null> {
+	try {
+		return await readJson<Record<string, unknown>>(path);
+	} catch {
+		return null;
+	}
+}
+
 export async function buildC7ValidateReport(
 	outputPath = ".cache/spec09/c7-validate.json",
 ): Promise<C7ValidateReport> {
 	const streamingIntPath = ".cache/spec09/cy7-streaming.int.json";
 	const sandboxIntPath = ".cache/spec09/cy7-sandbox.int.json";
 	const skillsLivePath = ".cache/spec08/skills-live-proof.json";
+	const flagshipProofPath = ".cache/spec09/cy6-flagship-proof.json";
+	const packageProofPath = ".cache/spec09/cy3-pkg-proof.json";
+	const themeProofPath = ".cache/spec09/cy5-theme-proof.json";
+	const uxProofPath = ".cache/spec09/cy7-client.e2e.json";
 
 	const streamProof = await readJson<SandboxSseProof>(streamingIntPath);
 	const sandboxProof = await readJson<SandboxFunctionalProof>(sandboxIntPath);
 	const skillsLiveProof = await readJson<SkillsLiveProof>(skillsLivePath);
+	const flagshipProof = await readOptionalJson(flagshipProofPath);
+	const packageProof = await readOptionalJson(packageProofPath);
+	const themeProof = await readOptionalJson(themeProofPath);
+	const uxProof = await readOptionalJson(uxProofPath);
 
 	const streamOk =
 		streamProof.stayedOpenAfterTerminal === true &&
@@ -72,10 +94,18 @@ export async function buildC7ValidateReport(
 		typeof skillsLiveProof.skillExecStepCount === "number" &&
 		skillsLiveProof.skillExecStepCount >= 1;
 
-	const extOk = true;
-	const pkgOk = true;
-	const themeOk = true;
-	const uxOk = true;
+	const extChecks = flagshipProof?.checks as
+		| Record<string, unknown>
+		| undefined;
+	const themeChecks = themeProof?.checks as Record<string, unknown> | undefined;
+	const extOk =
+		extChecks?.scope_guard_mark === "green" && extChecks?.unit_mark === "green";
+	const pkgOk =
+		packageProof?.unit_mark === true && packageProof?.contract_mark === true;
+	const themeOk =
+		themeChecks?.scope_guard_mark === "green" &&
+		themeChecks?.unit_mark === "green";
+	const uxOk = uxProof?.status === "ok";
 
 	const booleans = {
 		ext_ok: extOk,
@@ -96,6 +126,10 @@ export async function buildC7ValidateReport(
 			streamingIntPath,
 			sandboxIntPath,
 			skillsLivePath,
+			flagshipProofPath,
+			packageProofPath,
+			themeProofPath,
+			uxProofPath,
 			streamRunId: streamProof.runId,
 			sandboxRunId: sandboxProof.runId,
 			headlessRunId: skillsLiveProof.runId,
