@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import multer from "multer";
 import type { ActorService } from "../actor";
+import type { TenantScopeContext } from "../run/ports";
 import type { RunService } from "../run/service";
 import type { ArtifactService } from "../service";
 import { attachActorRoutes } from "./actor-routes";
@@ -12,9 +13,8 @@ import {
 } from "./request-parsers";
 import { asyncHandler, mapError } from "./route-utils";
 import { attachRunRoutes } from "./run-routes";
-import { resolveScope } from "./scope";
+import { resolveScope, runWithTenantScope } from "./scope";
 import type { resolveScope as resolveScopeFn, withScopeTx } from "./scope";
-import type { TenantScopeContext } from "../run/ports";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -29,15 +29,27 @@ export function buildApiRouter(deps: {
 	const app = express();
 
 	app.use((req, _res, next) => {
-		try {
-			if (deps.resolveScope) {
-				(req as Request & { tenantScope?: TenantScopeContext }).tenantScope =
-					deps.resolveScope(req);
-			}
+		if (req.path === "/health" || !req.path.startsWith("/runs")) {
 			next();
+			return;
+		}
+		const scopeResolver = deps.resolveScope;
+		if (!scopeResolver) {
+			next();
+			return;
+		}
+		let scope: TenantScopeContext;
+		try {
+			scope = scopeResolver(req);
+			(req as Request & { tenantScope?: TenantScopeContext }).tenantScope =
+				scope;
 		} catch (e) {
 			next(e);
+			return;
 		}
+		void Promise.resolve(runWithTenantScope(scope, async () => next())).catch(
+			(error: unknown) => next(error),
+		);
 	});
 
 	app.post(

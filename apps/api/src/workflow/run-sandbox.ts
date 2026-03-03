@@ -9,7 +9,7 @@ import {
 	assertToolCallResultAdjacency,
 	parseSessionJsonl,
 } from "../pi";
-import type { RunModel, RunRepo } from "../run/ports";
+import type { RunModel, RunRepo, TenantScopeContext } from "../run/ports";
 import type {
 	RegisteredRunWorkflow,
 	RunService,
@@ -30,6 +30,7 @@ import {
 	createSandboxSkillRunner,
 	executeSkillPlanDurably,
 } from "../skill";
+import { runWithTenantScope } from "../tenancy/scope-context";
 import { buildRunPromptInput } from "./prompt";
 import {
 	type ReplayStepPayload,
@@ -125,7 +126,10 @@ export type RunSandboxDeps = {
 	>;
 	backend: RunnerBackend;
 	workflowLauncher: {
-		startRunOnce(runId: string, opts: { workflowID: string }): Promise<void>;
+		startRunOnce(
+			input: { runId: string; scope: TenantScopeContext } | string,
+			opts: { workflowID: string },
+		): Promise<void>;
 	};
 	createPiSession(run: RunModel, sandbox: SandboxModel): Promise<PiSessionPort>;
 	readFileBytes?: ((path: string) => Promise<Buffer>) | undefined;
@@ -182,6 +186,15 @@ function assertLoaded(value: LoadedPlan | null): LoadedPlan {
 		throw new Error("run sandbox plan is not loaded");
 	}
 	return value;
+}
+
+function scopeFromRun(run: RunModel): TenantScopeContext {
+	return {
+		orgId: run.spec.orgId,
+		wsId: run.spec.wsId,
+		memberId: run.spec.memberId,
+		writeTarget: run.spec.writeTarget,
+	};
 }
 
 function readCommandText(command: RunCommandModel): string {
@@ -1053,9 +1066,15 @@ export async function executeRunSandbox(
 			}
 		});
 		if (nextWorkflowId) {
-			await deps.workflowLauncher.startRunOnce(runId, {
-				workflowID: nextWorkflowId,
-			});
+			await deps.workflowLauncher.startRunOnce(
+				{
+					runId,
+					scope: scopeFromRun(assertLoaded(loadedPlan).run),
+				},
+				{
+					workflowID: nextWorkflowId,
+				},
+			);
 		}
 	} catch (error) {
 		let retryWorkflowId: string | null = null;
@@ -1104,9 +1123,15 @@ export async function executeRunSandbox(
 			session = null;
 		});
 		if (retryWorkflowId) {
-			await deps.workflowLauncher.startRunOnce(runId, {
-				workflowID: retryWorkflowId,
-			});
+			await deps.workflowLauncher.startRunOnce(
+				{
+					runId,
+					scope: scopeFromRun(assertLoaded(loadedPlan).run),
+				},
+				{
+					workflowID: retryWorkflowId,
+				},
+			);
 		}
 		throw error;
 	}
@@ -1121,12 +1146,17 @@ export function registerRunSandboxWorkflow(
 	activeDeps = deps;
 	if (!registeredWorkflow) {
 		registeredWorkflow = DBOS.registerWorkflow(
-			async (runId: string): Promise<void> => {
+			async (input: {
+				runId: string;
+				scope: TenantScopeContext;
+			}): Promise<void> => {
 				const currentDeps = activeDeps;
 				if (!currentDeps) {
 					throw new Error("RunSandbox deps are not registered");
 				}
-				await executeRunSandbox(runId, currentDeps, dbosStepRunner);
+				await runWithTenantScope(input.scope, async () =>
+					executeRunSandbox(input.runId, currentDeps, dbosStepRunner),
+				);
 			},
 			{
 				name: "forkloomRunSandbox",

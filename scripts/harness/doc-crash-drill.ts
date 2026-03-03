@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
 	type CrashStage,
-	buildSamplePdfBytes,
+	buildSampleDocInput,
 	createDocLiveContext,
 	readCrashMarker,
 } from "./doc-live-support";
@@ -76,11 +76,11 @@ async function runStage(
 		crashMarkerPath,
 	});
 	try {
-		const body = buildSamplePdfBytes();
+		const sample = await buildSampleDocInput();
 		const ingest = await context.ingestLauncher.startIngestDoc(
 			{
-				body,
-				mime: "application/pdf",
+				body: sample.body,
+				mime: sample.mime,
 			},
 			{
 				workflowID: `doc_ingest:crash:${input.stage}:${input.scenarioId}`,

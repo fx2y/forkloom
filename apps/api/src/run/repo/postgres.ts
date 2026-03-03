@@ -1,4 +1,5 @@
 import pg from "pg";
+import { getTenantScope, withScopeTx } from "../../http/scope";
 import { createPoolCloseOnce } from "../../repo/pool-close";
 import type {
 	AppendRunEventInput,
@@ -241,23 +242,66 @@ export class PgRunRepo implements RunRepo {
 		await this.closePool();
 	}
 
+	private async withTenantScope<T>(
+		fn: (queryable: Queryable) => Promise<T>,
+	): Promise<T> {
+		const scope = getTenantScope();
+		if (!scope) {
+			return fn(this.pool);
+		}
+		const client = await this.pool.connect();
+		try {
+			return await withScopeTx(client, scope, () => fn(client));
+		} finally {
+			client.release();
+		}
+	}
+
+	private async withClientTx<T>(
+		fn: (client: PoolClientLike) => Promise<T>,
+	): Promise<T> {
+		const scope = getTenantScope();
+		const client = await this.pool.connect();
+		try {
+			if (scope) {
+				return await withScopeTx(client, scope, () => fn(client));
+			}
+			await client.query("begin");
+			try {
+				const output = await fn(client);
+				await client.query("commit");
+				return output;
+			} catch (error) {
+				await client.query("rollback");
+				throw error;
+			}
+		} finally {
+			client.release();
+		}
+	}
+
 	async createRun(
 		input: CreateRunInput,
 	): Promise<{ run: RunModel; created: boolean }> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const inserted = await client.query<RunRow>(
-				`insert into runs(run_id, status, spec, dbos_workflow_id)
-					 values ($1, 'queued', $2::jsonb, null)
+				`insert into runs(
+					 run_id, status, spec, dbos_workflow_id, org_id, ws_id, member_id
+				 )
+					 values ($1, 'queued', $2::jsonb, null, $3::uuid, $4::uuid, $5::uuid)
 					 on conflict (run_id) do nothing
 					 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
 					 pi_session_id, pi_session_file, result_text, result_stats, error`,
-				[input.runId, JSON.stringify(input.spec)],
+				[
+					input.runId,
+					JSON.stringify(input.spec),
+					input.spec.orgId,
+					input.spec.wsId ?? null,
+					input.spec.memberId ?? null,
+				],
 			);
 
 			if (inserted.rowCount && inserted.rowCount > 0) {
-				await client.query("commit");
 				return {
 					run: toRunModel(requireRow(inserted, "create run insert")),
 					created: true,
@@ -271,36 +315,32 @@ export class PgRunRepo implements RunRepo {
 					 where run_id = $1`,
 				[input.runId],
 			);
-			await client.query("commit");
 			return {
 				run: toRunModel(requireRow(existing, "create run select existing")),
 				created: false,
 			};
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async recordWorkflowLaunch(
 		runId: string,
 		workflowId: string,
 	): Promise<RunModel | null> {
-		const result = await this.pool.query<RunRow>(
-			`update runs
-				 set dbos_workflow_id = coalesce(dbos_workflow_id, $2),
-					 updated_at = now()
-				 where run_id = $1
-				 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-				 pi_session_id, pi_session_file, result_text, result_stats, error`,
-			[runId, workflowId],
-		);
-		if (!result.rowCount) {
-			return null;
-		}
-		return toRunModel(requireRow(result, "record workflow launch"));
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<RunRow>(
+				`update runs
+					 set dbos_workflow_id = coalesce(dbos_workflow_id, $2),
+						 updated_at = now()
+					 where run_id = $1
+					 returning run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+					 pi_session_id, pi_session_file, result_text, result_stats, error`,
+				[runId, workflowId],
+			);
+			if (!result.rowCount) {
+				return null;
+			}
+			return toRunModel(requireRow(result, "record workflow launch"));
+		});
 	}
 
 	async beginRun(input: {
@@ -308,9 +348,7 @@ export class PgRunRepo implements RunRepo {
 		workflowId: string;
 		payload: Record<string, unknown>;
 	}): Promise<RunEventModel> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const runResult = await client.query<RunRow>(
 				`update runs
 					 set status = 'running',
@@ -330,38 +368,36 @@ export class PgRunRepo implements RunRepo {
 				 returning event_id, run_id, kind, payload, created_at`,
 				[input.runId, JSON.stringify(input.payload)],
 			);
-			await client.query("commit");
 			return toRunEventModel(requireRow(eventResult, "begin run event"));
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async getRun(runId: string): Promise<RunModel | null> {
-		const result = await this.pool.query<RunRow>(
-			`select run_id, status, spec, created_at, updated_at, dbos_workflow_id,
-			 pi_session_id, pi_session_file, result_text, result_stats, error
-			 from runs
-			 where run_id = $1`,
-			[runId],
-		);
-		if (!result.rowCount) {
-			return null;
-		}
-		return toRunModel(requireRow(result, "get run"));
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<RunRow>(
+				`select run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+				 pi_session_id, pi_session_file, result_text, result_stats, error
+				 from runs
+				 where run_id = $1`,
+				[runId],
+			);
+			if (!result.rowCount) {
+				return null;
+			}
+			return toRunModel(requireRow(result, "get run"));
+		});
 	}
 
 	async appendEvent(input: AppendRunEventInput): Promise<RunEventModel> {
-		const result = await this.pool.query<RunEventRow>(
-			`insert into events(run_id, kind, payload)
-			 values ($1, $2, $3::jsonb)
-			 returning event_id, run_id, kind, payload, created_at`,
-			[input.runId, input.kind, JSON.stringify(input.payload)],
-		);
-		return toRunEventModel(requireRow(result, "append event"));
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<RunEventRow>(
+				`insert into events(run_id, kind, payload)
+				 values ($1, $2, $3::jsonb)
+				 returning event_id, run_id, kind, payload, created_at`,
+				[input.runId, input.kind, JSON.stringify(input.payload)],
+			);
+			return toRunEventModel(requireRow(result, "append event"));
+		});
 	}
 
 	async listEventsSince(
@@ -370,52 +406,62 @@ export class PgRunRepo implements RunRepo {
 		limit: number,
 	): Promise<RunEventModel[]> {
 		const safeLimit = clampLimit(limit);
-		const result = await this.pool.query<RunEventRow>(
-			`select event_id, run_id, kind, payload, created_at
-			 from events
-			 where run_id = $1 and event_id > $2
-			 order by event_id asc
-			 limit $3`,
-			[runId, sinceEventId, safeLimit],
-		);
-		return result.rows.map(toRunEventModel);
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<RunEventRow>(
+				`select event_id, run_id, kind, payload, created_at
+				 from events
+				 where run_id = $1 and event_id > $2
+				 order by event_id asc
+				 limit $3`,
+				[runId, sinceEventId, safeLimit],
+			);
+			return result.rows.map(toRunEventModel);
+		});
 	}
 
 	async listArtifacts(runId: string): Promise<RunArtifactLinkModel[]> {
-		const result = await this.pool.query<RunArtifactRow>(
-			`select run_id, sha256, kind, created_at
-			 from run_artifacts
-			 where run_id = $1
-			 order by created_at asc, sha256 asc, kind asc`,
-			[runId],
-		);
-		return result.rows.map(toRunArtifactLinkModel);
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<RunArtifactRow>(
+				`select run_id, sha256, kind, created_at
+				 from run_artifacts
+				 where run_id = $1
+				 order by created_at asc, sha256 asc, kind asc`,
+				[runId],
+			);
+			return result.rows.map(toRunArtifactLinkModel);
+		});
 	}
 
 	async createStep(input: CreateStepInput): Promise<StepModel> {
-		return this.createStepFrom(this.pool, input);
+		return this.withTenantScope((queryable) =>
+			this.createStepFrom(queryable, input),
+		);
 	}
 
 	async upsertLink(input: UpsertLinkInput): Promise<LinkModel> {
-		return this.upsertLinkFrom(this.pool, input);
+		return this.withTenantScope((queryable) =>
+			this.upsertLinkFrom(queryable, input),
+		);
 	}
 
 	async upsertSessionIndex(
 		input: UpsertSessionIndexInput,
 	): Promise<SessionIndexModel> {
-		return this.upsertSessionIndexFrom(this.pool, input);
+		return this.withTenantScope((queryable) =>
+			this.upsertSessionIndexFrom(queryable, input),
+		);
 	}
 
 	async upsertStepPayload(
 		input: UpsertStepPayloadInput,
 	): Promise<StepPayloadModel> {
-		return this.upsertStepPayloadFrom(this.pool, input);
+		return this.withTenantScope((queryable) =>
+			this.upsertStepPayloadFrom(queryable, input),
+		);
 	}
 
 	async recordStepLedger(input: RecordStepLedgerInput): Promise<void> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		await this.withClientTx(async (client) => {
 			await this.createStepFrom(client, {
 				runId: input.runId,
 				stepName: input.stepName,
@@ -451,13 +497,7 @@ export class PgRunRepo implements RunRepo {
 					summaryEntryCount: input.sessionIndex.summaryEntryCount ?? 0,
 				});
 			}
-			await client.query("commit");
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	private async createStepFrom(
@@ -572,70 +612,109 @@ export class PgRunRepo implements RunRepo {
 	}
 
 	async listSteps(runId: string): Promise<StepModel[]> {
-		const result = await this.pool.query<StepRow>(
-			`select run_id, step_name, attempt, step_key, in_hash, out_hash,
-			 started_at, ended_at
-			 from steps
-			 where run_id = $1
-			 order by started_at asc, step_name asc, attempt asc`,
-			[runId],
-		);
-		return result.rows.map(toStepModel);
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<StepRow>(
+				`select run_id, step_name, attempt, step_key, in_hash, out_hash,
+				 started_at, ended_at
+				 from steps
+				 where run_id = $1
+				 order by started_at asc, step_name asc, attempt asc`,
+				[runId],
+			);
+			return result.rows.map(toStepModel);
+		});
 	}
 
 	async listLinks(runId: string): Promise<LinkModel[]> {
-		const result = await this.pool.query<LinkRow>(
-			`select run_id, step_name, attempt, session_entry_ids, artifact_shas,
-			 note, created_at
-			 from links
-			 where run_id = $1
-			 order by created_at asc, step_name asc, attempt asc`,
-			[runId],
-		);
-		return result.rows.map(toLinkModel);
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<LinkRow>(
+				`select run_id, step_name, attempt, session_entry_ids, artifact_shas,
+				 note, created_at
+				 from links
+				 where run_id = $1
+				 order by created_at asc, step_name asc, attempt asc`,
+				[runId],
+			);
+			return result.rows.map(toLinkModel);
+		});
 	}
 
 	async listStepPayloads(runId: string): Promise<StepPayloadModel[]> {
-		const result = await this.pool.query<StepPayloadRow>(
-			`select run_id, step_name, attempt, payload, created_at
-			 from step_payloads
-			 where run_id = $1
-			 order by created_at asc, step_name asc, attempt asc`,
-			[runId],
-		);
-		return result.rows.map(toStepPayloadModel);
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<StepPayloadRow>(
+				`select run_id, step_name, attempt, payload, created_at
+				 from step_payloads
+				 where run_id = $1
+				 order by created_at asc, step_name asc, attempt asc`,
+				[runId],
+			);
+			return result.rows.map(toStepPayloadModel);
+		});
 	}
 
 	async getTruthBundle(runId: string): Promise<TruthBundle | null> {
-		const run = await this.getRun(runId);
-		if (!run) {
-			return null;
-		}
-		const [steps, links, artifacts, stepPayloads] = await Promise.all([
-			this.listSteps(runId),
-			this.listLinks(runId),
-			this.listArtifacts(runId),
-			this.listStepPayloads(runId),
-		]);
-		const sessionIndexResult = await this.pool.query<SessionIndexRow>(
-			`select run_id, entry_count, root_id, leaf_id, summary_entry_count,
-			 updated_at
-			 from sessions_index
-			 where run_id = $1`,
-			[runId],
-		);
-		return {
-			run,
-			steps,
-			links,
-			artifacts,
-			sessionIndex: sessionIndexResult.rowCount
-				? toSessionIndexModel(
-						requireRow(sessionIndexResult, "get truth bundle session index"),
-					)
-				: null,
-			stepPayloads,
-		};
+		return this.withTenantScope(async (queryable) => {
+			const runResult = await queryable.query<RunRow>(
+				`select run_id, status, spec, created_at, updated_at, dbos_workflow_id,
+				 pi_session_id, pi_session_file, result_text, result_stats, error
+				 from runs
+				 where run_id = $1`,
+				[runId],
+			);
+			if (!runResult.rowCount) {
+				return null;
+			}
+			const run = toRunModel(requireRow(runResult, "get truth bundle run"));
+			const stepsResult = await queryable.query<StepRow>(
+				`select run_id, step_name, attempt, step_key, in_hash, out_hash,
+				 started_at, ended_at
+				 from steps
+				 where run_id = $1
+				 order by started_at asc, step_name asc, attempt asc`,
+				[runId],
+			);
+			const linksResult = await queryable.query<LinkRow>(
+				`select run_id, step_name, attempt, session_entry_ids, artifact_shas,
+				 note, created_at
+				 from links
+				 where run_id = $1
+				 order by created_at asc, step_name asc, attempt asc`,
+				[runId],
+			);
+			const artifactsResult = await queryable.query<RunArtifactRow>(
+				`select run_id, sha256, kind, created_at
+				 from run_artifacts
+				 where run_id = $1
+				 order by created_at asc, sha256 asc, kind asc`,
+				[runId],
+			);
+			const payloadsResult = await queryable.query<StepPayloadRow>(
+				`select run_id, step_name, attempt, payload, created_at
+				 from step_payloads
+				 where run_id = $1
+				 order by created_at asc, step_name asc, attempt asc`,
+				[runId],
+			);
+			const sessionIndexResult = await queryable.query<SessionIndexRow>(
+				`select run_id, entry_count, root_id, leaf_id, summary_entry_count,
+				 updated_at
+				 from sessions_index
+				 where run_id = $1`,
+				[runId],
+			);
+			return {
+				run,
+				steps: stepsResult.rows.map(toStepModel),
+				links: linksResult.rows.map(toLinkModel),
+				artifacts: artifactsResult.rows.map(toRunArtifactLinkModel),
+				sessionIndex: sessionIndexResult.rowCount
+					? toSessionIndexModel(
+							requireRow(sessionIndexResult, "get truth bundle session index"),
+						)
+					: null,
+				stepPayloads: payloadsResult.rows.map(toStepPayloadModel),
+			};
+		});
 	}
 
 	async completeRun(input: {
@@ -646,9 +725,7 @@ export class PgRunRepo implements RunRepo {
 		piSessionId?: string | undefined;
 		piSessionFile?: string | undefined;
 	}): Promise<{ run: RunModel | null; event: RunEventModel | null }> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const runResult = await client.query<RunRow>(
 				`update runs
 					 set status = 'done',
@@ -669,7 +746,6 @@ export class PgRunRepo implements RunRepo {
 				],
 			);
 			if (!runResult.rowCount) {
-				await client.query("rollback");
 				return { run: null, event: null };
 			}
 			const eventResult = await client.query<RunEventRow>(
@@ -678,17 +754,11 @@ export class PgRunRepo implements RunRepo {
 				 returning event_id, run_id, kind, payload, created_at`,
 				[input.runId, JSON.stringify(input.eventPayload)],
 			);
-			await client.query("commit");
 			return {
 				run: toRunModel(requireRow(runResult, "complete run")),
 				event: toRunEventModel(requireRow(eventResult, "complete run event")),
 			};
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async failRun(input: {
@@ -696,9 +766,7 @@ export class PgRunRepo implements RunRepo {
 		error: string;
 		eventPayload: Record<string, unknown>;
 	}): Promise<{ run: RunModel | null; event: RunEventModel | null }> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const runResult = await client.query<RunRow>(
 				`update runs
 					 set status = 'failed',
@@ -710,7 +778,6 @@ export class PgRunRepo implements RunRepo {
 				[input.runId, input.error],
 			);
 			if (!runResult.rowCount) {
-				await client.query("rollback");
 				return { run: null, event: null };
 			}
 			const eventResult = await client.query<RunEventRow>(
@@ -719,17 +786,11 @@ export class PgRunRepo implements RunRepo {
 				 returning event_id, run_id, kind, payload, created_at`,
 				[input.runId, JSON.stringify(input.eventPayload)],
 			);
-			await client.query("commit");
 			return {
 				run: toRunModel(requireRow(runResult, "fail run")),
 				event: toRunEventModel(requireRow(eventResult, "fail run event")),
 			};
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async linkArtifact(input: {
@@ -737,11 +798,13 @@ export class PgRunRepo implements RunRepo {
 		sha256: string;
 		kind: string;
 	}): Promise<void> {
-		await this.pool.query(
-			`insert into run_artifacts(run_id, sha256, kind)
-			 values ($1, $2, $3)
-			 on conflict (run_id, sha256, kind) do nothing`,
-			[input.runId, input.sha256, input.kind],
-		);
+		await this.withTenantScope(async (queryable) => {
+			await queryable.query(
+				`insert into run_artifacts(run_id, sha256, kind)
+				 values ($1, $2, $3)
+				 on conflict (run_id, sha256, kind) do nothing`,
+				[input.runId, input.sha256, input.kind],
+			);
+		});
 	}
 }

@@ -346,8 +346,8 @@ describe("run SSE two-tab replay", () => {
 	const runService = new RunService({
 		runRepo,
 		workflowLauncher: {
-			startRunOnce: async (runId) => {
-				launches.push(runId);
+			startRunOnce: async (input) => {
+				launches.push(typeof input === "string" ? input : input.runId);
 			},
 		},
 	});

@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { buildSamplePdfBytes, createDocLiveContext } from "./doc-live-support";
+import { buildSampleDocInput, createDocLiveContext } from "./doc-live-support";
 import { writeJson } from "./live-support";
 
 type IngestProof = {
@@ -20,11 +20,11 @@ async function main(): Promise<void> {
 		crashMode: "disabled",
 	});
 	try {
-		const body = buildSamplePdfBytes();
+		const sample = await buildSampleDocInput();
 		const first = (await context.ingestLauncher.startIngestDoc(
 			{
-				body,
-				mime: "application/pdf",
+				body: sample.body,
+				mime: sample.mime,
 			},
 			{
 				workflowID: `doc_ingest:e2e:first:${Date.now()}`,
@@ -38,8 +38,8 @@ async function main(): Promise<void> {
 
 		const second = (await context.ingestLauncher.startIngestDoc(
 			{
-				body,
-				mime: "application/pdf",
+				body: sample.body,
+				mime: sample.mime,
 			},
 			{
 				workflowID: `doc_ingest:e2e:second:${Date.now()}`,

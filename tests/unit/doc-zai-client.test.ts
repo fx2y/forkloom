@@ -96,4 +96,44 @@ describe("ZaiLayoutClient", () => {
 			}),
 		).rejects.toThrow("layout_parsing failed");
 	});
+
+	it("falls back to data url when raw base64 bytes are rejected", async () => {
+		const fileValues: string[] = [];
+		const client = new ZaiLayoutClient({
+			endpoint: "https://api.z.ai/api/paas/v4/layout_parsing",
+			apiKey: "secret",
+			model: "glm-ocr",
+			retryLimit: 1,
+			fetchImpl: async (_url, init) => {
+				const request = JSON.parse(String(init?.body)) as {
+					file: string;
+				};
+				fileValues.push(request.file);
+				if (fileValues.length === 1) {
+					return new Response("OCR only supports PDF/JPG/PNG/JPEG inputs", {
+						status: 400,
+					});
+				}
+				return new Response(
+					JSON.stringify({
+						md_results: "ok",
+						layout_details: [[]],
+						data_info: { num_pages: 1 },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			},
+		});
+
+		const result = await client.layoutParsing({
+			kind: "bytes",
+			value: Buffer.from("pdf"),
+			mime: "application/pdf",
+		});
+
+		expect(result.markdown).toBe("ok");
+		expect(fileValues).toHaveLength(2);
+		expect(fileValues[0]).toBe(Buffer.from("pdf").toString("base64"));
+		expect(fileValues[1]).toMatch(/^data:application\/pdf;base64,/);
+	});
 });

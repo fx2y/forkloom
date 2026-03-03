@@ -66,11 +66,11 @@ UPDATE links SET
     member_id = r.member_id
 FROM runs r WHERE links.run_id = r.run_id AND links.org_id IS NULL;
 
-UPDATE session_index SET
+UPDATE sessions_index SET
     org_id = r.org_id,
     ws_id = r.ws_id,
     member_id = r.member_id
-FROM runs r WHERE session_index.run_id = r.run_id AND session_index.org_id IS NULL;
+FROM runs r WHERE sessions_index.run_id = r.run_id AND sessions_index.org_id IS NULL;
 
 -- 4) Backfill docs and their children
 -- Since docs are CAS, we'll assign them to the default workspace if they are unscoped.
@@ -89,13 +89,18 @@ UPDATE chunks SET
     org_id = d.org_id,
     ws_id = d.ws_id,
     member_id = d.member_id
-FROM docs d WHERE chunks.doc_sha = d.doc_sha AND chunks.org_id IS NULL;
+FROM parses p
+JOIN docs d ON d.doc_sha = p.doc_sha
+WHERE chunks.parse_id = p.parse_id AND chunks.org_id IS NULL;
 
 UPDATE spans SET
     org_id = d.org_id,
     ws_id = d.ws_id,
     member_id = d.member_id
-FROM docs d WHERE spans.doc_sha = d.doc_sha AND spans.org_id IS NULL;
+FROM chunks c
+JOIN parses p ON p.parse_id = c.parse_id
+JOIN docs d ON d.doc_sha = p.doc_sha
+WHERE spans.chunk_id = c.chunk_id AND spans.org_id IS NULL;
 
 -- 5) Finalize constraints and add indexes
 ALTER TABLE runs ALTER COLUMN org_id SET NOT NULL;

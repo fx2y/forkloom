@@ -5,6 +5,9 @@ source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
 cd_repo_root
 require_cmds pnpm
 
+docker compose restart api >/dev/null
+wait_for_url_stable "api" "http://127.0.0.1:8080/health" /tmp/svc.api "-fsS" 120 3 1
+
 mkdir -p .cache/spec06
 pnpm exec tsx scripts/harness/run-replay-proof.ts
 pnpm exec vitest run tests/int/run-replay.test.ts

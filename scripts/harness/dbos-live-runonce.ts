@@ -294,7 +294,13 @@ async function run(): Promise<void> {
 	await DBOS.launch();
 
 	if (mode === "first") {
-		const handle = await DBOS.startWorkflow(workflow, { workflowID })(runId);
+		const handle = await DBOS.startWorkflow(workflow, { workflowID })({
+			runId,
+			scope: {
+				orgId: "00000000-0000-0000-0000-000000000001",
+				writeTarget: "ws",
+			},
+		});
 		await handle.getResult();
 		return;
 	}

@@ -44,7 +44,9 @@ export type DocLiveContext = {
 	shutdown(): Promise<void>;
 };
 
-const DEFAULT_LIVE_PDF_PATH = "fixtures/ocr/live/01-w3-dummy.pdf";
+const DEFAULT_LIVE_IMAGE_PATH = ".cache/spec07/live-ocr-sample.png";
+const DEFAULT_LIVE_IMAGE_URL =
+	"https://cdn.bigmodel.cn/static/logo/introduction.png";
 
 function hashText(text: string): string {
 	return createHash("sha256").update(text).digest("hex");
@@ -98,8 +100,35 @@ function createCrashAwareRepo(
 	};
 }
 
-export function buildSamplePdfBytes(inputPath = DEFAULT_LIVE_PDF_PATH): Buffer {
-	return readFileSync(inputPath);
+export async function buildSampleDocInput(
+	inputPath = DEFAULT_LIVE_IMAGE_PATH,
+): Promise<{
+	body: Buffer;
+	mime: string;
+}> {
+	if (existsSync(inputPath)) {
+		return {
+			body: readFileSync(inputPath),
+			mime: "image/png",
+		};
+	}
+	const response = await fetch(DEFAULT_LIVE_IMAGE_URL);
+	if (!response.ok) {
+		throw new Error(
+			`failed to fetch live OCR sample image status=${response.status}`,
+		);
+	}
+	const arrayBuffer = await response.arrayBuffer();
+	const body = Buffer.from(arrayBuffer);
+	if (body.byteLength === 0) {
+		throw new Error("live OCR sample image is empty");
+	}
+	mkdirSync(dirname(inputPath), { recursive: true });
+	writeFileSync(inputPath, body);
+	return {
+		body,
+		mime: "image/png",
+	};
 }
 
 export function readCrashMarker(path: string): string | null {

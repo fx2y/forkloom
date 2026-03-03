@@ -1,4 +1,5 @@
 import pg from "pg";
+import { getTenantScope, withScopeTx } from "../../http/scope";
 import { createPoolCloseOnce } from "../../repo/pool-close";
 import { buildSpanId } from "../ids";
 import type {
@@ -281,27 +282,69 @@ export class PgDocRepo implements DocRepo {
 		await this.closePool();
 	}
 
+	private async withTenantScope<T>(
+		fn: (queryable: Queryable) => Promise<T>,
+	): Promise<T> {
+		const scope = getTenantScope();
+		if (!scope) {
+			return fn(this.pool);
+		}
+		const client = await this.pool.connect();
+		try {
+			return await withScopeTx(client, scope, () => fn(client));
+		} finally {
+			client.release();
+		}
+	}
+
+	private async withClientTx<T>(
+		fn: (client: PoolClientLike) => Promise<T>,
+	): Promise<T> {
+		const scope = getTenantScope();
+		const client = await this.pool.connect();
+		try {
+			if (scope) {
+				return await withScopeTx(client, scope, () => fn(client));
+			}
+			await client.query("begin");
+			try {
+				const out = await fn(client);
+				await client.query("commit");
+				return out;
+			} catch (error) {
+				await client.query("rollback");
+				throw error;
+			}
+		} finally {
+			client.release();
+		}
+	}
+
 	async getDoc(docSha: string): Promise<DocModel | null> {
-		const result = await this.pool.query<DocRow>(
-			`select doc_sha, mime, bytes, raw_artifact_sha, status, created_at, updated_at
-			 from docs
-			 where doc_sha = $1`,
-			[docSha],
-		);
-		const row = result.rows[0];
-		return row ? toDocModel(row) : null;
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<DocRow>(
+				`select doc_sha, mime, bytes, raw_artifact_sha, status, created_at, updated_at
+				 from docs
+				 where doc_sha = $1`,
+				[docSha],
+			);
+			const row = result.rows[0];
+			return row ? toDocModel(row) : null;
+		});
 	}
 
 	async getParse(parseId: string): Promise<ParseModel | null> {
-		const result = await this.pool.query<ParseRow>(
-			`select parse_id, doc_sha, parser, parser_ver, cfg_hash, norm_ver,
-			        md_artifact_sha, json_artifact_sha, stats, status, created_at, updated_at
-			 from parses
-			 where parse_id = $1`,
-			[parseId],
-		);
-		const row = result.rows[0];
-		return row ? toParseModel(row) : null;
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<ParseRow>(
+				`select parse_id, doc_sha, parser, parser_ver, cfg_hash, norm_ver,
+				        md_artifact_sha, json_artifact_sha, stats, status, created_at, updated_at
+				 from parses
+				 where parse_id = $1`,
+				[parseId],
+			);
+			const row = result.rows[0];
+			return row ? toParseModel(row) : null;
+		});
 	}
 
 	async getParsePayload(parseId: string): Promise<ParsePayloadModel | null> {
@@ -313,40 +356,52 @@ export class PgDocRepo implements DocRepo {
 		if (!doc) {
 			throw new Error(`parse payload missing doc: ${parse.docSha}`);
 		}
-		const usageResult = await this.pool.query<OcrUsageRow>(
-			`select parse_id, vendor, model, input_pages, input_bytes, output_tokens,
-			        cost_micros, payload, created_at, updated_at
-			 from ocr_usage
-			 where parse_id = $1`,
-			[parseId],
-		);
-		return {
-			doc,
-			parse,
-			usage: usageResult.rows[0] ? toOcrUsageModel(usageResult.rows[0]) : null,
-		};
+		return this.withTenantScope(async (queryable) => {
+			const usageResult = await queryable.query<OcrUsageRow>(
+				`select parse_id, vendor, model, input_pages, input_bytes, output_tokens,
+				        cost_micros, payload, created_at, updated_at
+				 from ocr_usage
+				 where parse_id = $1`,
+				[parseId],
+			);
+			return {
+				doc,
+				parse,
+				usage: usageResult.rows[0]
+					? toOcrUsageModel(usageResult.rows[0])
+					: null,
+			};
+		});
 	}
 
 	async upsertDoc(input: UpsertDocInput): Promise<DocModel> {
-		return this.upsertDocFrom(this.pool, input);
+		return this.withTenantScope((queryable) =>
+			this.upsertDocFrom(queryable, input),
+		);
 	}
 
 	async upsertParse(input: UpsertParseInput): Promise<ParseModel> {
-		return this.upsertParseFrom(this.pool, input);
+		return this.withTenantScope((queryable) =>
+			this.upsertParseFrom(queryable, input),
+		);
 	}
 
 	async aliasArtifact(input: AliasArtifactInput): Promise<void> {
-		await this.aliasArtifactFrom(this.pool, input);
+		await this.withTenantScope((queryable) =>
+			this.aliasArtifactFrom(queryable, input),
+		);
 	}
 
 	async resolveAlias(alias: string): Promise<string | null> {
-		const result = await this.pool.query<AliasRow>(
-			`select sha256
-			 from artifact_alias
-			 where alias = $1`,
-			[alias],
-		);
-		return result.rows[0]?.sha256 ?? null;
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<AliasRow>(
+				`select sha256
+				 from artifact_alias
+				 where alias = $1`,
+				[alias],
+			);
+			return result.rows[0]?.sha256 ?? null;
+		});
 	}
 
 	async searchLexicalChunks(
@@ -354,8 +409,9 @@ export class PgDocRepo implements DocRepo {
 	): Promise<LexicalChunkHitModel[]> {
 		const scope = whereScope(input.scope);
 		const limitIndex = scope.params.length + 2;
-		const result = await this.pool.query<LexicalChunkRow>(
-			`select
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<LexicalChunkRow>(
+				`select
 				 c.chunk_id,
 				 c.md,
 				 c.plain,
@@ -366,14 +422,15 @@ export class PgDocRepo implements DocRepo {
 			 where c.tsv @@ q${scope.sql}
 			 order by score desc, c.chunk_id asc
 			 limit $${limitIndex}`,
-			[input.query, ...scope.params, input.limit],
-		);
-		return result.rows.map((row) => ({
-			chunkId: row.chunk_id,
-			score: toScore(row.score),
-			md: row.md,
-			plain: row.plain,
-		}));
+				[input.query, ...scope.params, input.limit],
+			);
+			return result.rows.map((row) => ({
+				chunkId: row.chunk_id,
+				score: toScore(row.score),
+				md: row.md,
+				plain: row.plain,
+			}));
+		});
 	}
 
 	async listVectorChunks(
@@ -384,8 +441,9 @@ export class PgDocRepo implements DocRepo {
 			try {
 				const scope = whereScope(input.scope, "c", "p", 2);
 				const limitIndex = scope.params.length + 2;
-				const result = await this.pool.query<VectorChunkRow>(
-					`select
+				const result = await this.withTenantScope((queryable) =>
+					queryable.query<VectorChunkRow>(
+						`select
 						 c.chunk_id,
 						 c.md,
 						 c.plain,
@@ -397,7 +455,12 @@ export class PgDocRepo implements DocRepo {
 					 where cv.emb is not null${scope.sql}
 					 order by cv.emb <-> $1::vector asc, c.chunk_id asc
 					 limit $${limitIndex}`,
-					[toPgVectorLiteral(queryEmbedding), ...scope.params, input.limit * 8],
+						[
+							toPgVectorLiteral(queryEmbedding),
+							...scope.params,
+							input.limit * 8,
+						],
+					),
 				);
 				if (result.rows.length > 0) {
 					return result.rows
@@ -420,8 +483,9 @@ export class PgDocRepo implements DocRepo {
 
 		const scope = whereScope(input.scope, "c", "p", 1);
 		const limitIndex = scope.params.length + 1;
-		const result = await this.pool.query<VectorChunkRow>(
-			`select
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<VectorChunkRow>(
+				`select
 				 c.chunk_id,
 				 c.md,
 				 c.plain,
@@ -433,7 +497,8 @@ export class PgDocRepo implements DocRepo {
 			   and jsonb_array_length(cv.emb_json) > 0${scope.sql}
 			 order by c.updated_at desc, c.chunk_id asc
 			 limit $${limitIndex}`,
-			[...scope.params, input.limit * 8],
+				[...scope.params, input.limit * 8],
+			),
 		);
 		return result.rows
 			.map((row) => ({
@@ -449,8 +514,9 @@ export class PgDocRepo implements DocRepo {
 		if (chunkIds.length === 0) {
 			return [];
 		}
-		const result = await this.pool.query<SpanRow>(
-			`select
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<SpanRow>(
+				`select
 				 s.chunk_id,
 				 p.doc_sha,
 				 c.parse_id,
@@ -464,7 +530,8 @@ export class PgDocRepo implements DocRepo {
 			 join parses p on p.parse_id = c.parse_id
 			 where s.chunk_id = any($1::text[])
 			 order by s.chunk_id asc, s.p asc, s.block_path asc, s.char_start asc nulls first`,
-			[chunkIds],
+				[chunkIds],
+			),
 		);
 		return result.rows.map((row) => ({
 			docSha: row.doc_sha,
@@ -480,8 +547,9 @@ export class PgDocRepo implements DocRepo {
 
 	async resolveSpan(span: SpanModel): Promise<ResolveSpanModel | null> {
 		const spanId = buildSpanId(span);
-		const result = await this.pool.query<ResolveSpanRow>(
-			`select
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<ResolveSpanRow>(
+				`select
 				 s.chunk_id,
 				 p.doc_sha,
 				 c.parse_id,
@@ -504,7 +572,8 @@ export class PgDocRepo implements DocRepo {
 			   on pg.parse_id = c.parse_id
 			  and pg.p = s.p
 			 where s.span_id = $1`,
-			[spanId],
+				[spanId],
+			),
 		);
 		const row = result.rows[0];
 		if (!row) {
@@ -546,9 +615,7 @@ export class PgDocRepo implements DocRepo {
 	}
 
 	async markParseDone(input: MarkParseDoneInput): Promise<void> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		await this.withClientTx(async (client) => {
 			const parseResult = await client.query<{ doc_sha: string }>(
 				`update parses
 				 set status = 'done',
@@ -580,19 +647,11 @@ export class PgDocRepo implements DocRepo {
 					 updated_at = excluded.updated_at`,
 				[input.parseId, docSha, input.publishedAt],
 			);
-			await client.query("commit");
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async recordParseLedger(input: RecordParseLedgerInput): Promise<void> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		await this.withClientTx(async (client) => {
 			for (const alias of input.aliases) {
 				await this.aliasArtifactFrom(client, alias);
 			}
@@ -608,13 +667,7 @@ export class PgDocRepo implements DocRepo {
 			for (const item of input.search) {
 				await this.upsertChunkSearchFrom(client, item);
 			}
-			await client.query("commit");
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	private async upsertDocFrom(

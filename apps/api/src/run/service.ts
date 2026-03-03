@@ -37,6 +37,7 @@ import type {
 	RunRepo,
 	RunSpecModel,
 	RunStatus,
+	TenantScopeContext,
 } from "./ports";
 import { toRunEventContract, toRunStateContract } from "./projection";
 
@@ -51,20 +52,29 @@ export type CompleteRunInput = {
 export type RunStepLedgerInput = RecordStepLedgerInput;
 
 export interface RunWorkflowLauncher {
-	startRunOnce(runId: string, opts: { workflowID: string }): Promise<void>;
+	startRunOnce(
+		input: { runId: string; scope: TenantScopeContext } | string,
+		opts: { workflowID: string },
+	): Promise<void>;
 }
 
-export type RegisteredRunWorkflow = (runId: string) => Promise<void>;
+export type RegisteredRunWorkflow = (input: {
+	runId: string;
+	scope: TenantScopeContext;
+}) => Promise<void>;
 const SANDBOX_WORKFLOW_ID_PREFIX = "run:";
 
 export class DbosRunWorkflowLauncher implements RunWorkflowLauncher {
 	constructor(private readonly workflow: RegisteredRunWorkflow) {}
 
 	async startRunOnce(
-		runId: string,
+		input: { runId: string; scope: TenantScopeContext } | string,
 		opts: { workflowID: string },
 	): Promise<void> {
-		await DBOS.startWorkflow(this.workflow, opts)(runId);
+		if (typeof input === "string") {
+			throw new Error("tenant scope is required for run workflow launch");
+		}
+		await DBOS.startWorkflow(this.workflow, opts)(input);
 	}
 }
 
@@ -85,7 +95,7 @@ export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
 	}
 
 	async startRunOnce(
-		runId: string,
+		input: { runId: string; scope: TenantScopeContext } | string,
 		opts: { workflowID: string },
 	): Promise<void> {
 		const target = opts.workflowID.startsWith(SANDBOX_WORKFLOW_ID_PREFIX)
@@ -98,7 +108,7 @@ export class LazyDbosRunWorkflowLauncher implements RunWorkflowLauncher {
 					: "Run workflow is not registered",
 			);
 		}
-		return target.startRunOnce(runId, opts);
+		return target.startRunOnce(input, opts);
 	}
 }
 
@@ -177,6 +187,15 @@ function isTerminalStatus(status: RunStatus): boolean {
 	return status === "done" || status === "failed";
 }
 
+function scopeFromRunSpec(spec: RunSpecModel): TenantScopeContext {
+	return {
+		orgId: spec.orgId,
+		wsId: spec.wsId,
+		memberId: spec.memberId,
+		writeTarget: spec.writeTarget,
+	};
+}
+
 export class RunService {
 	constructor(private readonly deps: RunServiceDeps) {}
 
@@ -187,9 +206,15 @@ export class RunService {
 
 		if (!usesSandbox(spec, this.deps)) {
 			if (run.status === "queued" && run.dbosWorkflowId === null) {
-				await this.deps.workflowLauncher.startRunOnce(runId, {
-					workflowID: runId,
-				});
+				await this.deps.workflowLauncher.startRunOnce(
+					{
+						runId,
+						scope: scopeFromRunSpec(spec),
+					},
+					{
+						workflowID: runId,
+					},
+				);
 				run =
 					(await this.deps.runRepo.recordWorkflowLaunch(runId, runId)) ??
 					created.run;
@@ -234,7 +259,13 @@ export class RunService {
 			queued.firstPendingSeq != null
 		) {
 			const workflowID = toRunSandboxWorkflowId(runId, queued.firstPendingSeq);
-			await this.deps.workflowLauncher.startRunOnce(runId, { workflowID });
+			await this.deps.workflowLauncher.startRunOnce(
+				{
+					runId,
+					scope: scopeFromRunSpec(spec),
+				},
+				{ workflowID },
+			);
 			run =
 				(await this.deps.runRepo.recordWorkflowLaunch(runId, workflowID)) ??
 				created.run;
@@ -286,9 +317,18 @@ export class RunService {
 			});
 		}
 		if (queued.firstPendingSeq != null) {
-			await this.deps.workflowLauncher.startRunOnce(input.runId, {
-				workflowID: toRunSandboxWorkflowId(input.runId, queued.firstPendingSeq),
-			});
+			await this.deps.workflowLauncher.startRunOnce(
+				{
+					runId: input.runId,
+					scope: scopeFromRunSpec(run.spec),
+				},
+				{
+					workflowID: toRunSandboxWorkflowId(
+						input.runId,
+						queued.firstPendingSeq,
+					),
+				},
+			);
 		}
 		return {
 			command: queued.command,

@@ -39,13 +39,43 @@ type JsonEventStreamOptions = {
 const DEFAULT_API_ORIGIN = "http://127.0.0.1:8080";
 const DEFAULT_DATABASE_URL =
 	"postgresql://postgres:postgres@127.0.0.1:5432/agentos";
-const DEFAULT_SSE_IDLE_TIMEOUT_MS = 15_000;
+const DEFAULT_SSE_IDLE_TIMEOUT_MS = 30_000;
 const DEFAULT_RETRY_ATTEMPTS = 8;
 const DEFAULT_RETRY_DELAY_MS = 350;
 const DEFAULT_RETRYABLE_STATUSES = [502, 503, 504] as const;
 const DEFAULT_HEALTH_TIMEOUT_MS = 90_000;
 const DEFAULT_HEALTH_INTERVAL_MS = 500;
 const DEFAULT_HEALTH_CONSECUTIVE_SUCCESSES = 3;
+const DEFAULT_RUN_SCOPE_HEADERS = {
+	"x-org-id":
+		process.env.FORKLOOM_TEST_ORG_ID ?? "00000000-0000-0000-0000-000000000001",
+	"x-ws-id":
+		process.env.FORKLOOM_TEST_WS_ID ?? "00000000-0000-0000-0000-000000000002",
+	"x-write-scope": process.env.FORKLOOM_TEST_WRITE_SCOPE ?? "ws",
+} as const;
+
+function withRunScopeHeaders(
+	url: string | URL,
+	init: RequestInit | undefined,
+): RequestInit | undefined {
+	const parsedUrl =
+		typeof url === "string"
+			? new URL(url, apiOrigin())
+			: new URL(url.toString());
+	if (!parsedUrl.pathname.startsWith("/runs")) {
+		return init;
+	}
+	const headers = new Headers(init?.headers ?? undefined);
+	for (const [key, value] of Object.entries(DEFAULT_RUN_SCOPE_HEADERS)) {
+		if (!headers.has(key)) {
+			headers.set(key, value);
+		}
+	}
+	return {
+		...(init ?? {}),
+		headers,
+	};
+}
 
 function databaseUrl(): string {
 	return (
@@ -116,7 +146,10 @@ export async function fetchWithRetry(
 	let lastError: unknown = null;
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		try {
-			const response = await fetch(input.url, input.init);
+			const response = await fetch(
+				input.url,
+				withRunScopeHeaders(input.url, input.init),
+			);
 			if (!isRetryableStatus(response.status, input)) {
 				return response;
 			}
@@ -251,6 +284,12 @@ export class JsonEventStream<TEvent> {
 		const headers: Record<string, string> = {
 			accept: "text/event-stream",
 		};
+		const scopeHeaders = withRunScopeHeaders(url, undefined)?.headers;
+		if (scopeHeaders instanceof Headers) {
+			for (const [key, value] of scopeHeaders.entries()) {
+				headers[key] = value;
+			}
+		}
 		if (options.lastEventId != null) {
 			headers["Last-Event-ID"] = String(options.lastEventId);
 		}

@@ -138,23 +138,51 @@ function toDataUrl(input: { bytes: Uint8Array; mime: string }): string {
 	return `data:${input.mime};base64,${encoded}`;
 }
 
-function resolveFileField(file: ZaiLayoutFile): string {
+function toBase64(input: { bytes: Uint8Array }): string {
+	const encoded = Buffer.from(input.bytes).toString("base64");
+	if (!encoded) {
+		throw new Error("layout_parsing bytes input is empty");
+	}
+	return encoded;
+}
+
+function resolveFileFieldCandidates(file: ZaiLayoutFile): string[] {
 	if (typeof file === "string") {
 		if (!file) {
 			throw new Error("layout_parsing requires file input");
 		}
-		return file;
+		return [file];
 	}
 	if (file.kind === "url" || file.kind === "data_url") {
 		if (!file.value) {
 			throw new Error("layout_parsing requires file input");
 		}
-		return file.value;
+		return [file.value];
 	}
-	return toDataUrl({
-		bytes: file.value,
-		mime: file.mime,
-	});
+	return [
+		toBase64({
+			bytes: file.value,
+		}),
+		toDataUrl({
+			bytes: file.value,
+			mime: file.mime,
+		}),
+	];
+}
+
+function shouldRetryEncoding(status: number, bodyText: string): boolean {
+	if (status !== 400) {
+		return false;
+	}
+	const detail = bodyText.toLowerCase();
+	return (
+		detail.includes("supports pdf") ||
+		detail.includes("supports jpg") ||
+		detail.includes("supports png") ||
+		detail.includes("supports jpeg") ||
+		detail.includes("invalid file") ||
+		detail.includes("file format")
+	);
 }
 
 function readUsage(
@@ -239,56 +267,70 @@ export class ZaiLayoutClient {
 	}
 
 	async layoutParsing(file: ZaiLayoutFile): Promise<ZaiLayoutResult> {
-		const fileField = resolveFileField(file);
-		const requestBody = JSON.stringify({
-			model: this.deps.model,
-			file: fileField,
-		});
+		const fileFields = resolveFileFieldCandidates(file);
 		let lastError: Error | null = null;
-		for (let attempt = 1; attempt <= this.retryLimit; attempt += 1) {
-			try {
-				const response = await this.fetchImpl(this.deps.endpoint, {
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${this.deps.apiKey}`,
-						"content-type": "application/json",
-					},
-					body: requestBody,
-				});
-				const responseText = await response.text();
-				if (!response.ok) {
-					if (shouldRetryStatus(response.status) && attempt < this.retryLimit) {
-						await waitMs(this.retryDelayMs * attempt);
-						continue;
+		for (let fileIndex = 0; fileIndex < fileFields.length; fileIndex += 1) {
+			const fileField = fileFields[fileIndex];
+			const requestBody = JSON.stringify({
+				model: this.deps.model,
+				file: fileField,
+			});
+			for (let attempt = 1; attempt <= this.retryLimit; attempt += 1) {
+				try {
+					const response = await this.fetchImpl(this.deps.endpoint, {
+						method: "POST",
+						headers: {
+							Authorization: `Bearer ${this.deps.apiKey}`,
+							"content-type": "application/json",
+						},
+						body: requestBody,
+					});
+					const responseText = await response.text();
+					if (!response.ok) {
+						if (
+							shouldRetryEncoding(response.status, responseText) &&
+							fileIndex + 1 < fileFields.length
+						) {
+							break;
+						}
+						if (
+							shouldRetryStatus(response.status) &&
+							attempt < this.retryLimit
+						) {
+							await waitMs(this.retryDelayMs * attempt);
+							continue;
+						}
+						throw new Error(
+							`layout_parsing failed status=${response.status} body=${responseText.slice(0, 200)}`,
+						);
 					}
-					throw new Error(
-						`layout_parsing failed status=${response.status} body=${responseText.slice(0, 200)}`,
-					);
-				}
 
-				const payload = parseJsonText(responseText);
-				const layoutDetails = parseLayoutDetails(payload.layout_details);
-				const markdown = parseMarkdown(payload.md_results ?? payload.markdown);
-				const dataInfo =
-					payload.data_info == null
-						? null
-						: parseRecord(payload.data_info, "data_info");
-				const pageCount = pageCountFromPayload(dataInfo, layoutDetails);
-				const usage =
-					payload.usage == null ? null : parseRecord(payload.usage, "usage");
-				return {
-					markdown,
-					layoutDetails,
-					pageCount,
-					usage: readUsage(usage, pageCount),
-					raw: payload,
-				};
-			} catch (error) {
-				lastError = error instanceof Error ? error : new Error(String(error));
-				if (attempt >= this.retryLimit) {
-					break;
+					const payload = parseJsonText(responseText);
+					const layoutDetails = parseLayoutDetails(payload.layout_details);
+					const markdown = parseMarkdown(
+						payload.md_results ?? payload.markdown,
+					);
+					const dataInfo =
+						payload.data_info == null
+							? null
+							: parseRecord(payload.data_info, "data_info");
+					const pageCount = pageCountFromPayload(dataInfo, layoutDetails);
+					const usage =
+						payload.usage == null ? null : parseRecord(payload.usage, "usage");
+					return {
+						markdown,
+						layoutDetails,
+						pageCount,
+						usage: readUsage(usage, pageCount),
+						raw: payload,
+					};
+				} catch (error) {
+					lastError = error instanceof Error ? error : new Error(String(error));
+					if (attempt >= this.retryLimit) {
+						break;
+					}
+					await waitMs(this.retryDelayMs * attempt);
 				}
-				await waitMs(this.retryDelayMs * attempt);
 			}
 		}
 		throw new Error(

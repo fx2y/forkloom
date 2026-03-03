@@ -1,4 +1,5 @@
 import pg from "pg";
+import { getTenantScope, withScopeTx } from "../../http/scope";
 import { createPoolCloseOnce } from "../../repo/pool-close";
 import type {
 	ExecResult,
@@ -216,14 +217,50 @@ export class PgSandboxRepo implements SandboxRepo {
 		await this.closePool();
 	}
 
+	private async withTenantScope<T>(
+		fn: (queryable: Queryable) => Promise<T>,
+	): Promise<T> {
+		const scope = getTenantScope();
+		if (!scope) {
+			return fn(this.pool);
+		}
+		const client = await this.pool.connect();
+		try {
+			return await withScopeTx(client, scope, () => fn(client));
+		} finally {
+			client.release();
+		}
+	}
+
+	private async withClientTx<T>(
+		fn: (client: PoolClientLike) => Promise<T>,
+	): Promise<T> {
+		const scope = getTenantScope();
+		const client = await this.pool.connect();
+		try {
+			if (scope) {
+				return await withScopeTx(client, scope, () => fn(client));
+			}
+			await client.query("begin");
+			try {
+				const output = await fn(client);
+				await client.query("commit");
+				return output;
+			} catch (error) {
+				await client.query("rollback");
+				throw error;
+			}
+		} finally {
+			client.release();
+		}
+	}
+
 	async createSandbox(input: {
 		runId: string;
 		spec: SandboxSpecModel;
 		previewSpec: SandboxPreviewModel;
 	}): Promise<{ sandbox: SandboxModel; created: boolean }> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const inserted = await client.query<SandboxRow>(
 				`insert into sandbox(
 					 run_id,
@@ -255,7 +292,6 @@ export class PgSandboxRepo implements SandboxRepo {
 				],
 			);
 			if (inserted.rowCount) {
-				await client.query("commit");
 				return {
 					sandbox: toSandboxModel(requireRow(inserted, "create sandbox")),
 					created: true,
@@ -269,34 +305,30 @@ export class PgSandboxRepo implements SandboxRepo {
 				 where run_id = $1`,
 				[input.runId],
 			);
-			await client.query("commit");
 			return {
 				sandbox: toSandboxModel(
 					requireRow(existing, "create sandbox select existing"),
 				),
 				created: false,
 			};
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async getSandbox(runId: string): Promise<SandboxModel | null> {
-		const result = await this.pool.query<SandboxRow>(
-			`select run_id, sandbox_id, backend, profile, state, approval_state,
-			 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
-			 lease_expires_at, workspace_ref, created_at, updated_at, last_seen_at
-			 from sandbox
-			 where run_id = $1`,
-			[runId],
-		);
-		if (!result.rowCount) {
-			return null;
-		}
-		return toSandboxModel(requireRow(result, "get sandbox"));
+		return this.withTenantScope(async (queryable) => {
+			const result = await queryable.query<SandboxRow>(
+				`select run_id, sandbox_id, backend, profile, state, approval_state,
+				 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
+				 lease_expires_at, workspace_ref, created_at, updated_at, last_seen_at
+				 from sandbox
+				 where run_id = $1`,
+				[runId],
+			);
+			if (!result.rowCount) {
+				return null;
+			}
+			return toSandboxModel(requireRow(result, "get sandbox"));
+		});
 	}
 
 	async queueCommand(input: {
@@ -309,9 +341,7 @@ export class PgSandboxRepo implements SandboxRepo {
 		created: boolean;
 		firstPendingSeq: number | null;
 	}> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const sandboxResult = await client.query<SandboxRow>(
 				`select run_id, sandbox_id, backend, profile, state, approval_state,
 				 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
@@ -366,7 +396,6 @@ export class PgSandboxRepo implements SandboxRepo {
 				client,
 				input.runId,
 			);
-			await client.query("commit");
 			return {
 				command: toRunCommandModel(
 					requireRow(commandResult, "queue command row"),
@@ -374,12 +403,7 @@ export class PgSandboxRepo implements SandboxRepo {
 				created: inserted,
 				firstPendingSeq,
 			};
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async acquireLease(input: {
@@ -387,9 +411,7 @@ export class PgSandboxRepo implements SandboxRepo {
 		workflowId: string;
 		leaseMs: number;
 	}): Promise<boolean> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const result = await client.query<SandboxRow>(
 				`update sandbox
 				 set inflight_workflow_id = $2,
@@ -408,25 +430,19 @@ export class PgSandboxRepo implements SandboxRepo {
 				[input.runId, input.workflowId, input.leaseMs],
 			);
 			if (!result.rowCount) {
-				await client.query("rollback");
 				return false;
 			}
-			await client.query("commit");
 			return true;
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async claimNextCommand(input: {
 		runId: string;
 		workflowId: string;
 	}): Promise<RunCommandModel | null> {
-		const result = await this.pool.query<RunCommandRow>(
-			`with claimable as (
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<RunCommandRow>(
+				`with claimable as (
 				 select rc.run_id, rc.seq
 				 from run_command rc
 				 join sandbox s on s.run_id = rc.run_id
@@ -460,7 +476,8 @@ export class PgSandboxRepo implements SandboxRepo {
 			 returning rc.run_id, rc.seq, rc.kind, rc.payload, rc.dedupe_key,
 			 rc.state, rc.claimed_by, rc.claimed_at, rc.lease_expires_at, rc.done_at,
 			 rc.error, rc.created_at`,
-			[input.runId, input.workflowId],
+				[input.runId, input.workflowId],
+			),
 		);
 		if (!result.rowCount) {
 			return null;
@@ -481,9 +498,7 @@ export class PgSandboxRepo implements SandboxRepo {
 		sandbox: SandboxModel;
 		nextPendingSeq: number | null;
 	}> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			const execResult = await client.query<SandboxExecRow>(
 				`insert into sandbox_exec(
 						 run_id,
@@ -602,7 +617,6 @@ export class PgSandboxRepo implements SandboxRepo {
 				client,
 				input.runId,
 			);
-			await client.query("commit");
 			return {
 				exec: toSandboxExecModel(requireRow(execResult, "persist exec row")),
 				sandbox: toSandboxModel(
@@ -610,12 +624,7 @@ export class PgSandboxRepo implements SandboxRepo {
 				),
 				nextPendingSeq,
 			};
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async markCommandDead(input: {
@@ -624,9 +633,7 @@ export class PgSandboxRepo implements SandboxRepo {
 		commandSeq: number;
 		error: string;
 	}): Promise<number | null> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			await client.query(
 				`update run_command
 				 set state = 'dead',
@@ -641,14 +648,8 @@ export class PgSandboxRepo implements SandboxRepo {
 				client,
 				input.runId,
 			);
-			await client.query("commit");
 			return nextPendingSeq;
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async requeueCommand(input: {
@@ -657,9 +658,7 @@ export class PgSandboxRepo implements SandboxRepo {
 		commandSeq: number;
 		error: string;
 	}): Promise<number | null> {
-		const client = await this.pool.connect();
-		try {
-			await client.query("begin");
+		return this.withClientTx(async (client) => {
 			await client.query(
 				`update run_command
 				 set state = 'queued',
@@ -677,30 +676,27 @@ export class PgSandboxRepo implements SandboxRepo {
 				client,
 				input.runId,
 			);
-			await client.query("commit");
 			return nextPendingSeq;
-		} catch (error) {
-			await client.query("rollback");
-			throw error;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async releaseLease(runId: string, workflowId: string): Promise<void> {
-		await this.pool.query(
-			`update sandbox
-			 set inflight_workflow_id = null,
-				 lease_expires_at = null,
-				 updated_at = now()
-			 where run_id = $1 and inflight_workflow_id = $2`,
-			[runId, workflowId],
-		);
+		await this.withTenantScope(async (queryable) => {
+			await queryable.query(
+				`update sandbox
+				 set inflight_workflow_id = null,
+					 lease_expires_at = null,
+					 updated_at = now()
+				 where run_id = $1 and inflight_workflow_id = $2`,
+				[runId, workflowId],
+			);
+		});
 	}
 
 	async markApproved(runId: string): Promise<SandboxModel | null> {
-		const result = await this.pool.query<SandboxRow>(
-			`update sandbox
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<SandboxRow>(
+				`update sandbox
 			 set approval_state = case
 			   when approval_state = 'pending' then 'approved'
 			   else approval_state
@@ -710,7 +706,8 @@ export class PgSandboxRepo implements SandboxRepo {
 			 returning run_id, sandbox_id, backend, profile, state, approval_state,
 			 spec, preview_spec, container_name, work_volume, inflight_workflow_id,
 			 lease_expires_at, workspace_ref, created_at, updated_at, last_seen_at`,
-			[runId],
+				[runId],
+			),
 		);
 		if (!result.rowCount) {
 			return null;
@@ -719,8 +716,9 @@ export class PgSandboxRepo implements SandboxRepo {
 	}
 
 	async getCurrentCommand(runId: string): Promise<RunCommandModel | null> {
-		const result = await this.pool.query<RunCommandRow>(
-			`select run_id, seq, kind, payload, dedupe_key, state, claimed_by,
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<RunCommandRow>(
+				`select run_id, seq, kind, payload, dedupe_key, state, claimed_by,
 			 claimed_at, lease_expires_at, done_at, error, created_at
 			 from run_command
 			 where run_id = $1
@@ -729,7 +727,8 @@ export class PgSandboxRepo implements SandboxRepo {
 			   case when state in ('queued', 'claimed') then seq end asc,
 			   case when state not in ('queued', 'claimed') then seq end desc
 			 limit 1`,
-			[runId],
+				[runId],
+			),
 		);
 		if (!result.rowCount) {
 			return null;
@@ -738,15 +737,17 @@ export class PgSandboxRepo implements SandboxRepo {
 	}
 
 	async listExecs(runId: string): Promise<SandboxExecModel[]> {
-		const result = await this.pool.query<SandboxExecRow>(
-			`select exec_id, run_id, command_seq, command_kind, status, exit_code,
+		const result = await this.withTenantScope((queryable) =>
+			queryable.query<SandboxExecRow>(
+				`select exec_id, run_id, command_seq, command_kind, status, exit_code,
 			 cmd_list, artifact_reads, artifact_writes, stdout_tail, stderr_tail,
 			 stdout_bytes, stderr_bytes, timeout_sec, max_bytes_out, stdout_ref,
 			 stderr_ref, workspace_ref, started_at, ended_at
 			 from sandbox_exec
 			 where run_id = $1
 			 order by started_at asc, exec_id asc`,
-			[runId],
+				[runId],
+			),
 		);
 		return result.rows.map(toSandboxExecModel);
 	}

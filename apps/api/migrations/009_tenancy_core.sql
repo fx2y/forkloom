@@ -83,9 +83,9 @@ ALTER TABLE links ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES org(org_id);
 ALTER TABLE links ADD COLUMN IF NOT EXISTS ws_id uuid REFERENCES workspace(ws_id);
 ALTER TABLE links ADD COLUMN IF NOT EXISTS member_id uuid REFERENCES member(member_id);
 
-ALTER TABLE session_index ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES org(org_id);
-ALTER TABLE session_index ADD COLUMN IF NOT EXISTS ws_id uuid REFERENCES workspace(ws_id);
-ALTER TABLE session_index ADD COLUMN IF NOT EXISTS member_id uuid REFERENCES member(member_id);
+ALTER TABLE sessions_index ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES org(org_id);
+ALTER TABLE sessions_index ADD COLUMN IF NOT EXISTS ws_id uuid REFERENCES workspace(ws_id);
+ALTER TABLE sessions_index ADD COLUMN IF NOT EXISTS member_id uuid REFERENCES member(member_id);
 
 ALTER TABLE docs ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES org(org_id);
 ALTER TABLE docs ADD COLUMN IF NOT EXISTS ws_id uuid REFERENCES workspace(ws_id);

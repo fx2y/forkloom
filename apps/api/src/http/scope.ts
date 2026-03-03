@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { HttpError } from "../errors";
 import type { TenantScopeContext, WriteTarget } from "../run/ports";
+import { getTenantScope, runWithTenantScope } from "../tenancy/scope-context";
 
 export function resolveScope(req: Request): TenantScopeContext {
 	const orgId = req.header("x-org-id");
@@ -25,7 +26,10 @@ export function resolveScope(req: Request): TenantScopeContext {
 		throw new HttpError(400, "wsId required for ws write target");
 	}
 	if (writeTarget === "member" && (!wsId || !memberId)) {
-		throw new HttpError(400, "wsId and memberId required for member write target");
+		throw new HttpError(
+			400,
+			"wsId and memberId required for member write target",
+		);
 	}
 
 	return {
@@ -43,7 +47,9 @@ export async function withScopeTx<T>(
 ): Promise<T> {
 	await repo.query("BEGIN");
 	try {
-		await repo.query("SELECT set_config('app.org_id', $1, true)", [scope.orgId]);
+		await repo.query("SELECT set_config('app.org_id', $1, true)", [
+			scope.orgId,
+		]);
 		await repo.query("SELECT set_config('app.ws_id', $1, true)", [
 			scope.wsId ?? "",
 		]);
@@ -58,3 +64,5 @@ export async function withScopeTx<T>(
 		throw e;
 	}
 }
+
+export { getTenantScope, runWithTenantScope };

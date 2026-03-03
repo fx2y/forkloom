@@ -6,9 +6,10 @@ import type {
 	PiSessionState,
 	PiSessionStats,
 } from "../pi";
-import type { RunModel, RunRepo } from "../run/ports";
+import type { RunModel, RunRepo, TenantScopeContext } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
+import { runWithTenantScope } from "../tenancy/scope-context";
 import { buildRunPromptInput } from "./prompt";
 import { buildGenericStepHashes, buildGenericStepPayload } from "./step-hash";
 
@@ -466,12 +467,17 @@ export function registerRunOnceWorkflow(
 	activeDeps = deps;
 	if (!registeredWorkflow) {
 		registeredWorkflow = DBOS.registerWorkflow(
-			async (runId: string): Promise<void> => {
+			async (input: {
+				runId: string;
+				scope: TenantScopeContext;
+			}): Promise<void> => {
 				const currentDeps = activeDeps;
 				if (!currentDeps) {
 					throw new Error("RunOnce deps are not registered");
 				}
-				await executeRunOnce(runId, currentDeps, dbosStepRunner);
+				await runWithTenantScope(input.scope, async () =>
+					executeRunOnce(input.runId, currentDeps, dbosStepRunner),
+				);
 			},
 			{
 				name: "forkloomRunOnce",

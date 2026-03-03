@@ -84,6 +84,7 @@ export function makeRunSpec(input: {
 		userMsg: input.userMsg,
 		attachments: (input.attachments ?? []).map((sha256) => ({ sha256 })),
 		orgId: "00000000-0000-0000-0000-000000000001",
+		wsId: "00000000-0000-0000-0000-000000000002",
 		writeTarget: "ws",
 	};
 	if (input.profile) {

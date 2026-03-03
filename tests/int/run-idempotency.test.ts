@@ -180,7 +180,21 @@ function createArtifactService() {
 
 async function withServer(
 	repo: RunRepo,
-	launcher: { startRunOnce(runId: string): Promise<void> },
+	launcher: {
+		startRunOnce(
+			input:
+				| string
+				| {
+						runId: string;
+						scope: {
+							orgId: string;
+							wsId?: string | undefined;
+							memberId?: string | undefined;
+							writeTarget: "org" | "ws" | "member";
+						};
+				  },
+		): Promise<void>;
+	},
 	run: (base: string) => Promise<void>,
 ): Promise<void> {
 	const runService = new RunService({
@@ -217,6 +231,9 @@ function runPayload() {
 		scope: "team",
 		userMsg: "hello",
 		attachments: [],
+		orgId: "00000000-0000-0000-0000-000000000001",
+		wsId: "00000000-0000-0000-0000-000000000002",
+		writeTarget: "ws",
 	};
 }
 
@@ -226,8 +243,8 @@ describe("run idempotency over POST /runs", () => {
 		await withServer(
 			new InMemoryRunRepo(),
 			{
-				startRunOnce: async (runId) => {
-					launches.push(runId);
+				startRunOnce: async (input) => {
+					launches.push(typeof input === "string" ? input : input.runId);
 				},
 			},
 			async (base) => {
@@ -255,8 +272,8 @@ describe("run idempotency over POST /runs", () => {
 		await withServer(
 			new InMemoryRunRepo(),
 			{
-				startRunOnce: async (runId) => {
-					launches.push(runId);
+				startRunOnce: async (input) => {
+					launches.push(typeof input === "string" ? input : input.runId);
 					if (failFirst) {
 						failFirst = false;
 						throw new Error("launcher offline");
