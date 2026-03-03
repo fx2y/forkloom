@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import {
+	type ExtensionHostHooks,
 	type PiSessionPort,
 	type PiSessionState,
 	type PiSessionStats,
@@ -105,6 +106,7 @@ export type RunSandboxDeps = {
 				}): Promise<string>;
 		  }
 		| undefined;
+	extensions?: ExtensionHostHooks | undefined;
 	artifactService: Pick<
 		ArtifactService,
 		"getArtifactBytes" | "getArtifactMeta" | "putArtifact"
@@ -569,6 +571,34 @@ export async function executeRunSandbox(
 					scripts: 0,
 				};
 			}
+			const toolCallDecision = deps.extensions
+				? await deps.extensions.emitToolCall({
+						runId,
+						toolName: "skill_exec",
+						commandKind: loaded.command.kind,
+						input: {
+							skillName: resolved.execution.skillName,
+							scripts: resolved.execution.scripts,
+						},
+					})
+				: { blocked: false };
+			if (toolCallDecision.blocked) {
+				await deps.extensions?.emitToolResult({
+					runId,
+					toolName: "skill_exec",
+					commandKind: loaded.command.kind,
+					result: {
+						status: "blocked",
+						reason: toolCallDecision.reason ?? "blocked by extension",
+					},
+				});
+				return {
+					skillName: resolved.execution.skillName,
+					scripts: 0,
+					blocked: true,
+					reason: toolCallDecision.reason ?? "blocked by extension",
+				};
+			}
 			await executeSkillPlanDurably({
 				runId,
 				commandSeq: loaded.command.seq,
@@ -587,6 +617,16 @@ export async function executeRunSandbox(
 				timeoutMs: loaded.sandbox.spec.timeoutSec * 1_000,
 				maxBytesOut: loaded.sandbox.spec.maxBytesOut,
 			});
+			await deps.extensions?.emitToolResult({
+				runId,
+				toolName: "skill_exec",
+				commandKind: loaded.command.kind,
+				result: {
+					status: "executed",
+					skillName: resolved.execution.skillName,
+					scripts: resolved.execution.scripts.length,
+				},
+			});
 			return {
 				skillName: resolved.execution.skillName,
 				scripts: resolved.execution.scripts.length,
@@ -601,6 +641,12 @@ export async function executeRunSandbox(
 			const loaded = assertLoaded(loadedPlan);
 			if (loaded.run.status === "queued" && loaded.command.kind !== "approve") {
 				await deps.runService.beginRun(runId, { scope: loaded.run.spec.scope });
+				if (deps.extensions) {
+					await deps.extensions.emitSessionStart({
+						runId,
+						sessionId: loaded.run.piSessionId ?? undefined,
+					});
+				}
 			}
 			switch (loaded.command.kind) {
 				case "approve":
@@ -610,7 +656,21 @@ export async function executeRunSandbox(
 					});
 					return;
 				case "prompt": {
-					const userMsg = resolvedSkillText ?? readCommandText(loaded.command);
+					const withBeforeStart = deps.extensions
+						? await deps.extensions.emitBeforeAgentStart({
+								runId,
+								commandKind: "prompt",
+								text: resolvedSkillText ?? readCommandText(loaded.command),
+							})
+						: {
+								runId,
+								commandKind: "prompt" as const,
+								text: resolvedSkillText ?? readCommandText(loaded.command),
+							};
+					const withContext = deps.extensions
+						? await deps.extensions.emitContext(withBeforeStart)
+						: withBeforeStart;
+					const userMsg = withContext.text;
 					const promptSpec = {
 						...loaded.run.spec,
 						userMsg,
@@ -647,16 +707,36 @@ export async function executeRunSandbox(
 					);
 					return;
 				}
-				case "followUp":
-					await (await getOrCreateSession()).followUp(
-						resolvedSkillText ?? readCommandText(loaded.command),
-					);
+				case "followUp": {
+					const withContext = deps.extensions
+						? await deps.extensions.emitContext({
+								runId,
+								commandKind: "followUp",
+								text: resolvedSkillText ?? readCommandText(loaded.command),
+							})
+						: {
+								runId,
+								commandKind: "followUp" as const,
+								text: resolvedSkillText ?? readCommandText(loaded.command),
+							};
+					await (await getOrCreateSession()).followUp(withContext.text);
 					return;
-				case "steer":
-					await (await getOrCreateSession()).steer(
-						resolvedSkillText ?? readCommandText(loaded.command),
-					);
+				}
+				case "steer": {
+					const withContext = deps.extensions
+						? await deps.extensions.emitContext({
+								runId,
+								commandKind: "steer",
+								text: resolvedSkillText ?? readCommandText(loaded.command),
+							})
+						: {
+								runId,
+								commandKind: "steer" as const,
+								text: resolvedSkillText ?? readCommandText(loaded.command),
+							};
+					await (await getOrCreateSession()).steer(withContext.text);
 					return;
+				}
 				case "abort":
 					await (await getOrCreateSession()).abort();
 					return;

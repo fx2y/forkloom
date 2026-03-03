@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
 	RUN_API_ENDPOINTS,
+	RUN_C7_TOP_LEVEL_ROUTE_BANS,
+	RUN_EXTENSION_UI_ALIASES,
 	RUN_PUBLIC_BANNED_SANDBOX_NOUNS,
 	RUN_PUBLIC_COMMAND_KINDS,
 	RUN_PUBLIC_EVENT_KINDS_FROZEN_NEXT,
@@ -93,5 +95,13 @@ describe("run public surface freeze", () => {
 		expect(RUN_SKILL_EXECUTION_SURFACE_NOTE.join(" ")).toContain(
 			"never top-level HTTP routes",
 		);
+		expect(RUN_EXTENSION_UI_ALIASES).toEqual(["/reload"]);
+		expect(RUN_C7_TOP_LEVEL_ROUTE_BANS).toEqual([
+			"/skills",
+			"/extensions",
+			"/packages",
+			"/themes",
+			"/reload",
+		]);
 	});
 });

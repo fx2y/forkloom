@@ -47,3 +47,27 @@ export {
 	parseSessionJsonl,
 } from "./session-index";
 export type { SessionIndexSummary, SessionTreeIndex } from "./session-index";
+export {
+	discoverExtensionFiles,
+	defaultExtensionRoots,
+	defaultExtensionSettingsFiles,
+	ExtensionService,
+} from "./extensions";
+export type {
+	ExtensionApi,
+	ExtensionCommandDefinition,
+	ExtensionDiscovered,
+	ExtensionDiscoveryOptions,
+	ExtensionHookHandler,
+	ExtensionHookName,
+	ExtensionHookPayloadMap,
+	ExtensionHostHooks,
+	ExtensionModuleExport,
+	ExtensionProviderDefinition,
+	ExtensionReloadStatus,
+	ExtensionRuntimeSnapshot,
+	ExtensionServiceOptions,
+	ExtensionToolCallDecision,
+	ExtensionToolDefinition,
+	ExtensionUi,
+} from "./extensions";

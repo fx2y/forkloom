@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import type { PiSessionPort, PiSessionState, PiSessionStats } from "../pi";
+import type {
+	ExtensionHostHooks,
+	PiSessionPort,
+	PiSessionState,
+	PiSessionStats,
+} from "../pi";
 import type { RunModel, RunRepo } from "../run/ports";
 import type { RegisteredRunWorkflow, RunService } from "../run/service";
 import type { ArtifactService } from "../service";
@@ -60,6 +65,7 @@ export type RunOnceDeps = {
 				}): Promise<string>;
 		  }
 		| undefined;
+	extensions?: ExtensionHostHooks | undefined;
 	createPiSession(run: RunModel): Promise<PiSessionPort>;
 	readFileBytes?: ((path: string) => Promise<Buffer>) | undefined;
 };
@@ -204,6 +210,12 @@ export async function executeRunOnce(
 				throw new Error(`run not found: ${runId}`);
 			}
 			await deps.runService.beginRun(runId, { scope: run.spec.scope });
+			if (deps.extensions) {
+				await deps.extensions.emitSessionStart({
+					runId,
+					sessionId: run.piSessionId ?? undefined,
+				});
+			}
 			return run;
 		});
 
@@ -262,8 +274,20 @@ export async function executeRunOnce(
 							activationKind: "explicit",
 						})
 					: run.spec.userMsg;
+				const withBeforeStart = deps.extensions
+					? await deps.extensions.emitBeforeAgentStart({
+							runId,
+							commandKind: "prompt",
+							text: userMsg,
+						})
+					: { runId, commandKind: "prompt" as const, text: userMsg };
+				const withContext = deps.extensions
+					? await deps.extensions.emitContext(withBeforeStart)
+					: withBeforeStart;
 				const promptSpec =
-					userMsg === run.spec.userMsg ? run.spec : { ...run.spec, userMsg };
+					withContext.text === run.spec.userMsg
+						? run.spec
+						: { ...run.spec, userMsg: withContext.text };
 				const availableSkillsXml = deps.skills
 					? await deps.skills.buildAvailableSkillsXml()
 					: undefined;

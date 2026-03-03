@@ -7,6 +7,7 @@ require_cmds rg ast-grep
 
 mkdir -p .cache/spec07
 mkdir -p .cache/spec08
+mkdir -p .cache/spec09
 rg -n "No generalized observability|No extra event bus|No provenance DB" \
   spec-0/06-spec.md README.md docs/adr > .cache/spec07/scope-guard.c4-not-now.txt
 
@@ -89,6 +90,29 @@ fi
 
 if rg -n "innerHTML" apps/web/src > .cache/spec08/scope-guard.innerhtml.scan.txt; then
   echo "innerHTML usage is forbidden in web surface" >&2
+  exit 1
+fi
+
+rg -n "RUN_EXTENSION_UI_ALIASES|RUN_C7_TOP_LEVEL_ROUTE_BANS|/extensions|/packages|/themes|/reload" \
+  apps/api/src/run/public-surface.ts mise-tasks/check/scope-guard \
+  > .cache/spec09/scope-guard.ext-wire.txt
+for needle in "RUN_EXTENSION_UI_ALIASES" "RUN_C7_TOP_LEVEL_ROUTE_BANS" "/extensions" "/packages" "/themes" "/reload"; do
+  if ! rg -Fq "$needle" .cache/spec09/scope-guard.ext-wire.txt; then
+    echo "scope guard missing C7 wire freeze anchor: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n "app\\.(get|post|put|patch|delete)\\(\"/(extensions|packages|themes|reload)|router\\.(get|post|put|patch|delete)\\(\"/(extensions|packages|themes|reload)" \
+  apps/api/src/http > .cache/spec09/scope-guard.ext-route-violations.txt; then
+  echo "top-level /extensions|/packages|/themes|/reload routes are forbidden; keep wire run-owned" >&2
+  exit 1
+fi
+
+ast-grep --lang typescript -p "RUN_C7_TOP_LEVEL_ROUTE_BANS" \
+  apps/api/src/run/public-surface.ts > .cache/spec09/scope-guard.ext-ban.ast.txt
+if [[ ! -s .cache/spec09/scope-guard.ext-ban.ast.txt ]]; then
+  echo "scope guard ast-grep found no C7 top-level route ban anchor" >&2
   exit 1
 fi
 

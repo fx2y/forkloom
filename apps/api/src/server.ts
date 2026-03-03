@@ -19,6 +19,7 @@ import {
 import { buildHealthHandler } from "./http/health";
 import { buildApiRouter } from "./http/routes";
 import {
+	ExtensionService,
 	MockPiProviderManager,
 	createManagedPiSessionFactory,
 	probePiSession,
@@ -121,6 +122,8 @@ async function bootstrap() {
 		promptMaxSkills: config.skillPromptMaxSkills,
 		promptMaxDescriptionChars: config.skillPromptMaxDescriptionChars,
 	});
+	const extensionService = new ExtensionService();
+	await extensionService.loadAll();
 	const docIngestWorkflowLauncher = new LazyDbosDocIngestWorkflowLauncher();
 	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
 	const workflowSandboxBackend = new DockerBackend({
@@ -171,6 +174,7 @@ async function bootstrap() {
 		runRepo,
 		runService,
 		skills: skillService,
+		extensions: extensionService,
 		artifactService: workflowArtifactService,
 		createPiSession: async (run) =>
 			createPiSession({
@@ -181,6 +185,7 @@ async function bootstrap() {
 		runRepo,
 		runService,
 		skills: skillService,
+		extensions: extensionService,
 		artifactService: workflowArtifactService,
 		sandboxRepo,
 		backend: workflowSandboxBackend,
@@ -271,6 +276,7 @@ async function bootstrap() {
 		actorRepo,
 		docRepo,
 		actorProcessor,
+		extensionService,
 	};
 }
 
@@ -284,6 +290,7 @@ async function main(): Promise<void> {
 		actorRepo,
 		docRepo,
 		actorProcessor,
+		extensionService,
 	} = await bootstrap();
 
 	const server = app.listen(config.port, () => {
@@ -314,6 +321,7 @@ async function main(): Promise<void> {
 			await actorRepo.close();
 			await docRepo.close();
 			await actorProcessor.closeAll();
+			await extensionService.unloadAll();
 			await shutdownDbos();
 		})();
 		return closing;

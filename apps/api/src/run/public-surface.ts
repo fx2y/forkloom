@@ -19,6 +19,14 @@ export const RUN_SKILL_API_ENDPOINTS_FROZEN_NEXT = [
 ] as const;
 
 export const RUN_SKILL_UI_ALIASES = ["/skills", "/skill:<name>"] as const;
+export const RUN_EXTENSION_UI_ALIASES = ["/reload"] as const;
+export const RUN_C7_TOP_LEVEL_ROUTE_BANS = [
+	"/skills",
+	"/extensions",
+	"/packages",
+	"/themes",
+	"/reload",
+] as const;
 
 export const RUN_SKILL_EXECUTION_SURFACE_NOTE = [
 	"GET /runs/:runId/skills is metadata-only list/read",
@@ -77,6 +85,7 @@ export const RUN_PUBLIC_OWNERSHIP_NOTE = [
 	"run owns public preview/state/commands/files",
 	"doc ingest/search/resolve stay nested under /runs and reuse run-owned contracts",
 	"skill list/preview stay nested under /runs; /skills and /skill:<name> are UI-only aliases",
+	"extension/package/theme capabilities stay internal; /reload is command alias not top-level HTTP route",
 	"sandbox stays internal and owns compute/workspace/exec",
 	"actor queue and lease law are reuse-only, not public nouns",
 ] as const;
