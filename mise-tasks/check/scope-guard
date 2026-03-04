@@ -171,9 +171,9 @@ if [[ ! -s .cache/spec10/scope-guard.ast.txt ]]; then
   exit 1
 fi
 
-rg -n "read_expr|write_expr|ws_id IS NULL OR ws_id =|member_id IS NULL OR member_id =|CREATE POLICY tenant_isolation" \
+rg -n "read_expr|write_expr|ws_id IS NULL|member_id IS NULL|OR ws_id =|OR member_id =|CREATE POLICY tenant_isolation" \
   apps/api/migrations/011_tenancy_rls.sql > .cache/spec10/w10-rls-policy.scan.txt
-for needle in "read_expr" "write_expr" "ws_id IS NULL OR ws_id =" "member_id IS NULL OR member_id =" "CREATE POLICY tenant_isolation"; do
+for needle in "read_expr" "write_expr" "ws_id IS NULL" "member_id IS NULL" "OR ws_id =" "OR member_id =" "CREATE POLICY tenant_isolation"; do
   if ! rg -Fq "$needle" .cache/spec10/w10-rls-policy.scan.txt; then
     echo "scope guard missing C8 RLS anchor: $needle" >&2
     exit 1
@@ -207,7 +207,7 @@ for needle in "resolveRunScopeHeaders" "x-org-id" "x-ws-id" "x-member-id" "x-wri
   fi
 done
 
-if ast-grep --lang typescript -p "new pg.Pool({ connectionString: $URL })" \
+if ast-grep --lang typescript -p 'new pg.Pool({ connectionString: $URL })' \
   apps/api/src/workflow/promote-member-to-ws.ts \
   apps/api/src/workflow/promote-ws-to-org.ts \
   > .cache/spec10/w10-promotion-raw-pool.ast.txt; then

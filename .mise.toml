@@ -445,6 +445,12 @@ depends = ["test:int:c7-checklist"]
 sources = [".cache/spec09/c7-validate.json", ".cache/spec09/c7-checklist.report.json", ".cache/spec09/c7-smoke.json", ".cache/spec09/cy8-proof-matrix.json", ".cache/spec09/req-cover-miss.txt", "mise-tasks/golden/c7"]
 outputs = [".cache/mise-marks/golden__c7.ok", ".cache/spec09/final-proof-index.txt"]
 
+[tasks."golden:c8"]
+run = "bash ./mise-tasks/golden/c8"
+depends = ["test:int:c8-checklist"]
+sources = [".cache/spec10/c8-validate.json", ".cache/spec10/c8-checklist.report.json", ".cache/spec10/req-cover-miss.txt", ".cache/spec10/w10-ledger-miss.txt", ".cache/spec10/w10-anchor-miss.txt", "mise-tasks/golden/c8"]
+outputs = [".cache/mise-marks/golden__c8.ok", ".cache/spec10/final-proof-index.txt"]
+
 [tasks."golden:accept"]
 run = "bash ./mise-tasks/golden/accept"
 depends = ["golden:canonicalize"]
@@ -452,7 +458,7 @@ sources = [".cache/golden/sample.session.canon.jsonl", "mise-tasks/golden/accept
 outputs = [".cache/mise-marks/golden__accept.ok", "fixtures/golden/sample.session.canon.jsonl"]
 
 [tasks.golden]
-depends = ["golden:diff", "golden:truth", "golden:doc", "golden:skills", "golden:c7"]
+depends = ["golden:diff", "golden:truth", "golden:doc", "golden:skills", "golden:c7", "golden:c8"]
 
 [tasks."fault:kill-resume"]
 run = "bash ./mise-tasks/fault/kill-resume"

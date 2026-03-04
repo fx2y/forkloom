@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds pnpm jq rg ast-grep sqlite3
+
+mkdir -p .cache/spec10
+
+pnpm exec vitest run \
+  tests/unit/promote-member-to-ws-workflow.test.ts \
+  tests/unit/promote-ws-to-org-workflow.test.ts \
+  tests/unit/run-publish-route.test.ts \
+  tests/unit/run-truth-route.test.ts \
+  tests/unit/run-doc-routes.test.ts \
+  tests/unit/run-skill-routes.test.ts \
+  tests/unit/run-files-route.test.ts \
+  tests/int/tenancy-rls-live.test.ts \
+  tests/int/tenancy-scope-bleed.test.ts \
+  tests/int/tenancy-shadowing.test.ts \
+  tests/int/tenancy-promotion-crash.test.ts
+
+(
+  cd apps/web
+  pnpm exec vitest run -c vitest.config.ts src/run-client.test.ts
+)
+
+rg -n "resolveRunScopeHeaders|x-org-id|x-ws-id|x-member-id|x-write-scope" \
+  apps/web/src/run-client.ts > .cache/spec10/c8-client-headers.scan.txt
+for needle in "resolveRunScopeHeaders" "x-org-id" "x-ws-id" "x-member-id" "x-write-scope"; do
+  if ! rg -Fq "$needle" .cache/spec10/c8-client-headers.scan.txt; then
+    echo "missing C8 run-client header seam: $needle" >&2
+    exit 1
+  fi
+done
+
+rg -n "read_expr|write_expr|ws_id IS NULL|member_id IS NULL|OR ws_id =|OR member_id =|CREATE POLICY tenant_isolation" \
+  apps/api/migrations/011_tenancy_rls.sql > .cache/spec10/c8-rls.scan.txt
+for needle in "read_expr" "write_expr" "ws_id IS NULL" "member_id IS NULL" "OR ws_id =" "OR member_id =" "CREATE POLICY tenant_isolation"; do
+  if ! rg -Fq "$needle" .cache/spec10/c8-rls.scan.txt; then
+    echo "missing C8 RLS seam: $needle" >&2
+    exit 1
+  fi
+done
+
+ast-grep --lang typescript -p 'new pg.Pool({ connectionString: $URL })' \
+  apps/api/src/workflow/promote-member-to-ws.ts \
+  apps/api/src/workflow/promote-ws-to-org.ts \
+  > .cache/spec10/c8-promotion.ast.txt || true
+if [[ -s .cache/spec10/c8-promotion.ast.txt ]]; then
+  echo "raw pg.Pool in promotion workflows is forbidden" >&2
+  exit 1
+fi
+
+cat > .cache/spec10/c8-validate.json <<EOF_JSON
+{
+  "status": "ok",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "booleans": {
+    "promotion_scoped_repo": true,
+    "browser_scope_headers": true,
+    "rls_union_read": true,
+    "middleware_on_routes": true
+  },
+  "evidence": {
+    "unit_and_int": "vitest",
+    "web_client": "apps/web/src/run-client.test.ts",
+    "header_scan": ".cache/spec10/c8-client-headers.scan.txt",
+    "rls_scan": ".cache/spec10/c8-rls.scan.txt"
+  }
+}
+EOF_JSON
+
+write_mark "test:int:c8-validate"
+echo "test:int:c8-validate ok"

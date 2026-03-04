@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds jq rg sqlite3
+
+mkdir -p .cache/spec10
+
+jq -e '.status == "ok"' .cache/spec10/c8-validate.json >/dev/null
+
+rg -n 'test:int:c8-validate|test:int:c8-checklist|test:int:c8-force|golden:c8|ci:force' \
+  .mise.toml > .cache/spec10/c8-dag.scan.txt
+for needle in "test:int:c8-validate" "test:int:c8-checklist" "test:int:c8-force" "golden:c8" "ci:force"; do
+  if ! rg -Fq "$needle" .cache/spec10/c8-dag.scan.txt; then
+    echo "missing C8 DAG lane anchor: $needle" >&2
+    exit 1
+  fi
+done
+
+sqlite3 spec-0/10-00-htn.sqlite "
+attach 'spec-0/10-tasks.sqlite' as t;
+select count(*) from node n
+where n.id between 'N800' and 'N968'
+  and not exists(select 1 from t.tasks x where x.id=n.id);
+" > .cache/spec10/w10-ledger-miss.txt
+if [[ "$(cat .cache/spec10/w10-ledger-miss.txt)" != "0" ]]; then
+  echo "wave10 ledger drift remains" >&2
+  exit 1
+fi
+
+sqlite3 spec-0/10-htn.sqlite "
+select count(*)
+from req r
+left join req_cover c on c.req_id=r.id and c.fit='full'
+where c.req_id is null;
+" > .cache/spec10/req-cover-miss.txt
+if [[ "$(cat .cache/spec10/req-cover-miss.txt)" != "0" ]]; then
+  echo "req full-cover miss must be zero" >&2
+  exit 1
+fi
+
+sqlite3 spec-0/10-00-htn.sqlite "
+select count(*) from anchor_ref
+where path='apps/api/migrations' or path like '%/';
+" > .cache/spec10/w10-anchor-miss.txt
+if [[ "$(cat .cache/spec10/w10-anchor-miss.txt)" != "0" ]]; then
+  echo "invalid anchor paths remain" >&2
+  exit 1
+fi
+
+cat > .cache/spec10/c8-checklist.report.json <<EOF_JSON
+{
+  "status": "ok",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "booleans": {
+    "validate_ok": true,
+    "dag_wired": true,
+    "ledger_aligned": true,
+    "req_cover_zero": true,
+    "anchors_clean": true
+  },
+  "metrics": {
+    "ledger_miss": $(cat .cache/spec10/w10-ledger-miss.txt),
+    "req_cover_miss": $(cat .cache/spec10/req-cover-miss.txt),
+    "anchor_miss": $(cat .cache/spec10/w10-anchor-miss.txt)
+  }
+}
+EOF_JSON
+
+jq -e '.status == "ok" and .booleans.validate_ok and .booleans.dag_wired and .booleans.ledger_aligned and .booleans.req_cover_zero and .booleans.anchors_clean' \
+  .cache/spec10/c8-checklist.report.json >/dev/null
+
+write_mark "test:int:c8-checklist"
+echo "test:int:c8-checklist ok"

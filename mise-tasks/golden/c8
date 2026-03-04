@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/lib/common.sh"
+
+cd_repo_root
+require_cmds jq rg
+
+mkdir -p .cache/spec10
+
+cat > .cache/spec10/final-proof-index.txt <<EOF_INDEX
+c8_validate=.cache/spec10/c8-validate.json
+c8_checklist=.cache/spec10/c8-checklist.report.json
+ledger_miss=.cache/spec10/w10-ledger-miss.txt
+anchor_miss=.cache/spec10/w10-anchor-miss.txt
+req_cover_miss=.cache/spec10/req-cover-miss.txt
+EOF_INDEX
+
+for path in \
+  .cache/spec10/c8-validate.json \
+  .cache/spec10/c8-checklist.report.json \
+  .cache/spec10/w10-ledger-miss.txt \
+  .cache/spec10/w10-anchor-miss.txt \
+  .cache/spec10/req-cover-miss.txt; do
+  if [[ ! -s "$path" ]]; then
+    echo "missing proof file: $path" >&2
+    exit 1
+  fi
+done
+
+jq -e '.status == "ok"' .cache/spec10/c8-validate.json >/dev/null
+jq -e '.status == "ok" and .booleans.validate_ok and .booleans.dag_wired and .booleans.ledger_aligned and .booleans.req_cover_zero and .booleans.anchors_clean' \
+  .cache/spec10/c8-checklist.report.json >/dev/null
+
+if [[ "$(cat .cache/spec10/w10-ledger-miss.txt)" != "0" ]]; then
+  echo "ledger miss must be 0" >&2
+  exit 1
+fi
+if [[ "$(cat .cache/spec10/w10-anchor-miss.txt)" != "0" ]]; then
+  echo "anchor miss must be 0" >&2
+  exit 1
+fi
+if [[ "$(cat .cache/spec10/req-cover-miss.txt)" != "0" ]]; then
+  echo "req cover miss must be 0" >&2
+  exit 1
+fi
+
+for needle in \
+  "c8_validate=.cache/spec10/c8-validate.json" \
+  "c8_checklist=.cache/spec10/c8-checklist.report.json" \
+  "ledger_miss=.cache/spec10/w10-ledger-miss.txt" \
+  "anchor_miss=.cache/spec10/w10-anchor-miss.txt" \
+  "req_cover_miss=.cache/spec10/req-cover-miss.txt"; do
+  if ! rg -Fq "$needle" .cache/spec10/final-proof-index.txt; then
+    echo "final-proof-index missing: $needle" >&2
+    exit 1
+  fi
+done
+
+write_mark "golden:c8"
+echo "golden:c8 ok"
