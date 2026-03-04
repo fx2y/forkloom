@@ -61,6 +61,9 @@ export type RunViewState = {
 	skills: RunSkillView[];
 	selectedSkillName: string | null;
 	selectedSkillPreview: RunSkillPreviewView | null;
+	selectedScope: "me" | "team" | "org";
+	selectedWriteTarget: "org" | "ws" | "member";
+	selectedPublishTarget: "org" | "ws" | "member";
 };
 
 function appendArtifact(
@@ -149,7 +152,22 @@ export const initialRunViewState: RunViewState = {
 	skills: [],
 	selectedSkillName: null,
 	selectedSkillPreview: null,
+	selectedScope: "team",
+	selectedWriteTarget: "ws",
+	selectedPublishTarget: "org",
 };
+
+function recommendedPublishTarget(
+	writeTarget: "org" | "ws" | "member",
+): "org" | "ws" | "member" {
+	if (writeTarget === "member") {
+		return "ws";
+	}
+	if (writeTarget === "ws") {
+		return "org";
+	}
+	return "org";
+}
 
 export function toSpanKey(span: SpanRef): string {
 	return [
@@ -227,10 +245,25 @@ export function hydrateRunTruth(
 			});
 		}
 	}
+	const truthScope = truth.run.spec.scope;
+	const selectedScope =
+		truthScope === "me" || truthScope === "team" || truthScope === "org"
+			? truthScope
+			: state.selectedScope;
+	const truthWriteTarget = truth.run.spec.writeTarget;
+	const selectedWriteTarget =
+		truthWriteTarget === "org" ||
+		truthWriteTarget === "ws" ||
+		truthWriteTarget === "member"
+			? truthWriteTarget
+			: state.selectedWriteTarget;
 	return {
 		...state,
 		artifacts,
 		provenanceByArtifact,
+		selectedScope,
+		selectedWriteTarget,
+		selectedPublishTarget: recommendedPublishTarget(selectedWriteTarget),
 	};
 }
 
@@ -298,6 +331,41 @@ export function selectRunSkill(
 			state.selectedSkillPreview?.skillName === selectedSkillName
 				? state.selectedSkillPreview
 				: null,
+	};
+}
+
+export function selectRunScope(
+	state: RunViewState,
+	scope: "me" | "team" | "org",
+): RunViewState {
+	return {
+		...state,
+		selectedScope: scope,
+	};
+}
+
+export function selectRunWriteTarget(
+	state: RunViewState,
+	writeTarget: "org" | "ws" | "member",
+): RunViewState {
+	const selectedPublishTarget =
+		state.selectedPublishTarget === writeTarget
+			? recommendedPublishTarget(writeTarget)
+			: state.selectedPublishTarget;
+	return {
+		...state,
+		selectedWriteTarget: writeTarget,
+		selectedPublishTarget,
+	};
+}
+
+export function selectRunPublishTarget(
+	state: RunViewState,
+	publishTarget: "org" | "ws" | "member",
+): RunViewState {
+	return {
+		...state,
+		selectedPublishTarget: publishTarget,
 	};
 }
 
@@ -444,6 +512,9 @@ export function reduceRunEvent(
 		skills: state.skills,
 		selectedSkillName: state.selectedSkillName,
 		selectedSkillPreview: state.selectedSkillPreview,
+		selectedScope: state.selectedScope,
+		selectedWriteTarget: state.selectedWriteTarget,
+		selectedPublishTarget: state.selectedPublishTarget,
 		trace: [
 			...state.trace,
 			{

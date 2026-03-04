@@ -8,7 +8,10 @@ import {
 	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
+	selectRunPublishTarget,
+	selectRunScope,
 	selectRunSkill,
+	selectRunWriteTarget,
 	toSpanKey,
 } from "./run-reducer";
 
@@ -46,6 +49,9 @@ describe("run reducer", () => {
 
 		expect(state.artifacts).toHaveLength(2);
 		expect((state.run?.files as Record<string, unknown>)?.entries).toBeTruthy();
+		expect(state.selectedScope).toBe("team");
+		expect(state.selectedWriteTarget).toBe("ws");
+		expect(state.selectedPublishTarget).toBe("org");
 	});
 
 	it("reduces interactive run events into truthful status and trace state", () => {
@@ -255,5 +261,19 @@ describe("run reducer", () => {
 		expect(
 			reduced.artifacts.some((entry) => entry.key.endsWith("a".repeat(64))),
 		).toBe(true);
+	});
+
+	it("keeps explicit scope/write-target/publish-target inside reducer state", () => {
+		const scoped = selectRunScope(initialRunViewState, "org");
+		expect(scoped.selectedScope).toBe("org");
+
+		const writeScoped = selectRunWriteTarget(scoped, "member");
+		expect(writeScoped.selectedWriteTarget).toBe("member");
+
+		const publishScoped = selectRunPublishTarget(writeScoped, "ws");
+		expect(publishScoped.selectedPublishTarget).toBe("ws");
+
+		const noConflict = selectRunWriteTarget(publishScoped, "ws");
+		expect(noConflict.selectedPublishTarget).toBe("org");
 	});
 });

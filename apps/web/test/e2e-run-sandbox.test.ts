@@ -263,6 +263,17 @@ describe("web run sandbox flow", () => {
 					{ status: 202, headers: { "content-type": "application/json" } },
 				);
 			}
+			if (url === `/runs/${runId}/publish` && init?.method === "POST") {
+				return new Response(
+					JSON.stringify({
+						sha: "c".repeat(64),
+						fromTarget: "ws",
+						publishTarget: "org",
+						workflowID: `publish:${runId}`,
+					}),
+					{ status: 202, headers: { "content-type": "application/json" } },
+				);
+			}
 			if (url === `/runs/${runId}/skills`) {
 				return new Response(
 					JSON.stringify({
@@ -603,13 +614,35 @@ describe("web run sandbox flow", () => {
 		if (!resolveButton) {
 			throw new Error("missing resolve button");
 		}
-		resolveButton.click();
-		await vi.waitFor(() => {
-			expect(
-				root.querySelector("[data-run-doc-resolve]")?.textContent,
-			).toContain("Total: $19.99");
+			resolveButton.click();
+			await vi.waitFor(() => {
+				expect(
+					root.querySelector("[data-run-doc-resolve]")?.textContent,
+				).toContain("Total: $19.99");
+			});
+
+			const publishButton =
+				root.querySelector<HTMLButtonElement>("[data-run-publish]");
+			if (!publishButton) {
+				throw new Error("missing publish button");
+			}
+			publishButton.click();
+			await vi.waitFor(() => {
+				expect(fetchImpl).toHaveBeenCalledWith(
+					`/runs/${runId}/publish`,
+					expect.objectContaining({
+						method: "POST",
+						body: JSON.stringify({
+							kind: "policy",
+							key: "policy/default",
+							scope: "team",
+							writeTarget: "ws",
+							publishTarget: "org",
+						}),
+					}),
+				);
+			});
 		});
-	});
 
 	const liveOnly = process.env.FORKLOOM_LIVE_WEB_E2E === "1";
 	(liveOnly ? it : it.skip)(

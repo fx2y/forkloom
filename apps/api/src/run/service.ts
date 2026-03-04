@@ -27,6 +27,12 @@ import type {
 	SkillPreviewRequest,
 } from "../skill";
 import { parseSkillInvocation } from "../skill";
+import type {
+	PromoteMemberToWsInput,
+	PromoteMemberToWsOutput,
+	PromoteWsToOrgInput,
+	PromoteWsToOrgOutput,
+} from "../workflow";
 import { toRunSandboxWorkflowId } from "../workflow/run-sandbox";
 import type { RunEventKind, RunEventPayloadMap } from "./event";
 import type { RunPlan } from "./plan";
@@ -157,12 +163,18 @@ type RunSkillDeps = {
 	previewSkill(input: SkillPreviewRequest): Promise<SkillPreview | null>;
 };
 
+type RunPromotionDeps = {
+	promoteMemberToWs(input: PromoteMemberToWsInput): Promise<PromoteMemberToWsOutput>;
+	promoteWsToOrg(input: PromoteWsToOrgInput): Promise<PromoteWsToOrgOutput>;
+};
+
 export type RunServiceDeps = {
 	runRepo: RunRepo;
 	workflowLauncher: RunWorkflowLauncher;
 	sandbox?: SandboxDeps | undefined;
 	docs?: RunDocDeps | undefined;
 	skills?: RunSkillDeps | undefined;
+	promotion?: RunPromotionDeps | undefined;
 };
 
 export type StartRunResult = {
@@ -171,6 +183,8 @@ export type StartRunResult = {
 	sandbox?: SandboxModel | undefined;
 	command?: RunCommandModel | undefined;
 };
+
+type PublishTarget = "org" | "ws" | "member";
 
 function normalizeErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message) {
@@ -522,6 +536,94 @@ export class RunService {
 		return exported;
 	}
 
+	async publishObject(input: {
+		runId: string;
+		kind: string;
+		key: string;
+		scope: "me" | "team" | "org";
+		writeTarget: PublishTarget;
+		publishTarget: PublishTarget;
+	}): Promise<{
+		sha: string | null;
+		fromTarget: PublishTarget;
+		publishTarget: PublishTarget;
+		workflowID: string;
+	}> {
+		const run = await this.requireRun(input.runId);
+		const kind = input.kind.trim();
+		const key = input.key.trim();
+		if (!kind || !key) {
+			throw new HttpError(400, "publish kind and key are required");
+		}
+		if (input.scope !== run.spec.scope) {
+			throw new HttpError(
+				409,
+				`publish scope mismatch: expected ${run.spec.scope}, got ${input.scope}`,
+			);
+		}
+		if (input.writeTarget !== run.spec.writeTarget) {
+			throw new HttpError(
+				409,
+				`publish writeTarget mismatch: expected ${run.spec.writeTarget}, got ${input.writeTarget}`,
+			);
+		}
+		if (input.publishTarget === run.spec.writeTarget) {
+			throw new HttpError(409, "publishTarget must promote beyond current writeTarget");
+		}
+		const promotion = this.requirePromotionDeps();
+		const fromTarget = run.spec.writeTarget;
+		if (fromTarget === "member" && input.publishTarget === "ws") {
+			if (!run.spec.wsId || !run.spec.memberId) {
+				throw new HttpError(
+					409,
+					"run spec is missing wsId/memberId for member->ws publish",
+				);
+			}
+			const workflowID = `publish:m2w:${run.runId}:${kind}:${key}`;
+			const handle = await DBOS.startWorkflow(promotion.promoteMemberToWs, {
+				workflowID,
+			})({
+				orgId: run.spec.orgId,
+				wsId: run.spec.wsId,
+				memberId: run.spec.memberId,
+				kind,
+				key,
+			});
+			const output = await handle.getResult();
+			return {
+				sha: output.sha,
+				fromTarget,
+				publishTarget: input.publishTarget,
+				workflowID,
+			};
+		}
+		if (fromTarget === "ws" && input.publishTarget === "org") {
+			if (!run.spec.wsId) {
+				throw new HttpError(409, "run spec is missing wsId for ws->org publish");
+			}
+			const workflowID = `publish:w2o:${run.runId}:${kind}:${key}`;
+			const handle = await DBOS.startWorkflow(promotion.promoteWsToOrg, {
+				workflowID,
+			})({
+				orgId: run.spec.orgId,
+				wsId: run.spec.wsId,
+				kind,
+				key,
+			});
+			const output = await handle.getResult();
+			return {
+				sha: output.sha,
+				fromTarget,
+				publishTarget: input.publishTarget,
+				workflowID,
+			};
+		}
+		throw new HttpError(
+			409,
+			`unsupported publish transition: ${fromTarget}->${input.publishTarget}`,
+		);
+	}
+
 	async beginRun(
 		runId: string,
 		payload: RunEventPayloadMap["run_started"] = {},
@@ -625,6 +727,13 @@ export class RunService {
 			throw new HttpError(503, "skills are not configured");
 		}
 		return this.deps.skills;
+	}
+
+	private requirePromotionDeps(): RunPromotionDeps {
+		if (!this.deps.promotion) {
+			throw new HttpError(503, "publish promotion is not configured");
+		}
+		return this.deps.promotion;
 	}
 
 	private async requireRun(runId: string): Promise<RunModel> {

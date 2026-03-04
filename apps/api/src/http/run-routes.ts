@@ -9,6 +9,7 @@ import {
 	parseRunCreatePayload,
 	parseRunCursor,
 	parseRunFileExportPayload,
+	parseRunPublishPayload,
 	parseRunSkillPreviewPayload,
 } from "./run-request-parsers";
 import { streamInteractiveRunEvents } from "./run-sandbox-sse";
@@ -139,6 +140,24 @@ export function attachRunRoutes(app: Express, runService: RunService): void {
 				listEvents: (sinceEventId, limit) =>
 					runService.listRunEvents(runId, sinceEventId, limit),
 			});
+		}),
+	);
+
+	app.post(
+		"/runs/:runId/publish",
+		express.json({ limit: "1mb" }),
+		asyncHandler(async (req, res) => {
+			const runId = requireRouteParam(req.params.runId, "runId");
+			const payload = parseRunPublishPayload(req.body);
+			const published = await runService.publishObject({
+				runId,
+				kind: payload.kind,
+				key: payload.key,
+				scope: payload.scope,
+				writeTarget: payload.writeTarget,
+				publishTarget: payload.publishTarget,
+			});
+			res.status(202).json(published);
 		}),
 	);
 

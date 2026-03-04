@@ -36,11 +36,15 @@ export type RunSkillPreview = {
 	menuVisible: boolean;
 };
 
-type RunCreateInput = {
+export type RunCreateInput = {
 	runId: string;
 	scope: "me" | "team" | "org";
 	userMsg: string;
 	attachments: Array<{ sha256: string }>;
+	orgId: string;
+	wsId?: string | undefined;
+	memberId?: string | undefined;
+	writeTarget: "org" | "ws" | "member";
 	profile: "safe" | "std" | "priv";
 };
 
@@ -110,6 +114,30 @@ export async function postRunCommand(
 		body: JSON.stringify(input),
 	});
 	return readJson(response, `post run command ${runId}`);
+}
+
+export async function publishRunObject(
+	deps: AppDeps,
+	runId: string,
+	input: {
+		kind: string;
+		key: string;
+		scope: "me" | "team" | "org";
+		writeTarget: "org" | "ws" | "member";
+		publishTarget: "org" | "ws" | "member";
+	},
+): Promise<{
+	sha: string | null;
+	fromTarget: "org" | "ws" | "member";
+	publishTarget: "org" | "ws" | "member";
+	workflowID: string;
+}> {
+	const response = await deps.fetchImpl(`/runs/${runId}/publish`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return readJson(response, `publish run object ${runId}`);
 }
 
 export async function fetchRunSkills(

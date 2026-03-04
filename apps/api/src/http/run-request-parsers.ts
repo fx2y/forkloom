@@ -39,6 +39,17 @@ function parseWriteTarget(input: unknown): "org" | "ws" | "member" {
 	throw new HttpError(400, "writeTarget must be one of org|ws|member");
 }
 
+function parseNonEmptyField(
+	record: Record<string, unknown>,
+	key: string,
+): string {
+	const value = record[key];
+	if (typeof value !== "string" || value.trim().length === 0) {
+		throw new HttpError(400, `${key} is required`);
+	}
+	return value.trim();
+}
+
 function parseRunProfile(input: unknown): RunProfile {
 	if (input === "safe" || input === "std" || input === "priv") {
 		return input;
@@ -192,6 +203,26 @@ export function parseRunFileExportPayload(input: unknown): {
 	}
 	return {
 		paths: record.paths.map((path) => String(path).trim()),
+	};
+}
+
+export function parseRunPublishPayload(input: unknown): {
+	kind: string;
+	key: string;
+	scope: RunScope;
+	writeTarget: "org" | "ws" | "member";
+	publishTarget: "org" | "ws" | "member";
+} {
+	if (input == null || typeof input !== "object" || Array.isArray(input)) {
+		throw new HttpError(400, "publish payload must be an object");
+	}
+	const record = input as Record<string, unknown>;
+	return {
+		kind: parseNonEmptyField(record, "kind"),
+		key: parseNonEmptyField(record, "key"),
+		scope: parseRunScope(record.scope),
+		writeTarget: parseWriteTarget(record.writeTarget),
+		publishTarget: parseWriteTarget(record.publishTarget),
 	};
 }
 

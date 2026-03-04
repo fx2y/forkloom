@@ -260,6 +260,12 @@ async function bootstrap() {
 	);
 	const docIngestWorkflowLauncher = new LazyDbosDocIngestWorkflowLauncher();
 	const docOcrWorkflowLauncher = new LazyDbosDocOcrWorkflowLauncher();
+	const promoteMemberToWsWorkflow = registerPromoteMemberToWsWorkflow({
+		databaseUrl: config.databaseUrl,
+	});
+	const promoteWsToOrgWorkflow = registerPromoteWsToOrgWorkflow({
+		databaseUrl: config.databaseUrl,
+	});
 	const workflowSandboxBackend = new DockerBackend({
 		writeSnapshot: async (body, meta) => {
 			const artifact = await workflowArtifactService.putArtifact({
@@ -284,6 +290,10 @@ async function bootstrap() {
 			ingestDoc: (input) => docIngestWorkflowLauncher.startIngestDoc(input),
 		},
 		skills: skillService,
+		promotion: {
+			promoteMemberToWs: promoteMemberToWsWorkflow,
+			promoteWsToOrg: promoteWsToOrgWorkflow,
+		},
 		sandbox: {
 			sandboxRepo,
 			createRunPlan: (spec) => createRunPlan(spec, config),
@@ -376,12 +386,6 @@ async function bootstrap() {
 			pdfMaxPages: config.docLimitPdfPages,
 			imageMaxBytes: config.docLimitImageBytes,
 		},
-	});
-	registerPromoteMemberToWsWorkflow({
-		databaseUrl: config.databaseUrl,
-	});
-	registerPromoteWsToOrgWorkflow({
-		databaseUrl: config.databaseUrl,
 	});
 	workflowLauncher.bindClassic(runWorkflow);
 	workflowLauncher.bindSandbox(runSandboxWorkflow);

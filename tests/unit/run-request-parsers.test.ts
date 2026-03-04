@@ -10,6 +10,7 @@ import {
 	parseRunDocResolvePayload,
 	parseRunDocSearchPayload,
 	parseRunFileExportPayload,
+	parseRunPublishPayload,
 	parseRunSkillPreviewPayload,
 } from "../../apps/api/src/http/run-request-parsers";
 
@@ -218,6 +219,42 @@ describe("run-request-parsers", () => {
 		expect(() => parseRunFileExportPayload({ paths: ["", 1] })).toThrow(
 			"paths must be a non-empty string array",
 		);
+	});
+
+	it("parses publish payload and enforces explicit scope/write targets", () => {
+		expect(
+			parseRunPublishPayload({
+				kind: "policy",
+				key: "policy/default",
+				scope: "team",
+				writeTarget: "ws",
+				publishTarget: "org",
+			}),
+		).toEqual({
+			kind: "policy",
+			key: "policy/default",
+			scope: "team",
+			writeTarget: "ws",
+			publishTarget: "org",
+		});
+		expect(() =>
+			parseRunPublishPayload({
+				kind: "",
+				key: "policy/default",
+				scope: "team",
+				writeTarget: "ws",
+				publishTarget: "org",
+			}),
+		).toThrow("kind is required");
+		expect(() =>
+			parseRunPublishPayload({
+				kind: "policy",
+				key: "policy/default",
+				scope: "all",
+				writeTarget: "ws",
+				publishTarget: "org",
+			}),
+		).toThrow("scope must be one of me|team|org");
 	});
 
 	it("parses skill preview payload and validates shape", () => {

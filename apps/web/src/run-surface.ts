@@ -15,6 +15,7 @@ import {
 	fetchRunSkills,
 	fetchRunTruth,
 	parseRunEvent,
+	publishRunObject,
 	postRunCommand,
 	postRunDocResolve,
 	postRunDocSearch,
@@ -37,7 +38,10 @@ import {
 	hydrateRunTruth,
 	initialRunViewState,
 	reduceRunEvent,
+	selectRunPublishTarget,
+	selectRunScope,
 	selectRunSkill,
+	selectRunWriteTarget,
 	toSpanKey,
 } from "./state/run-reducer";
 import { parseStaticFragment } from "./static-html";
@@ -61,6 +65,35 @@ type PendingRunStream = {
 	stream: EventSourceLike;
 };
 
+const DEFAULT_SCOPE_IDS = {
+	orgId: "00000000-0000-0000-0000-000000000001",
+	wsId: "00000000-0000-0000-0000-000000000002",
+	memberId: "00000000-0000-0000-0000-000000000003",
+} as const;
+
+function toCreateScopeShape(input: {
+	orgId: string;
+	wsId: string;
+	memberId: string;
+	writeTarget: "org" | "ws" | "member";
+}): {
+	orgId: string;
+	wsId?: string | undefined;
+	memberId?: string | undefined;
+} {
+	if (input.writeTarget === "org") {
+		return { orgId: input.orgId };
+	}
+	if (input.writeTarget === "ws") {
+		return { orgId: input.orgId, wsId: input.wsId };
+	}
+	return {
+		orgId: input.orgId,
+		wsId: input.wsId,
+		memberId: input.memberId,
+	};
+}
+
 function appendExportArtifact(
 	artifacts: RunArtifactView[],
 	sha256: string,
@@ -73,6 +106,23 @@ function appendExportArtifact(
 					key: `export:${sha256}`,
 					label: sha256.slice(0, 12),
 					kind: "workspace_export",
+					href: `/artifacts/${sha256}`,
+				},
+			];
+}
+
+function appendPublishedArtifact(
+	artifacts: RunArtifactView[],
+	sha256: string,
+): RunArtifactView[] {
+	return artifacts.some((artifact) => artifact.key === `publish:${sha256}`)
+		? artifacts
+		: [
+				...artifacts,
+				{
+					key: `publish:${sha256}`,
+					label: sha256.slice(0, 12),
+					kind: "published",
 					href: `/artifacts/${sha256}`,
 				},
 			];
@@ -135,8 +185,10 @@ export function mountRunSurface(
 	let loadingSkills = false;
 	let previewingSkill = false;
 	let searchingDocs = false;
+	let publishing = false;
 	let resolvingSpanKey: string | null = null;
 	let errorMessage = "";
+	let publishStatus = "";
 	let uploaded: UploadedAttachment[] = [];
 	let activeStream: PendingRunStream | null = null;
 	let selectedArtifactSha: string | null = null;
@@ -159,6 +211,34 @@ export function mountRunSurface(
 					<label class="field">
 						<span>Run ID</span>
 						<input data-run-id-input type="text" name="runId" placeholder="01HS7Z6E5R4W6NED8MH4D9Y6A0" autocomplete="off" />
+					</label>
+					<label class="field">
+						<span>Scope</span>
+						<select data-run-scope name="scope">
+							<option value="me">me</option>
+							<option value="team" selected>team</option>
+							<option value="org">org</option>
+						</select>
+					</label>
+					<label class="field">
+						<span>Write Target</span>
+						<select data-run-write-target name="writeTarget">
+							<option value="org">org</option>
+							<option value="ws" selected>ws</option>
+							<option value="member">member</option>
+						</select>
+					</label>
+					<label class="field">
+						<span>Org ID</span>
+						<input data-run-org-id type="text" name="orgId" value="${DEFAULT_SCOPE_IDS.orgId}" autocomplete="off" />
+					</label>
+					<label class="field">
+						<span>Workspace ID</span>
+						<input data-run-ws-id type="text" name="wsId" value="${DEFAULT_SCOPE_IDS.wsId}" autocomplete="off" />
+					</label>
+					<label class="field">
+						<span>Member ID</span>
+						<input data-run-member-id type="text" name="memberId" value="${DEFAULT_SCOPE_IDS.memberId}" autocomplete="off" />
 					</label>
 					<label class="field">
 						<span>Profile</span>
@@ -218,23 +298,51 @@ export function mountRunSurface(
 								<ul class="file-list" data-run-skill-list></ul>
 								<p class="thread-preview" data-run-skill-preview>No skill WILL-RUN preview yet.</p>
 							</div>
-							<div class="panel run-subpanel">
-								<p class="section-label">Citations</p>
-								<form class="field" data-run-doc-search-form>
+								<div class="panel run-subpanel">
+									<p class="section-label">Citations</p>
+									<form class="field" data-run-doc-search-form>
+										<label class="field">
+											<span>Query</span>
+											<input data-run-doc-query type="text" name="query" placeholder="invoice total" />
+										</label>
+										<label class="field">
+											<span>Read Scope</span>
+											<select data-run-doc-scope name="scope">
+												<option value="me">me</option>
+												<option value="team" selected>team</option>
+												<option value="org">org</option>
+												<option value="all">all</option>
+											</select>
+										</label>
+										<button type="submit" data-run-doc-search>Search citations</button>
+									</form>
+									<ul class="file-list" data-run-doc-hits></ul>
+									<div class="thread-preview" data-run-doc-resolve>Resolve a span to view exact markdown slice.</div>
+								</div>
+								<div class="panel run-subpanel">
+									<p class="section-label">Publish</p>
 									<label class="field">
-										<span>Query</span>
-										<input data-run-doc-query type="text" name="query" placeholder="invoice total" />
+										<span>Kind</span>
+										<input data-run-publish-kind type="text" name="publishKind" value="policy" placeholder="policy" />
 									</label>
 									<label class="field">
-										<span>Scope</span>
-										<input data-run-doc-scope type="text" name="scope" value="*" placeholder="* | doc:&lt;sha&gt; | parse:&lt;id&gt;" />
+										<span>Key</span>
+										<input data-run-publish-key type="text" name="publishKey" value="policy/default" placeholder="policy/default" />
 									</label>
-									<button type="submit" data-run-doc-search>Search citations</button>
-								</form>
-								<ul class="file-list" data-run-doc-hits></ul>
-								<div class="thread-preview" data-run-doc-resolve>Resolve a span to view exact markdown slice.</div>
+									<label class="field">
+										<span>Publish Target</span>
+										<select data-run-publish-target name="publishTarget">
+											<option value="ws">ws</option>
+											<option value="org" selected>org</option>
+											<option value="member">member</option>
+										</select>
+									</label>
+									<div class="actions run-actions">
+										<button type="button" class="secondary" data-run-publish>Publish</button>
+									</div>
+									<p class="hint" data-run-publish-status>No publish action yet.</p>
+								</div>
 							</div>
-						</div>
 					<form class="composer" data-run-command-form>
 					<label class="field">
 						<span>Control text</span>
@@ -258,6 +366,16 @@ export function mountRunSurface(
 	);
 	const runIdInput = root.querySelector<HTMLInputElement>(
 		"[data-run-id-input]",
+	);
+	const runScopeSelect =
+		root.querySelector<HTMLSelectElement>("[data-run-scope]");
+	const runWriteTargetSelect = root.querySelector<HTMLSelectElement>(
+		"[data-run-write-target]",
+	);
+	const orgIdInput = root.querySelector<HTMLInputElement>("[data-run-org-id]");
+	const wsIdInput = root.querySelector<HTMLInputElement>("[data-run-ws-id]");
+	const memberIdInput = root.querySelector<HTMLInputElement>(
+		"[data-run-member-id]",
 	);
 	const runProfile =
 		root.querySelector<HTMLSelectElement>("[data-run-profile]");
@@ -310,7 +428,7 @@ export function mountRunSurface(
 	const docQueryInput = root.querySelector<HTMLInputElement>(
 		"[data-run-doc-query]",
 	);
-	const docScopeInput = root.querySelector<HTMLInputElement>(
+	const docScopeSelect = root.querySelector<HTMLSelectElement>(
 		"[data-run-doc-scope]",
 	);
 	const docSearchButton = root.querySelector<HTMLButtonElement>(
@@ -337,11 +455,30 @@ export function mountRunSurface(
 	const abortButton = root.querySelector<HTMLButtonElement>("[data-run-abort]");
 	const exportButton =
 		root.querySelector<HTMLButtonElement>("[data-run-export]");
+	const publishKindInput = root.querySelector<HTMLInputElement>(
+		"[data-run-publish-kind]",
+	);
+	const publishKeyInput = root.querySelector<HTMLInputElement>(
+		"[data-run-publish-key]",
+	);
+	const publishTargetSelect = root.querySelector<HTMLSelectElement>(
+		"[data-run-publish-target]",
+	);
+	const publishButton =
+		root.querySelector<HTMLButtonElement>("[data-run-publish]");
+	const publishStatusNode = root.querySelector<HTMLElement>(
+		"[data-run-publish-status]",
+	);
 
 	if (
 		!(
 			createForm &&
 			runIdInput &&
+			runScopeSelect &&
+			runWriteTargetSelect &&
+			orgIdInput &&
+			wsIdInput &&
+			memberIdInput &&
 			runProfile &&
 			promptInput &&
 			fileInput &&
@@ -364,7 +501,7 @@ export function mountRunSurface(
 			skillInsertButton &&
 			docSearchForm &&
 			docQueryInput &&
-			docScopeInput &&
+			docScopeSelect &&
 			docSearchButton &&
 			docHitsNode &&
 			docResolveNode &&
@@ -375,7 +512,12 @@ export function mountRunSurface(
 			steerButton &&
 			approveButton &&
 			abortButton &&
-			exportButton
+			exportButton &&
+			publishKindInput &&
+			publishKeyInput &&
+			publishTargetSelect &&
+			publishButton &&
+			publishStatusNode
 		)
 	) {
 		throw new Error("web mount failed: missing run nodes");
@@ -696,9 +838,14 @@ export function mountRunSurface(
 		const run = state.run;
 		const status = run?.status ?? "idle";
 		const sendKind = defaultCommandKind(run);
+		const writeTarget = state.selectedWriteTarget;
 		const canExport =
 			((run?.files as { workspaceRef?: { sha256: string } } | undefined)
 				?.workspaceRef?.sha256?.length ?? 0) > 0;
+		const canPublish =
+			run != null &&
+			publishKindInput.value.trim().length > 0 &&
+			publishKeyInput.value.trim().length > 0;
 		errorNode.hidden = errorMessage.length === 0;
 		errorNode.textContent = errorMessage;
 		statusNode.textContent = status;
@@ -717,6 +864,13 @@ export function mountRunSurface(
 
 		createButton.disabled = creating;
 		createButton.textContent = creating ? "Starting..." : "Start run";
+		runScopeSelect.value = state.selectedScope;
+		runWriteTargetSelect.value = state.selectedWriteTarget;
+		publishTargetSelect.value = state.selectedPublishTarget;
+		docScopeSelect.value = state.selectedScope;
+		orgIdInput.disabled = creating;
+		wsIdInput.disabled = creating || writeTarget === "org";
+		memberIdInput.disabled = creating || writeTarget !== "member";
 		docSearchButton.disabled = searchingDocs || run == null;
 		docSearchButton.textContent = searchingDocs
 			? "Searching..."
@@ -742,6 +896,10 @@ export function mountRunSurface(
 		abortButton.disabled = sending || !canAbortRun(run);
 		exportButton.disabled = sending || !canExport;
 		commandInput.disabled = sending || run == null;
+		publishButton.disabled = publishing || sending || !canPublish;
+		publishButton.textContent = publishing ? "Publishing..." : "Publish";
+		publishStatusNode.textContent =
+			publishStatus || "No publish action yet.";
 	};
 
 	const refreshRunFiles = async (runId: string) => {
@@ -838,6 +996,30 @@ export function mountRunSurface(
 		update();
 	});
 
+	runScopeSelect.addEventListener("change", () => {
+		state = selectRunScope(
+			state,
+			runScopeSelect.value as "me" | "team" | "org",
+		);
+		update();
+	});
+
+	runWriteTargetSelect.addEventListener("change", () => {
+		state = selectRunWriteTarget(
+			state,
+			runWriteTargetSelect.value as "org" | "ws" | "member",
+		);
+		update();
+	});
+
+	publishTargetSelect.addEventListener("change", () => {
+		state = selectRunPublishTarget(
+			state,
+			publishTargetSelect.value as "org" | "ws" | "member",
+		);
+		update();
+	});
+
 	createForm.addEventListener("submit", async (event) => {
 		event.preventDefault();
 		const runId = runIdInput.value.trim();
@@ -851,17 +1033,41 @@ export function mountRunSurface(
 		try {
 			creating = true;
 			errorMessage = "";
+			publishStatus = "";
 			update();
 			const uploadedFiles = await uploadAttachments(
 				deps.fetchImpl,
 				Array.from(fileInput.files ?? []),
 			);
 			uploaded = uploadedFiles;
+			const orgId = orgIdInput.value.trim();
+			const wsId = wsIdInput.value.trim();
+			const memberId = memberIdInput.value.trim();
+			const writeTarget = state.selectedWriteTarget;
+			if (orgId.length === 0) {
+				throw new Error("orgId is required");
+			}
+			if (writeTarget !== "org" && wsId.length === 0) {
+				throw new Error("wsId is required for ws/member write target");
+			}
+			if (writeTarget === "member" && memberId.length === 0) {
+				throw new Error("memberId is required for member write target");
+			}
+			const scopeShape = toCreateScopeShape({
+				orgId,
+				wsId,
+				memberId,
+				writeTarget,
+			});
 			await createRun(deps, {
 				runId,
-				scope: "team",
+				scope: state.selectedScope,
 				userMsg: prompt,
 				attachments: uploadedFiles.map(({ sha256 }) => ({ sha256 })),
+				orgId: scopeShape.orgId,
+				wsId: scopeShape.wsId,
+				memberId: scopeShape.memberId,
+				writeTarget,
 				profile: runProfile.value as "safe" | "std" | "priv",
 			});
 			state = hydrateRunState(initialRunViewState, await fetchRun(deps, runId));
@@ -889,7 +1095,7 @@ export function mountRunSurface(
 			return;
 		}
 		const query = docQueryInput.value.trim();
-		const scope = docScopeInput.value.trim() || "*";
+		const scope = docScopeSelect.value || state.selectedScope;
 		if (!query) {
 			errorMessage = "doc search query is required";
 			update();
@@ -979,6 +1185,48 @@ export function mountRunSurface(
 		state = selectRunSkill(state, skillName);
 		errorMessage = "";
 		update();
+	});
+
+	publishButton.addEventListener("click", async () => {
+		if (!state.run) {
+			errorMessage = "start a run before publish";
+			update();
+			return;
+		}
+		const kind = publishKindInput.value.trim();
+		const key = publishKeyInput.value.trim();
+		if (!kind || !key) {
+			errorMessage = "publish kind and key are required";
+			update();
+			return;
+		}
+		try {
+			publishing = true;
+			errorMessage = "";
+			update();
+			const runId = state.run.runId;
+			const published = await publishRunObject(deps, runId, {
+				kind,
+				key,
+				scope: state.selectedScope,
+				writeTarget: state.selectedWriteTarget,
+				publishTarget: state.selectedPublishTarget,
+			});
+			publishStatus = `${published.fromTarget}->${published.publishTarget} ${published.sha ? published.sha.slice(0, 12) : "null"} (${published.workflowID})`;
+			if (published.sha) {
+				state = {
+					...state,
+					artifacts: appendPublishedArtifact(state.artifacts, published.sha),
+				};
+			}
+			await refreshRunTruth(runId);
+		} catch (error) {
+			errorMessage =
+				error instanceof Error ? error.message : "publish request failed";
+		} finally {
+			publishing = false;
+			update();
+		}
 	});
 
 	commandForm.addEventListener("submit", async (event) => {

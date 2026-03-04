@@ -3,6 +3,7 @@ export const RUN_API_ENDPOINTS = [
 	"GET /runs/:runId",
 	"GET /runs/:runId/truth",
 	"GET /runs/:runId/events",
+	"POST /runs/:runId/publish",
 	"POST /runs/:runId/commands",
 	"GET /runs/:runId/skills",
 	"POST /runs/:runId/skills/preview",
