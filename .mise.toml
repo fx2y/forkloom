@@ -102,8 +102,8 @@ outputs = [".cache/mise-marks/check__lesson-guard.ok"]
 
 [tasks."check:scope-guard"]
 run = "bash ./mise-tasks/check/scope-guard"
-sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "apps/web/src/**/*.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "skills/**/*.md", "README.md", "docs/adr/**/*.md", "docs/runbook/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "spec-0/08-spec.md", "spec-0/09-spec.md", "mise-tasks/check/scope-guard"]
-outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt", ".cache/spec08/scope-guard.skill-wire.txt", ".cache/spec08/scope-guard.skills-route-violations.txt", ".cache/spec08/scope-guard.skill-kind.ast.txt", ".cache/spec08/scope-guard.innerhtml.scan.txt", ".cache/spec08/scope-guard.pack.scan.txt", ".cache/spec09/scope-guard.ext-wire.txt", ".cache/spec09/scope-guard.ext-route-violations.txt", ".cache/spec09/scope-guard.provider-seam.txt", ".cache/spec09/scope-guard.flagship-scope.txt", ".cache/spec09/scope-guard.ext-ban.ast.txt", ".cache/spec09/scope-guard.c7-innerhtml.scan.txt", ".cache/spec09/cy7-rpc-seam.ast.txt"]
+sources = ["apps/api/src/http/**/*.ts", "apps/api/src/run/public-surface.ts", "apps/api/src/workflow/promote-*.ts", "apps/web/src/**/*.ts", "packages/contracts/src/check.ts", "contracts/v1/**/*.json", "skills/**/*.md", "README.md", "docs/adr/**/*.md", "docs/runbook/**/*.md", "spec-0/06-spec.md", "spec-0/07-spec.md", "spec-0/08-spec.md", "spec-0/09-spec.md", "spec-0/10-spec.md", "mise-tasks/check/scope-guard"]
+outputs = [".cache/mise-marks/check__scope-guard.ok", ".cache/spec07/scope-guard.c4-not-now.txt", ".cache/spec07/scope-guard.c5-scope.txt", ".cache/spec07/scope-guard.doc-ops.txt", ".cache/spec07/scope-guard.doc-wire.txt", ".cache/spec07/scope-guard.docs-route-violations.txt", ".cache/spec07/scope-guard.noun-scan.txt", ".cache/spec07/scope-guard.ast-grep.txt", ".cache/spec08/scope-guard.skill-wire.txt", ".cache/spec08/scope-guard.skills-route-violations.txt", ".cache/spec08/scope-guard.skill-kind.ast.txt", ".cache/spec08/scope-guard.innerhtml.scan.txt", ".cache/spec08/scope-guard.pack.scan.txt", ".cache/spec09/scope-guard.ext-wire.txt", ".cache/spec09/scope-guard.ext-route-violations.txt", ".cache/spec09/scope-guard.provider-seam.txt", ".cache/spec09/scope-guard.flagship-scope.txt", ".cache/spec09/scope-guard.ext-ban.ast.txt", ".cache/spec09/scope-guard.c7-innerhtml.scan.txt", ".cache/spec09/cy7-rpc-seam.ast.txt", ".cache/spec10/scope-guard.ext-route-violations.txt", ".cache/spec10/scope-guard.ast.txt", ".cache/spec10/w10-rls-policy.scan.txt", ".cache/spec10/w10-current-setting-false.scan.txt", ".cache/spec10/w10-session-set.scan.txt", ".cache/spec10/w10-permissive-policy.scan.txt", ".cache/spec10/w10-run-client-headers.scan.txt", ".cache/spec10/w10-promotion-raw-pool.ast.txt"]
 
 [tasks.check]
 depends = ["check:lint", "check:type", "check:unit", "check:contract", "check:lesson-guard", "check:scope-guard"]
@@ -308,6 +308,24 @@ depends = ["test:int:c7-checklist", "test:int:c7-perf"]
 sources = [".mise.toml", "mise-tasks/test/int/c7-force"]
 outputs = [".cache/mise-marks/test__int__c7-force.ok"]
 
+[tasks."test:int:c8-validate"]
+run = "bash ./mise-tasks/test/int/c8-validate"
+depends = ["svc:health", "check:scope-guard"]
+sources = [".mise.toml", "apps/**/*.ts", "apps/web/src/**/*.ts", "tests/unit/**/*.ts", "tests/int/**/*.ts", "scripts/harness/live-support.ts", "mise-tasks/test/int/c8-validate", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__c8-validate.ok", ".cache/spec10/c8-validate.json", ".cache/spec10/c8-client-headers.scan.txt", ".cache/spec10/c8-rls.scan.txt", ".cache/spec10/c8-promotion.ast.txt"]
+
+[tasks."test:int:c8-checklist"]
+run = "bash ./mise-tasks/test/int/c8-checklist"
+depends = ["test:int:c8-validate", "check:scope-guard"]
+sources = [".mise.toml", "spec-0/10-00-htn.sqlite", "spec-0/10-htn.sqlite", "spec-0/10-tasks.sqlite", "mise-tasks/test/int/c8-checklist", "package.json", "pnpm-lock.yaml"]
+outputs = [".cache/mise-marks/test__int__c8-checklist.ok", ".cache/spec10/c8-checklist.report.json", ".cache/spec10/c8-dag.scan.txt", ".cache/spec10/w10-ledger-miss.txt", ".cache/spec10/req-cover-miss.txt", ".cache/spec10/w10-anchor-miss.txt"]
+
+[tasks."test:int:c8-force"]
+run = "bash ./mise-tasks/test/int/c8-force"
+depends = ["test:int:c8-checklist"]
+sources = [".mise.toml", "mise-tasks/test/int/c8-force"]
+outputs = [".cache/mise-marks/test__int__c8-force.ok"]
+
 [tasks."test:int:doc-force"]
 run = [
   "mise run --force test:int:doc-config",
@@ -353,7 +371,8 @@ run = [
   "mise run test:int:skills-checklist",
   "mise run test:int:c7-validate",
   "mise run test:int:c7-perf",
-  "mise run test:int:c7-checklist"
+  "mise run test:int:c7-checklist",
+  "mise run test:int:c8-checklist"
 ]
 
 [tasks."test:int:force"]
@@ -388,7 +407,8 @@ run = [
   "mise run --force test:int:skills-validate",
   "mise run --force test:int:skills-perf",
   "mise run --force test:int:skills-checklist",
-  "mise run --force test:int:c7-force"
+  "mise run --force test:int:c7-force",
+  "mise run --force test:int:c8-force"
 ]
 
 [tasks."golden:canonicalize"]

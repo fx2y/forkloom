@@ -16,8 +16,15 @@ const SCOPE_B = {
 	orgId: "00000000-0000-0000-0000-0000000000a2",
 	wsId: "00000000-0000-0000-0000-0000000000b2",
 };
+const MEMBER_SCOPE_A = {
+	orgId: SCOPE_A.orgId,
+	wsId: SCOPE_A.wsId,
+	memberId: "00000000-0000-0000-0000-0000000000c1",
+};
 const RUN_A = "rls-live-run-a";
 const RUN_BAD = "rls-live-run-bad";
+const POLICY_UNION_KEY = "policy/rls-union";
+const POLICY_STRICT_KEY = "policy/rls-strict-check";
 const RLS_ROLE = "forkloom_rls_test";
 
 type Queryable = {
@@ -29,7 +36,11 @@ type Queryable = {
 
 async function withScopedTx<T>(
 	db: Queryable,
-	scope: { orgId: string; wsId?: string | undefined },
+	scope: {
+		orgId: string;
+		wsId?: string | undefined;
+		memberId?: string | undefined;
+	},
 	fn: () => Promise<T>,
 ): Promise<T> {
 	await db.query("begin");
@@ -38,7 +49,9 @@ async function withScopedTx<T>(
 		await db.query("select set_config('app.ws_id', $1, true)", [
 			scope.wsId ?? "",
 		]);
-		await db.query("select set_config('app.member_id', $1, true)", [""]);
+		await db.query("select set_config('app.member_id', $1, true)", [
+			scope.memberId ?? "",
+		]);
 		const result = await fn();
 		await db.query("commit");
 		return result;
@@ -80,24 +93,37 @@ describe("tenancy RLS live", () => {
 				 on conflict (org_id) do nothing`,
 				[SCOPE_A.orgId, SCOPE_B.orgId],
 			);
-			await pool.query(
-				`insert into workspace(ws_id, org_id, name)
-				 values ($1, $2, 'rls-ws-a'), ($3, $4, 'rls-ws-b')
-				 on conflict (ws_id) do nothing`,
-				[SCOPE_A.wsId, SCOPE_A.orgId, SCOPE_B.wsId, SCOPE_B.orgId],
-			);
-		} finally {
-			await pool.end();
-		}
+				await pool.query(
+					`insert into workspace(ws_id, org_id, name)
+					 values ($1, $2, 'rls-ws-a'), ($3, $4, 'rls-ws-b')
+					 on conflict (ws_id) do nothing`,
+					[SCOPE_A.wsId, SCOPE_A.orgId, SCOPE_B.wsId, SCOPE_B.orgId],
+				);
+				await pool.query(
+					`insert into member(member_id, org_id, email)
+					 values ($1, $2, 'rls-member-a@example.com')
+					 on conflict (member_id) do nothing`,
+					[MEMBER_SCOPE_A.memberId, MEMBER_SCOPE_A.orgId],
+				);
+			} finally {
+				await pool.end();
+			}
 	}, 30_000);
 
 	it("enforces default-deny and scope-isolated reads/writes", async () => {
 		const pool = new pg.Pool({ connectionString: DATABASE_URL });
-		const client = await pool.connect();
-		try {
-			await client.query(`set role ${RLS_ROLE}`);
-			await withScopedTx(client, SCOPE_A, async () => {
-				await client.query("delete from events where run_id in ($1, $2)", [
+			const client = await pool.connect();
+			try {
+				await client.query(
+					`delete from object_kv
+					 where org_id = $1::uuid
+					   and kind = 'policy'
+					   and key in ($2, $3)`,
+					[SCOPE_A.orgId, POLICY_UNION_KEY, POLICY_STRICT_KEY],
+				);
+				await client.query(`set role ${RLS_ROLE}`);
+				await withScopedTx(client, SCOPE_A, async () => {
+					await client.query("delete from events where run_id in ($1, $2)", [
 					RUN_A,
 					RUN_BAD,
 				]);
@@ -160,18 +186,85 @@ describe("tenancy RLS live", () => {
 			await client.query("commit");
 			expect(Number(unsetCount.rows[0]?.n ?? "0")).toBe(0);
 
-			await expect(
-				withScopedTx(client, SCOPE_A, async () => {
+				await expect(
+					withScopedTx(client, SCOPE_A, async () => {
+						await client.query(
+							`insert into runs(run_id, status, spec, org_id, ws_id, member_id)
+							 values ($1, 'queued', '{}'::jsonb, $2::uuid, $3::uuid, null)`,
+							[RUN_BAD, SCOPE_B.orgId, SCOPE_B.wsId],
+						);
+					}),
+				).rejects.toThrowError(/row-level security/i);
+
+				await withScopedTx(client, { orgId: SCOPE_A.orgId }, async () => {
 					await client.query(
-						`insert into runs(run_id, status, spec, org_id, ws_id, member_id)
-						 values ($1, 'queued', '{}'::jsonb, $2::uuid, $3::uuid, null)`,
-						[RUN_BAD, SCOPE_B.orgId, SCOPE_B.wsId],
+						`insert into object_kv(kind, key, org_id, ws_id, member_id, body_artifact_sha, updated_at)
+						 values ('policy', $1, $2::uuid, null, null, null, now())`,
+						[POLICY_UNION_KEY, SCOPE_A.orgId],
 					);
-				}),
-			).rejects.toThrowError(/row-level security/i);
-		} finally {
-			await client.query("reset role");
-			client.release();
+				});
+				await withScopedTx(client, SCOPE_A, async () => {
+					await client.query(
+						`insert into object_kv(kind, key, org_id, ws_id, member_id, body_artifact_sha, updated_at)
+						 values ('policy', $1, $2::uuid, $3::uuid, null, null, now())`,
+						[POLICY_UNION_KEY, SCOPE_A.orgId, SCOPE_A.wsId],
+					);
+				});
+				await withScopedTx(client, MEMBER_SCOPE_A, async () => {
+					await client.query(
+						`insert into object_kv(kind, key, org_id, ws_id, member_id, body_artifact_sha, updated_at)
+						 values ('policy', $1, $2::uuid, $3::uuid, $4::uuid, null, now())`,
+						[
+							POLICY_UNION_KEY,
+							SCOPE_A.orgId,
+							SCOPE_A.wsId,
+							MEMBER_SCOPE_A.memberId,
+						],
+					);
+				});
+
+				const wsRows = await withScopedTx(client, SCOPE_A, async () => {
+					const result = await client.query<{ n: string }>(
+						`select count(*)::text as n
+						 from object_kv
+						 where kind = 'policy'
+						   and key = $1
+						   and org_id = $2::uuid`,
+						[POLICY_UNION_KEY, SCOPE_A.orgId],
+					);
+					return Number(result.rows[0]?.n ?? "0");
+				});
+				expect(wsRows).toBe(2);
+
+				const memberRows = await withScopedTx(
+					client,
+					MEMBER_SCOPE_A,
+					async () => {
+						const result = await client.query<{ n: string }>(
+							`select count(*)::text as n
+							 from object_kv
+							 where kind = 'policy'
+							   and key = $1
+							   and org_id = $2::uuid`,
+							[POLICY_UNION_KEY, SCOPE_A.orgId],
+						);
+						return Number(result.rows[0]?.n ?? "0");
+					},
+				);
+				expect(memberRows).toBe(3);
+
+				await expect(
+					withScopedTx(client, SCOPE_A, async () => {
+						await client.query(
+							`insert into object_kv(kind, key, org_id, ws_id, member_id, body_artifact_sha, updated_at)
+							 values ('policy', $1, $2::uuid, null, null, null, now())`,
+							[POLICY_STRICT_KEY, SCOPE_A.orgId],
+						);
+					}),
+				).rejects.toThrowError(/row-level security/i);
+			} finally {
+				await client.query("reset role");
+				client.release();
 			await pool.end();
 		}
 	}, 30_000);

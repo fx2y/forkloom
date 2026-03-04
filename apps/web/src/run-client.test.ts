@@ -50,7 +50,65 @@ describe("run-client doc methods", () => {
 				query: "invoice",
 				scope: "*",
 			}),
+			});
+	});
+
+	it("adds explicit tenancy headers for /runs requests when resolver is provided", async () => {
+		const fetchImpl = vi.fn<typeof fetch>(async () => {
+			return new Response(
+				JSON.stringify({
+					query: "invoice",
+					scope: "*",
+					hits: [],
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			);
 		});
+		const deps: AppDeps = {
+			fetchImpl,
+			createEventSource: () =>
+				({
+					addEventListener() {
+						return;
+					},
+					close() {
+						return;
+					},
+					onerror: null,
+				}) as never,
+			resolveRunScopeHeaders: () => ({
+				orgId: "00000000-0000-0000-0000-000000000001",
+				wsId: "00000000-0000-0000-0000-000000000002",
+				memberId: "00000000-0000-0000-0000-000000000003",
+				writeTarget: "member",
+			}),
+		};
+		await postRunDocSearch(deps, RUN_ID, {
+			query: "invoice",
+			scope: "*",
+		});
+		const [url, init] = fetchImpl.mock.calls[0] ?? [];
+		expect(url).toBe(`/runs/${RUN_ID}/doc/search`);
+		expect((init as RequestInit).method).toBe("POST");
+		expect((init as RequestInit).body).toBe(
+			JSON.stringify({
+				query: "invoice",
+				scope: "*",
+			}),
+		);
+		const headers = new Headers((init as RequestInit).headers);
+		expect(headers.get("content-type")).toBe("application/json");
+		expect(headers.get("x-org-id")).toBe(
+			"00000000-0000-0000-0000-000000000001",
+		);
+		expect(headers.get("x-ws-id")).toBe("00000000-0000-0000-0000-000000000002");
+		expect(headers.get("x-member-id")).toBe(
+			"00000000-0000-0000-0000-000000000003",
+		);
+		expect(headers.get("x-write-scope")).toBe("member");
 	});
 
 	it("returns null when resolve route responds 404", async () => {

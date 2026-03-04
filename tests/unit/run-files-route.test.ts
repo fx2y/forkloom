@@ -1,6 +1,13 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApiRouter } from "../../apps/api/src/http/routes";
+import { resolveScope } from "../../apps/api/src/http/scope";
 import type { RunService } from "../../apps/api/src/run/service";
+
+const RUN_SCOPE_HEADERS = {
+	"x-org-id": "00000000-0000-0000-0000-000000000001",
+	"x-ws-id": "00000000-0000-0000-0000-000000000002",
+	"x-write-scope": "ws",
+} as const;
 
 describe("run files route", () => {
 	const app = buildApiRouter({
@@ -18,6 +25,7 @@ describe("run files route", () => {
 				throw new Error("unused");
 			},
 		} as never,
+		resolveScope,
 		runService: {
 			startRun: async () => {
 				throw new Error("unused");
@@ -93,7 +101,10 @@ describe("run files route", () => {
 		}
 		const base = `http://127.0.0.1:${address.port}`;
 
-		const runResponse = await fetch(`${base}/runs/01HS7Z6E5R4W6NED8MH4D9Y6A0`);
+			const runResponse = await fetch(
+				`${base}/runs/01HS7Z6E5R4W6NED8MH4D9Y6A0`,
+				{ headers: RUN_SCOPE_HEADERS },
+			);
 		expect(runResponse.status).toBe(200);
 		const runPayload = (await runResponse.json()) as {
 			status: string;
@@ -102,9 +113,10 @@ describe("run files route", () => {
 		expect(runPayload.status).toBe("awaiting_approval");
 		expect(runPayload.files.entries[0]?.path).toBe("project/proof.txt");
 
-		const filesResponse = await fetch(
-			`${base}/runs/01HS7Z6E5R4W6NED8MH4D9Y6A0/files`,
-		);
+			const filesResponse = await fetch(
+				`${base}/runs/01HS7Z6E5R4W6NED8MH4D9Y6A0/files`,
+				{ headers: RUN_SCOPE_HEADERS },
+			);
 		expect(filesResponse.status).toBe(200);
 		const payload = (await filesResponse.json()) as {
 			workspaceRef?: { sha256: string };

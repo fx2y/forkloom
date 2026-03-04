@@ -523,6 +523,33 @@ export function mountRunSurface(
 		throw new Error("web mount failed: missing run nodes");
 	}
 
+	const resolveRunScopeHeaders = () => {
+		const orgId = orgIdInput.value.trim();
+		if (orgId.length === 0) {
+			return undefined;
+		}
+		const writeTarget = state.selectedWriteTarget;
+		if (writeTarget === "org") {
+			return { orgId, writeTarget };
+		}
+		const wsId = wsIdInput.value.trim();
+		if (wsId.length === 0) {
+			return undefined;
+		}
+		if (writeTarget === "ws") {
+			return { orgId, wsId, writeTarget };
+		}
+		const memberId = memberIdInput.value.trim();
+		if (memberId.length === 0) {
+			return undefined;
+		}
+		return { orgId, wsId, memberId, writeTarget };
+	};
+	const runClientDeps: AppDeps = {
+		...deps,
+		resolveRunScopeHeaders,
+	};
+
 	const closeActiveStream = () => {
 		activeStream?.stream.close();
 		activeStream = null;
@@ -641,7 +668,11 @@ export function mountRunSurface(
 			resolvingSpanKey = key;
 			errorMessage = "";
 			update();
-			const resolved = await postRunDocResolve(deps, state.run.runId, span);
+				const resolved = await postRunDocResolve(
+					runClientDeps,
+					state.run.runId,
+					span,
+				);
 			if (!resolved) {
 				errorMessage = "span not found";
 				return;
@@ -906,7 +937,7 @@ export function mountRunSurface(
 		if (!state.run) {
 			return;
 		}
-		const files = await fetchRunFiles(deps, runId);
+		const files = await fetchRunFiles(runClientDeps, runId);
 		state = hydrateRunState(state, {
 			...state.run,
 			files: {
@@ -918,7 +949,7 @@ export function mountRunSurface(
 	};
 
 	const refreshRunTruth = async (runId: string) => {
-		const truth = await fetchRunTruth(deps, runId);
+		const truth = await fetchRunTruth(runClientDeps, runId);
 		state = hydrateRunTruth(state, truth);
 		if (!selectedArtifactSha) {
 			selectedArtifactSha = truth.artifacts[0]?.sha256 ?? null;
@@ -930,7 +961,7 @@ export function mountRunSurface(
 		loadingSkills = true;
 		update();
 		try {
-			const result = await fetchRunSkills(deps, runId);
+				const result = await fetchRunSkills(runClientDeps, runId);
 			state = hydrateRunSkills(state, result.skills);
 		} finally {
 			loadingSkills = false;
@@ -1059,7 +1090,7 @@ export function mountRunSurface(
 				memberId,
 				writeTarget,
 			});
-			await createRun(deps, {
+				await createRun(runClientDeps, {
 				runId,
 				scope: state.selectedScope,
 				userMsg: prompt,
@@ -1070,7 +1101,10 @@ export function mountRunSurface(
 				writeTarget,
 				profile: runProfile.value as "safe" | "std" | "priv",
 			});
-			state = hydrateRunState(initialRunViewState, await fetchRun(deps, runId));
+				state = hydrateRunState(
+					initialRunViewState,
+					await fetchRun(runClientDeps, runId),
+				);
 			selectedResolvedSpanKey = null;
 			await refreshRunSkills(runId);
 			await refreshRunTruth(runId);
@@ -1105,7 +1139,7 @@ export function mountRunSurface(
 			searchingDocs = true;
 			errorMessage = "";
 			update();
-			const search = await postRunDocSearch(deps, state.run.runId, {
+				const search = await postRunDocSearch(runClientDeps, state.run.runId, {
 				query,
 				scope,
 				limit: 20,
@@ -1148,10 +1182,14 @@ export function mountRunSurface(
 			previewingSkill = true;
 			errorMessage = "";
 			update();
-			const preview = await postRunSkillPreview(deps, state.run.runId, {
-				skillName,
-				args: skillArgsInput.value.trim() || undefined,
-			});
+				const preview = await postRunSkillPreview(
+					runClientDeps,
+					state.run.runId,
+					{
+					skillName,
+					args: skillArgsInput.value.trim() || undefined,
+					},
+				);
 			if (!preview) {
 				errorMessage = `skill not found: ${skillName}`;
 				return;
@@ -1205,7 +1243,7 @@ export function mountRunSurface(
 			errorMessage = "";
 			update();
 			const runId = state.run.runId;
-			const published = await publishRunObject(deps, runId, {
+				const published = await publishRunObject(runClientDeps, runId, {
 				kind,
 				key,
 				scope: state.selectedScope,
@@ -1245,7 +1283,7 @@ export function mountRunSurface(
 			sending = true;
 			errorMessage = "";
 			update();
-			await postRunCommand(deps, state.run.runId, {
+				await postRunCommand(runClientDeps, state.run.runId, {
 				kind,
 				payload: { text },
 			});
@@ -1273,7 +1311,7 @@ export function mountRunSurface(
 			sending = true;
 			errorMessage = "";
 			update();
-			await postRunCommand(deps, state.run.runId, {
+				await postRunCommand(runClientDeps, state.run.runId, {
 				kind: "steer",
 				payload: { text },
 			});
@@ -1295,7 +1333,7 @@ export function mountRunSurface(
 			sending = true;
 			errorMessage = "";
 			update();
-			await postRunCommand(deps, state.run.runId, {
+				await postRunCommand(runClientDeps, state.run.runId, {
 				kind: "approve",
 			});
 		} catch (error) {
@@ -1315,7 +1353,7 @@ export function mountRunSurface(
 			sending = true;
 			errorMessage = "";
 			update();
-			await postRunCommand(deps, state.run.runId, {
+				await postRunCommand(runClientDeps, state.run.runId, {
 				kind: "abort",
 			});
 		} catch (error) {
@@ -1336,7 +1374,7 @@ export function mountRunSurface(
 			sending = true;
 			errorMessage = "";
 			update();
-			const exported = await exportRunFiles(deps, runId);
+				const exported = await exportRunFiles(runClientDeps, runId);
 			state = {
 				...state,
 				artifacts: appendExportArtifact(

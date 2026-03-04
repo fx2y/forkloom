@@ -6,7 +6,7 @@ import type {
 	SpanRef,
 	TruthBundle,
 } from "@forkloom/contracts";
-import type { AppDeps } from "./actor-client";
+import type { AppDeps, RunScopeHeaders } from "./actor-client";
 
 export const RUN_SKILL_CLIENT_ROUTE_TEMPLATES = [
 	"GET /runs/:runId/skills",
@@ -60,6 +60,59 @@ async function readJson<T>(response: Response, label: string): Promise<T> {
 	return (await response.json()) as T;
 }
 
+function applyRunScopeHeaders(
+	headers: Headers,
+	scope: RunScopeHeaders,
+): Headers {
+	headers.set("x-org-id", scope.orgId);
+	headers.set("x-write-scope", scope.writeTarget);
+	if (scope.wsId) {
+		headers.set("x-ws-id", scope.wsId);
+	} else {
+		headers.delete("x-ws-id");
+	}
+	if (scope.memberId) {
+		headers.set("x-member-id", scope.memberId);
+	} else {
+		headers.delete("x-member-id");
+	}
+	return headers;
+}
+
+function withRunScopeHeaders(
+	deps: AppDeps,
+	url: string,
+	init?: RequestInit | undefined,
+): RequestInit | undefined {
+	if (!url.startsWith("/runs")) {
+		return init;
+	}
+	const scope = deps.resolveRunScopeHeaders?.();
+	if (!scope) {
+		return init;
+	}
+	const headers = applyRunScopeHeaders(
+		new Headers(init?.headers ?? undefined),
+		scope,
+	);
+	return {
+		...(init ?? {}),
+		headers,
+	};
+}
+
+function fetchRunScoped(
+	deps: AppDeps,
+	url: string,
+	init?: RequestInit | undefined,
+): Promise<Response> {
+	const scopedInit = withRunScopeHeaders(deps, url, init);
+	if (scopedInit) {
+		return deps.fetchImpl(url, scopedInit);
+	}
+	return deps.fetchImpl(url);
+}
+
 export function buildRunEventsUrl(runId: string, sinceEventId: number): string {
 	const query =
 		sinceEventId > 0
@@ -76,7 +129,7 @@ export async function createRun(
 	created: boolean;
 	status: string;
 }> {
-	const response = await deps.fetchImpl("/runs", {
+	const response = await fetchRunScoped(deps, "/runs", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(input),
@@ -88,7 +141,7 @@ export async function fetchRun(
 	deps: AppDeps,
 	runId: string,
 ): Promise<RunState> {
-	const response = await deps.fetchImpl(`/runs/${runId}`);
+	const response = await fetchRunScoped(deps, `/runs/${runId}`);
 	return readJson(response, `fetch run ${runId}`);
 }
 
@@ -96,7 +149,7 @@ export async function fetchRunTruth(
 	deps: AppDeps,
 	runId: string,
 ): Promise<TruthBundle> {
-	const response = await deps.fetchImpl(`/runs/${runId}/truth`);
+	const response = await fetchRunScoped(deps, `/runs/${runId}/truth`);
 	return readJson(response, `fetch run truth ${runId}`);
 }
 
@@ -108,7 +161,7 @@ export async function postRunCommand(
 	created: boolean;
 	command: { seq: number; kind: string; state: string };
 }> {
-	const response = await deps.fetchImpl(`/runs/${runId}/commands`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/commands`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(input),
@@ -132,7 +185,7 @@ export async function publishRunObject(
 	publishTarget: "org" | "ws" | "member";
 	workflowID: string;
 }> {
-	const response = await deps.fetchImpl(`/runs/${runId}/publish`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/publish`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(input),
@@ -144,7 +197,7 @@ export async function fetchRunSkills(
 	deps: AppDeps,
 	runId: string,
 ): Promise<{ skills: RunSkillListEntry[] }> {
-	const response = await deps.fetchImpl(`/runs/${runId}/skills`);
+	const response = await fetchRunScoped(deps, `/runs/${runId}/skills`);
 	return readJson(response, `fetch run skills ${runId}`);
 }
 
@@ -156,7 +209,7 @@ export async function postRunSkillPreview(
 		args?: string | undefined;
 	},
 ): Promise<RunSkillPreview | null> {
-	const response = await deps.fetchImpl(`/runs/${runId}/skills/preview`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/skills/preview`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(input),
@@ -176,7 +229,7 @@ export async function postRunDocSearch(
 		limit?: number | undefined;
 	},
 ): Promise<RunDocSearch> {
-	const response = await deps.fetchImpl(`/runs/${runId}/doc/search`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/doc/search`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(input),
@@ -194,7 +247,7 @@ export async function postRunDocIngest(
 	status: "queued" | "rejected" | "deduped";
 	reason?: string | undefined;
 }> {
-	const response = await deps.fetchImpl(`/runs/${runId}/doc/ingest`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/doc/ingest`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(input),
@@ -207,7 +260,7 @@ export async function postRunDocResolve(
 	runId: string,
 	span: SpanRef,
 ): Promise<RunDocResolve | null> {
-	const response = await deps.fetchImpl(`/runs/${runId}/doc/resolve`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/doc/resolve`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ span }),
@@ -225,10 +278,10 @@ export async function fetchRunFiles(
 	workspaceRef?: { sha256: string } | undefined;
 	workspace_manifest: {
 		version: 1;
-		entries: Array<{ path: string; bytes: number; sha256: string }>;
-	};
+			entries: Array<{ path: string; bytes: number; sha256: string }>;
+		};
 }> {
-	const response = await deps.fetchImpl(`/runs/${runId}/files`);
+	const response = await fetchRunScoped(deps, `/runs/${runId}/files`);
 	return readJson(response, `fetch run files ${runId}`);
 }
 
@@ -239,10 +292,10 @@ export async function exportRunFiles(
 	workspace_export: { sha256: string };
 	workspace_manifest: {
 		version: 1;
-		entries: Array<{ path: string; bytes: number; sha256: string }>;
-	};
+			entries: Array<{ path: string; bytes: number; sha256: string }>;
+		};
 }> {
-	const response = await deps.fetchImpl(`/runs/${runId}/files/export`, {
+	const response = await fetchRunScoped(deps, `/runs/${runId}/files/export`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({}),

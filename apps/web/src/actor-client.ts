@@ -19,9 +19,17 @@ export type UploadedAttachment = {
 	sha256: string;
 };
 
+export type RunScopeHeaders = {
+	orgId: string;
+	wsId?: string | undefined;
+	memberId?: string | undefined;
+	writeTarget: "org" | "ws" | "member";
+};
+
 export type AppDeps = {
 	fetchImpl: typeof fetch;
 	createEventSource(url: string): EventSourceLike;
+	resolveRunScopeHeaders?: (() => RunScopeHeaders | undefined) | undefined;
 };
 
 function browserDeps(): AppDeps {

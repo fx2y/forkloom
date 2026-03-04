@@ -1,5 +1,8 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import pg from "pg";
+import {
+	createPromotionScopedRepo,
+	type PromotionSourceRow,
+} from "./promotion-scoped-repo";
 
 type PromoteMemberToWsStep = "loadSource" | "copyRef" | "copyProvenance";
 
@@ -30,55 +33,25 @@ export type PromoteMemberToWsDeps = {
 	repo?: PromoteMemberToWsRepo | undefined;
 };
 
-type SourceRow = {
-	body_artifact_sha: string | null;
-};
-
-type Queryable = {
-	query<TRow = unknown>(
-		text: string,
-		values?: readonly unknown[],
-	): Promise<{ rows: TRow[] }>;
-};
-
 type PromoteMemberToWsRepo = {
-	loadSource(input: PromoteMemberToWsInput): Promise<SourceRow>;
-	copyRef(input: PromoteMemberToWsInput, source: SourceRow): Promise<string | null>;
+	loadSource(input: PromoteMemberToWsInput): Promise<PromotionSourceRow>;
+	copyRef(
+		input: PromoteMemberToWsInput,
+		source: PromotionSourceRow,
+	): Promise<string | null>;
 	copyProvenance(
 		_input: PromoteMemberToWsInput,
 		_sha: string | null,
 	): Promise<void>;
 };
 
-const poolsByDatabaseUrl = new Map<string, pg.Pool>();
-
-function getPool(databaseUrl: string): pg.Pool {
-	const existing = poolsByDatabaseUrl.get(databaseUrl);
-	if (existing) {
-		return existing;
-	}
-	const created = new pg.Pool({ connectionString: databaseUrl });
-	poolsByDatabaseUrl.set(databaseUrl, created);
-	return created;
-}
-
 function createPgRepo(databaseUrl: string): PromoteMemberToWsRepo {
-	const db: Queryable = getPool(databaseUrl);
+	const repo = createPromotionScopedRepo(databaseUrl);
 	return {
-		async loadSource(input: PromoteMemberToWsInput): Promise<SourceRow> {
-			const result = await db.query<SourceRow>(
-				`select body_artifact_sha
-				 from object_kv
-				 where org_id = $1::uuid
-				   and ws_id = $2::uuid
-				   and member_id = $3::uuid
-				   and kind = $4
-				   and key = $5
-				 order by updated_at desc
-				 limit 1`,
-				[input.orgId, input.wsId, input.memberId, input.kind, input.key],
-			);
-			const row = result.rows[0];
+		async loadSource(
+			input: PromoteMemberToWsInput,
+		): Promise<PromotionSourceRow> {
+			const row = await repo.loadMemberSource(input);
 			if (!row) {
 				throw new Error("member-scope source row not found");
 			}
@@ -86,26 +59,9 @@ function createPgRepo(databaseUrl: string): PromoteMemberToWsRepo {
 		},
 		async copyRef(
 			input: PromoteMemberToWsInput,
-			source: SourceRow,
+			source: PromotionSourceRow,
 		): Promise<string | null> {
-			const result = await db.query<SourceRow>(
-				`insert into object_kv(
-				   kind, key, org_id, ws_id, member_id, body_artifact_sha, updated_at
-				 )
-				 values ($1, $2, $3::uuid, $4::uuid, null, $5, now())
-				 on conflict (kind, key, org_id, ws_id, member_id) do update
-				 set body_artifact_sha = excluded.body_artifact_sha,
-				     updated_at = excluded.updated_at
-				 returning body_artifact_sha`,
-				[
-					input.kind,
-					input.key,
-					input.orgId,
-					input.wsId,
-					source.body_artifact_sha,
-				],
-			);
-			return result.rows[0]?.body_artifact_sha ?? null;
+			return repo.copyMemberToWs(input, source);
 		},
 		async copyProvenance(): Promise<void> {
 			// Promotion preserves immutable provenance by re-pointing to the same CAS sha.

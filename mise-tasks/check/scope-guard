@@ -171,5 +171,51 @@ if [[ ! -s .cache/spec10/scope-guard.ast.txt ]]; then
   exit 1
 fi
 
+rg -n "read_expr|write_expr|ws_id IS NULL OR ws_id =|member_id IS NULL OR member_id =|CREATE POLICY tenant_isolation" \
+  apps/api/migrations/011_tenancy_rls.sql > .cache/spec10/w10-rls-policy.scan.txt
+for needle in "read_expr" "write_expr" "ws_id IS NULL OR ws_id =" "member_id IS NULL OR member_id =" "CREATE POLICY tenant_isolation"; do
+  if ! rg -Fq "$needle" .cache/spec10/w10-rls-policy.scan.txt; then
+    echo "scope guard missing C8 RLS anchor: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n "current_setting\\('app\\.(org_id|ws_id|member_id)', false\\)" \
+  apps/api/src apps/api/migrations > .cache/spec10/w10-current-setting-false.scan.txt; then
+  echo "current_setting(..., false) is forbidden for tenancy settings" >&2
+  exit 1
+fi
+
+if rg -n "SET\\s+app\\.(org_id|ws_id|member_id)" \
+  apps/api/src apps/api/migrations > .cache/spec10/w10-session-set.scan.txt; then
+  echo "session-level SET app.* is forbidden; use set_config(..., true)" >&2
+  exit 1
+fi
+
+if rg -n "tenant_isolation[^\\n]*OR\\s+true" \
+  apps/api/migrations > .cache/spec10/w10-permissive-policy.scan.txt; then
+  echo "permissive tenant_isolation policy detected" >&2
+  exit 1
+fi
+
+rg -n "resolveRunScopeHeaders|x-org-id|x-ws-id|x-member-id|x-write-scope" \
+  apps/web/src/run-client.ts > .cache/spec10/w10-run-client-headers.scan.txt
+for needle in "resolveRunScopeHeaders" "x-org-id" "x-ws-id" "x-member-id" "x-write-scope"; do
+  if ! rg -Fq "$needle" .cache/spec10/w10-run-client-headers.scan.txt; then
+    echo "scope guard missing run-client scope header anchor: $needle" >&2
+    exit 1
+  fi
+done
+
+if ast-grep --lang typescript -p "new pg.Pool({ connectionString: $URL })" \
+  apps/api/src/workflow/promote-member-to-ws.ts \
+  apps/api/src/workflow/promote-ws-to-org.ts \
+  > .cache/spec10/w10-promotion-raw-pool.ast.txt; then
+  if [[ -s .cache/spec10/w10-promotion-raw-pool.ast.txt ]]; then
+    echo "raw pg.Pool in promotion workflows is forbidden" >&2
+    exit 1
+  fi
+fi
+
 write_mark "check:scope-guard"
 echo "check:scope-guard ok"

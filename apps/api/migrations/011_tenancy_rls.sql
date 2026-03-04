@@ -60,7 +60,18 @@ END $$;
 DO $$
 DECLARE
   t text;
-  expr text := $policy$
+  read_expr text := $policy$
+    org_id = nullif(current_setting('app.org_id', true), '')::uuid
+    AND (
+      ws_id IS NULL
+      OR ws_id = nullif(current_setting('app.ws_id', true), '')::uuid
+    )
+    AND (
+      member_id IS NULL
+      OR member_id = nullif(current_setting('app.member_id', true), '')::uuid
+    )
+  $policy$;
+  write_expr text := $policy$
     org_id = nullif(current_setting('app.org_id', true), '')::uuid
     AND (
       (ws_id IS NULL AND nullif(current_setting('app.ws_id', true), '') IS NULL)
@@ -95,8 +106,8 @@ BEGIN
     EXECUTE format(
       'CREATE POLICY tenant_isolation ON %I USING (%s) WITH CHECK (%s)',
       t,
-      expr,
-      expr
+      read_expr,
+      write_expr
     );
   END LOOP;
 END $$;

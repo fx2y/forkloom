@@ -1,8 +1,14 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApiRouter } from "../../apps/api/src/http/routes";
+import { resolveScope } from "../../apps/api/src/http/scope";
 import type { RunService } from "../../apps/api/src/run/service";
 
 const RUN_ID = "01HS7Z6E5R4W6NED8MH4D9Y6A0";
+const RUN_SCOPE_HEADERS = {
+	"x-org-id": "00000000-0000-0000-0000-000000000001",
+	"x-ws-id": "00000000-0000-0000-0000-000000000002",
+	"x-write-scope": "ws",
+} as const;
 
 describe("run doc routes", () => {
 	const app = buildApiRouter({
@@ -20,6 +26,7 @@ describe("run doc routes", () => {
 				throw new Error("unused");
 			},
 		} as never,
+		resolveScope,
 		runService: {
 			startRun: async () => {
 				throw new Error("unused");
@@ -106,11 +113,14 @@ describe("run doc routes", () => {
 			throw new Error("failed to bind test server");
 		}
 		const base = `http://127.0.0.1:${address.port}`;
-		const response = await fetch(`${base}/runs/${RUN_ID}/doc/search`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ query: "invoice total", scope: "*" }),
-		});
+			const response = await fetch(`${base}/runs/${RUN_ID}/doc/search`, {
+				method: "POST",
+				headers: {
+					...RUN_SCOPE_HEADERS,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ query: "invoice total", scope: "*" }),
+			});
 		expect(response.status).toBe(200);
 		const payload = (await response.json()) as {
 			hits: Array<{ spans: unknown[] }>;
@@ -124,11 +134,14 @@ describe("run doc routes", () => {
 			throw new Error("failed to bind test server");
 		}
 		const base = `http://127.0.0.1:${address.port}`;
-		const response = await fetch(`${base}/runs/${RUN_ID}/doc/ingest`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				mime: "application/pdf",
+			const response = await fetch(`${base}/runs/${RUN_ID}/doc/ingest`, {
+				method: "POST",
+				headers: {
+					...RUN_SCOPE_HEADERS,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					mime: "application/pdf",
 				bodyBase64: Buffer.from("pdf-bytes", "utf8").toString("base64"),
 			}),
 		});
@@ -147,11 +160,14 @@ describe("run doc routes", () => {
 			throw new Error("failed to bind test server");
 		}
 		const base = `http://127.0.0.1:${address.port}`;
-		const response = await fetch(`${base}/runs/${RUN_ID}/doc/resolve`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				span: {
+			const response = await fetch(`${base}/runs/${RUN_ID}/doc/resolve`, {
+				method: "POST",
+				headers: {
+					...RUN_SCOPE_HEADERS,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					span: {
 					docSha: "a".repeat(64),
 					parseId: "parse:1",
 					page: 1,
@@ -174,11 +190,14 @@ describe("run doc routes", () => {
 			throw new Error("failed to bind test server");
 		}
 		const base = `http://127.0.0.1:${address.port}`;
-		const response = await fetch(`${base}/runs/${RUN_ID}/doc/resolve`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				span: {
+			const response = await fetch(`${base}/runs/${RUN_ID}/doc/resolve`, {
+				method: "POST",
+				headers: {
+					...RUN_SCOPE_HEADERS,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					span: {
 					docSha: "a".repeat(64),
 					parseId: "parse:1",
 					page: 1,
@@ -200,11 +219,14 @@ describe("run doc routes", () => {
 			throw new Error("failed to bind test server");
 		}
 		const base = `http://127.0.0.1:${address.port}`;
-		const response = await fetch(`${base}/runs/${RUN_ID}/doc/search`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ query: "  ", scope: "*" }),
-		});
+			const response = await fetch(`${base}/runs/${RUN_ID}/doc/search`, {
+				method: "POST",
+				headers: {
+					...RUN_SCOPE_HEADERS,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ query: "  ", scope: "*" }),
+			});
 		expect(response.status).toBe(400);
 		expect(await response.json()).toEqual({
 			error: "doc search query is required",
@@ -217,11 +239,14 @@ describe("run doc routes", () => {
 			throw new Error("failed to bind test server");
 		}
 		const base = `http://127.0.0.1:${address.port}`;
-		const response = await fetch(`${base}/runs/${RUN_ID}/doc/ingest`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ mime: "application/pdf" }),
-		});
+			const response = await fetch(`${base}/runs/${RUN_ID}/doc/ingest`, {
+				method: "POST",
+				headers: {
+					...RUN_SCOPE_HEADERS,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ mime: "application/pdf" }),
+			});
 		expect(response.status).toBe(400);
 		expect(await response.json()).toEqual({
 			error: "doc ingest bodyBase64 is required",
