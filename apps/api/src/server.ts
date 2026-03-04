@@ -52,6 +52,8 @@ import {
 	registerActorTickWorkflow,
 	registerDocOcrWorkflow,
 	registerIngestDocWorkflow,
+	registerPromoteMemberToWsWorkflow,
+	registerPromoteWsToOrgWorkflow,
 	registerRunOnceWorkflow,
 	registerRunSandboxWorkflow,
 } from "./workflow";
@@ -374,6 +376,12 @@ async function bootstrap() {
 			pdfMaxPages: config.docLimitPdfPages,
 			imageMaxBytes: config.docLimitImageBytes,
 		},
+	});
+	registerPromoteMemberToWsWorkflow({
+		databaseUrl: config.databaseUrl,
+	});
+	registerPromoteWsToOrgWorkflow({
+		databaseUrl: config.databaseUrl,
 	});
 	workflowLauncher.bindClassic(runWorkflow);
 	workflowLauncher.bindSandbox(runSandboxWorkflow);

@@ -93,6 +93,7 @@ type LexicalChunkRow = {
 	score: string | number;
 	md: string;
 	plain: string;
+	scope_rank: number;
 };
 
 type VectorChunkRow = {
@@ -101,6 +102,7 @@ type VectorChunkRow = {
 	plain: string;
 	emb_json: unknown;
 	distance?: string | number | null;
+	scope_rank: number;
 };
 
 type SpanRow = {
@@ -126,6 +128,28 @@ type ResolveSpanRow = {
 	chunk_md: string;
 	block_md: string | null;
 	img_artifact_sha: string | null;
+};
+
+export type ObjectKvWinner = {
+	kind: string;
+	key: string;
+	orgId: string;
+	wsId: string | null;
+	memberId: string | null;
+	bodyArtifactSha: string | null;
+	scopeRank: 1 | 2 | 3;
+	updatedAt: string;
+};
+
+type ObjectKvWinnerRow = {
+	kind: string;
+	key: string;
+	org_id: string;
+	ws_id: string | null;
+	member_id: string | null;
+	body_artifact_sha: string | null;
+	scope_rank: 1 | 2 | 3;
+	updated_at: Date | string;
 };
 
 export type PgDocRepoDeps = {
@@ -250,20 +274,30 @@ function whereScope(
 	parseAlias = "p",
 	paramStart = 2,
 ): { sql: string; params: unknown[] } {
+	const scopeSql = [
+		`${alias}.org_id = nullif(current_setting('app.org_id', true), '')::uuid`,
+		`(${alias}.ws_id is null or ${alias}.ws_id = nullif(current_setting('app.ws_id', true), '')::uuid)`,
+		`(${alias}.member_id is null or ${alias}.member_id = nullif(current_setting('app.member_id', true), '')::uuid)`,
+	];
+	if (scope.overlay === "org") {
+		scopeSql.push(`${alias}.ws_id is null`, `${alias}.member_id is null`);
+	} else if (scope.overlay === "ws") {
+		scopeSql.push(`${alias}.member_id is null`);
+	}
 	if (scope.docSha) {
 		return {
-			sql: ` and ${parseAlias}.doc_sha = $${paramStart}`,
+			sql: ` and ${scopeSql.join(" and ")} and ${parseAlias}.doc_sha = $${paramStart}`,
 			params: [scope.docSha],
 		};
 	}
 	if (scope.parseId) {
 		return {
-			sql: ` and ${alias}.parse_id = $${paramStart}`,
+			sql: ` and ${scopeSql.join(" and ")} and ${alias}.parse_id = $${paramStart}`,
 			params: [scope.parseId],
 		};
 	}
 	return {
-		sql: "",
+		sql: ` and ${scopeSql.join(" and ")}`,
 		params: [],
 	};
 }
@@ -404,6 +438,51 @@ export class PgDocRepo implements DocRepo {
 		});
 	}
 
+	async listObjectKvWinners(input?: {
+		kinds?: string[] | undefined;
+		keys?: string[] | undefined;
+	}): Promise<ObjectKvWinner[]> {
+		return this.withTenantScope(async (queryable) => {
+			const kinds =
+				input?.kinds && input.kinds.length > 0 ? [...input.kinds] : null;
+			const keys =
+				input?.keys && input.keys.length > 0 ? [...input.keys] : null;
+			const result = await queryable.query<ObjectKvWinnerRow>(
+				`select distinct on (ok.kind, ok.key)
+				 ok.kind,
+				 ok.key,
+				 ok.org_id::text as org_id,
+				 ok.ws_id::text as ws_id,
+				 ok.member_id::text as member_id,
+				 ok.body_artifact_sha,
+				 case
+				   when ok.member_id is not null then 3
+				   when ok.ws_id is not null then 2
+				   else 1
+				 end as scope_rank,
+				 ok.updated_at
+			 from object_kv ok
+			 where ok.org_id = nullif(current_setting('app.org_id', true), '')::uuid
+			   and (ok.ws_id is null or ok.ws_id = nullif(current_setting('app.ws_id', true), '')::uuid)
+			   and (ok.member_id is null or ok.member_id = nullif(current_setting('app.member_id', true), '')::uuid)
+			   and ($1::text[] is null or ok.kind = any($1::text[]))
+			   and ($2::text[] is null or ok.key = any($2::text[]))
+			 order by ok.kind asc, ok.key asc, scope_rank desc, ok.updated_at desc`,
+				[kinds, keys],
+			);
+			return result.rows.map((row) => ({
+				kind: row.kind,
+				key: row.key,
+				orgId: row.org_id,
+				wsId: row.ws_id,
+				memberId: row.member_id,
+				bodyArtifactSha: row.body_artifact_sha,
+				scopeRank: row.scope_rank,
+				updatedAt: asIsoString(row.updated_at),
+			}));
+		});
+	}
+
 	async searchLexicalChunks(
 		input: SearchDocsInput,
 	): Promise<LexicalChunkHitModel[]> {
@@ -415,12 +494,17 @@ export class PgDocRepo implements DocRepo {
 				 c.chunk_id,
 				 c.md,
 				 c.plain,
-				 ts_rank(c.tsv, q) as score
+				 ts_rank(c.tsv, q) as score,
+				 case
+				   when c.member_id is not null then 3
+				   when c.ws_id is not null then 2
+				   else 1
+				 end as scope_rank
 			 from chunks c
 			 join parses p on p.parse_id = c.parse_id,
 			      websearch_to_tsquery('english', $1) q
 			 where c.tsv @@ q${scope.sql}
-			 order by score desc, c.chunk_id asc
+			 order by score desc, scope_rank desc, c.updated_at desc, c.chunk_id asc
 			 limit $${limitIndex}`,
 				[input.query, ...scope.params, input.limit],
 			);
@@ -448,12 +532,17 @@ export class PgDocRepo implements DocRepo {
 						 c.md,
 						 c.plain,
 						 cv.emb_json,
-						 cv.emb <-> $1::vector as distance
+						 cv.emb <-> $1::vector as distance,
+						 case
+						   when c.member_id is not null then 3
+						   when c.ws_id is not null then 2
+						   else 1
+						 end as scope_rank
 					 from chunk_vec cv
 					 join chunks c on c.chunk_id = cv.chunk_id
 					 join parses p on p.parse_id = c.parse_id
 					 where cv.emb is not null${scope.sql}
-					 order by cv.emb <-> $1::vector asc, c.chunk_id asc
+					 order by cv.emb <-> $1::vector asc, scope_rank desc, c.updated_at desc, c.chunk_id asc
 					 limit $${limitIndex}`,
 						[
 							toPgVectorLiteral(queryEmbedding),
@@ -489,13 +578,18 @@ export class PgDocRepo implements DocRepo {
 				 c.chunk_id,
 				 c.md,
 				 c.plain,
-				 cv.emb_json
+				 cv.emb_json,
+				 case
+				   when c.member_id is not null then 3
+				   when c.ws_id is not null then 2
+				   else 1
+				 end as scope_rank
 			 from chunk_vec cv
 			 join chunks c on c.chunk_id = cv.chunk_id
 			 join parses p on p.parse_id = c.parse_id
 			 where jsonb_typeof(cv.emb_json) = 'array'
 			   and jsonb_array_length(cv.emb_json) > 0${scope.sql}
-			 order by c.updated_at desc, c.chunk_id asc
+			 order by scope_rank desc, c.updated_at desc, c.chunk_id asc
 			 limit $${limitIndex}`,
 				[...scope.params, input.limit * 8],
 			),

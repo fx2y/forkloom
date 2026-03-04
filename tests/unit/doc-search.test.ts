@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	DocService,
 	buildDeterministicEmbedding,
+	parseSearchScope,
 } from "../../apps/api/src/doc";
 import type { DocRepo } from "../../apps/api/src/doc";
 
@@ -103,6 +104,13 @@ function createRepo(): DocRepo {
 }
 
 describe("doc search service", () => {
+	it("maps tenancy scope grammar to overlay modes", () => {
+		expect(parseSearchScope("org").overlay).toBe("org");
+		expect(parseSearchScope("team").overlay).toBe("ws");
+		expect(parseSearchScope("me").overlay).toBe("all");
+		expect(parseSearchScope("doc:".concat("a".repeat(64))).overlay).toBe("all");
+	});
+
 	it("merges lexical + vector scores and enforces SpanRef presence", async () => {
 		const service = new DocService({ repo: createRepo() });
 		const result = await service.searchDocs({

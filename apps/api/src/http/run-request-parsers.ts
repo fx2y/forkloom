@@ -9,6 +9,7 @@ import {
 	hasSkillInvocationPrefix,
 	parseSkillInvocation,
 } from "../skill";
+import { canonicalizeWriteTarget } from "../tenancy/write-target";
 import {
 	parseArtifactPointer,
 	parseArtifactPointers,
@@ -74,16 +75,30 @@ export function parseRunCreatePayload(input: unknown): RunSpecModel {
 			? record.memberId.trim()
 			: undefined;
 	const writeTarget = parseWriteTarget(record.writeTarget);
+	const canonicalScope = (() => {
+		try {
+			return canonicalizeWriteTarget(writeTarget, {
+				orgId,
+				wsId,
+				memberId,
+			});
+		} catch (error) {
+			throw new HttpError(
+				400,
+				error instanceof Error ? error.message : String(error),
+			);
+		}
+	})();
 
 	return {
 		runId,
 		scope: parseRunScope(record.scope),
 		userMsg,
 		attachments: parseArtifactPointers(record.attachments),
-		orgId,
-		wsId,
-		memberId,
-		writeTarget,
+		orgId: canonicalScope.orgId,
+		wsId: canonicalScope.wsId,
+		memberId: canonicalScope.memberId,
+		writeTarget: canonicalScope.writeTarget,
 		workdirRef:
 			record.workdirRef == null
 				? undefined

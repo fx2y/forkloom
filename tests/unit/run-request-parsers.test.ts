@@ -63,6 +63,55 @@ describe("run-request-parsers", () => {
 		expect(payload.profile).toBe("safe");
 	});
 
+	it("canonicalizes write-target scope shape", () => {
+		const orgWrite = parseRunCreatePayload({
+			runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
+			scope: "team",
+			userMsg: "hello",
+			attachments: [],
+			orgId: "org-1",
+			writeTarget: "org",
+		});
+		expect(orgWrite.wsId).toBeUndefined();
+		expect(orgWrite.memberId).toBeUndefined();
+
+		const wsWrite = parseRunCreatePayload({
+			runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
+			scope: "team",
+			userMsg: "hello",
+			attachments: [],
+			orgId: "org-1",
+			writeTarget: "ws",
+			wsId: "ws-1",
+		});
+		expect(wsWrite.wsId).toBe("ws-1");
+		expect(wsWrite.memberId).toBeUndefined();
+	});
+
+	it("rejects write-target shapes failing run contract", () => {
+		expect(() =>
+			parseRunCreatePayload({
+				runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
+				scope: "team",
+				userMsg: "hello",
+				attachments: [],
+				orgId: "org-1",
+				writeTarget: "ws",
+			}),
+		).toThrow("invalid run payload:");
+		expect(() =>
+			parseRunCreatePayload({
+				runId: "01HS7Z6E5R4W6NED8MH4D9Y6A0",
+				scope: "team",
+				userMsg: "hello",
+				attachments: [],
+				orgId: "org-1",
+				writeTarget: "member",
+				wsId: "ws-1",
+			}),
+		).toThrow("invalid run payload:");
+	});
+
 	it("rejects invalid run payloads", () => {
 		expect(() =>
 			parseRunCreatePayload({

@@ -265,6 +265,48 @@ describe("registry/filter/enable/startup", () => {
 			["extensions/project.ts", "pkg-project"],
 			["extensions/shared.ts", "pkg-project"],
 		]);
+		const reversedRegistry = buildPackageResourceRegistry({
+			descriptors: [
+				{
+					packageIdentity: "pkg-project",
+					packageScope: "project",
+					manifest: {
+						packageRoot: "/b",
+						packageName: "b",
+						version: "1.0.0",
+						resources: {
+							extensions: ["extensions/shared.ts", "extensions/project.ts"],
+							skills: [],
+							prompts: [],
+							themes: [],
+						},
+					},
+				},
+				{
+					packageIdentity: "pkg-global",
+					packageScope: "global",
+					manifest: {
+						packageRoot: "/a",
+						packageName: "a",
+						version: "1.0.0",
+						resources: {
+							extensions: ["extensions/shared.ts"],
+							skills: [],
+							prompts: [],
+							themes: [],
+						},
+					},
+				},
+			],
+		});
+		expect(
+			reversedRegistry
+				.filter((record) => record.kind === "extensions")
+				.map((record) => [record.path, record.packageIdentity]),
+		).toEqual([
+			["extensions/project.ts", "pkg-project"],
+			["extensions/shared.ts", "pkg-project"],
+		]);
 
 		const root = await makeTempDir("forkloom-pkg-enable-");
 		const settingsPath = resolve(root, ".pi/settings.json");

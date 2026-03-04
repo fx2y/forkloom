@@ -2,6 +2,7 @@ import type { Request } from "express";
 import { HttpError } from "../errors";
 import type { TenantScopeContext, WriteTarget } from "../run/ports";
 import { getTenantScope, runWithTenantScope } from "../tenancy/scope-context";
+import { canonicalizeWriteTarget } from "../tenancy/write-target";
 
 export function resolveScope(req: Request): TenantScopeContext {
 	const orgId = req.header("x-org-id");
@@ -20,24 +21,18 @@ export function resolveScope(req: Request): TenantScopeContext {
 		throw new HttpError(400, "x-write-scope must be one of org|ws|member");
 	}
 	const writeTarget = writeTargetRaw as WriteTarget;
-
-	// Validation of scope lattice
-	if (writeTarget === "ws" && !wsId) {
-		throw new HttpError(400, "wsId required for ws write target");
-	}
-	if (writeTarget === "member" && (!wsId || !memberId)) {
+	try {
+		return canonicalizeWriteTarget(writeTarget, {
+			orgId,
+			wsId,
+			memberId,
+		});
+	} catch (error) {
 		throw new HttpError(
 			400,
-			"wsId and memberId required for member write target",
+			error instanceof Error ? error.message : String(error),
 		);
 	}
-
-	return {
-		orgId,
-		wsId,
-		memberId,
-		writeTarget,
-	};
 }
 
 export async function withScopeTx<T>(

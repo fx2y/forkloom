@@ -284,7 +284,7 @@ describe("PgDocRepo", () => {
 
 		const hits = await repo.searchLexicalChunks({
 			query: "alpha",
-			scope: { scope: "all", docSha: null, parseId: null },
+			scope: { scope: "all", docSha: null, parseId: null, overlay: "all" },
 			limit: 5,
 		});
 		expect(hits).toEqual([
@@ -322,7 +322,7 @@ describe("PgDocRepo", () => {
 		const hits = await repo.listVectorChunks(
 			{
 				query: "vector",
-				scope: { scope: "all", docSha: null, parseId: null },
+				scope: { scope: "all", docSha: null, parseId: null, overlay: "all" },
 				limit: 3,
 			},
 			[0.1, 0.2, 0.3],

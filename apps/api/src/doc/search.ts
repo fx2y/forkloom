@@ -8,27 +8,36 @@ export function parseSearchScope(scopeRaw: string): SearchScopeModel {
 	if (!scope) {
 		throw new Error("search scope is required");
 	}
+	if (scope === "org") {
+		return { scope, docSha: null, parseId: null, overlay: "org" };
+	}
+	if (scope === "team" || scope === "ws") {
+		return { scope, docSha: null, parseId: null, overlay: "ws" };
+	}
+	if (scope === "me" || scope === "member") {
+		return { scope, docSha: null, parseId: null, overlay: "all" };
+	}
 	if (scope === "*" || scope === "all") {
-		return { scope, docSha: null, parseId: null };
+		return { scope, docSha: null, parseId: null, overlay: "all" };
 	}
 	if (scope.startsWith("doc:")) {
 		const docSha = scope.slice(4).trim();
 		if (!SHA256_RE.test(docSha)) {
 			throw new Error("invalid search scope doc sha");
 		}
-		return { scope, docSha, parseId: null };
+		return { scope, docSha, parseId: null, overlay: "all" };
 	}
 	if (scope.startsWith("parse:")) {
 		const parseId = scope.slice(6).trim();
 		if (!parseId) {
 			throw new Error("invalid search scope parse id");
 		}
-		return { scope, docSha: null, parseId };
+		return { scope, docSha: null, parseId, overlay: "all" };
 	}
 	if (SHA256_RE.test(scope)) {
-		return { scope, docSha: scope, parseId: null };
+		return { scope, docSha: scope, parseId: null, overlay: "all" };
 	}
-	return { scope, docSha: null, parseId: scope };
+	return { scope, docSha: null, parseId: scope, overlay: "all" };
 }
 
 export function buildDeterministicEmbedding(text: string): number[] {

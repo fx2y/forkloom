@@ -108,6 +108,7 @@ export type SearchScopeModel = {
 	scope: string;
 	docSha: string | null;
 	parseId: string | null;
+	overlay: "org" | "ws" | "all";
 };
 
 export type SearchDocsInput = {

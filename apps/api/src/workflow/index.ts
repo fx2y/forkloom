@@ -43,6 +43,18 @@ export const DOC_OCR_WORKFLOW_STEPS = [
 ] as const;
 
 export type DocOcrWorkflowStep = (typeof DOC_OCR_WORKFLOW_STEPS)[number];
+export const PROMOTE_MEMBER_TO_WS_STEPS = [
+	"loadSource",
+	"copyRef",
+	"copyProvenance",
+] as const;
+export type PromoteMemberToWsStep = (typeof PROMOTE_MEMBER_TO_WS_STEPS)[number];
+export const PROMOTE_WS_TO_ORG_STEPS = [
+	"loadSource",
+	"copyRef",
+	"copyProvenance",
+] as const;
+export type PromoteWsToOrgStep = (typeof PROMOTE_WS_TO_ORG_STEPS)[number];
 
 export { executeRunOnce, registerRunOnceWorkflow } from "./runonce";
 export type { RunOnceDeps } from "./runonce";
@@ -99,3 +111,21 @@ export type {
 	DocOcrOutput,
 	RegisteredDocOcrWorkflow,
 } from "./doc-ocr";
+export {
+	executePromoteMemberToWs,
+	registerPromoteMemberToWsWorkflow,
+} from "./promote-member-to-ws";
+export type {
+	PromoteMemberToWsDeps,
+	PromoteMemberToWsInput,
+	PromoteMemberToWsOutput,
+} from "./promote-member-to-ws";
+export {
+	executePromoteWsToOrg,
+	registerPromoteWsToOrgWorkflow,
+} from "./promote-ws-to-org";
+export type {
+	PromoteWsToOrgDeps,
+	PromoteWsToOrgInput,
+	PromoteWsToOrgOutput,
+} from "./promote-ws-to-org";
